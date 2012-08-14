@@ -25,7 +25,9 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map.Entry;
 
@@ -38,7 +40,7 @@ public class DispatchClassInfo {
 
   private final int clsId;
 
-  private ArrayList<Member> memberById;
+  private LinkedHashSet<Member> memberById;
 
   private HashMap<String, Integer> memberIdByName;
 
@@ -54,7 +56,13 @@ public class DispatchClassInfo {
   public Member getMember(int id) {
     lazyInitTargetMembers();
     id &= 0xffff;
-    return memberById.get(id);
+
+    Iterator<Member> iterator = memberById.iterator();
+    for (int i = 0; i < id; i++) {
+      iterator.next();
+    }
+
+    return iterator.next();
   }
 
   public int getMemberId(String mangledMemberName) {
@@ -82,9 +90,9 @@ public class DispatchClassInfo {
 
   private void addMemberIfUnique(String name, List<Member> membersForName) {
     if (membersForName.size() == 1) {
-      memberById.add(membersForName.get(0));
-      memberIdByName.put(
-          StringInterner.get().intern(name), memberById.size() - 1);
+      if (memberById.add(membersForName.get(0))) {
+        memberIdByName.put(StringInterner.get().intern(name), memberById.size() - 1);
+      }
     }
   }
 
@@ -229,7 +237,7 @@ public class DispatchClassInfo {
 
   private void lazyInitTargetMembers() {
     if (memberById == null) {
-      memberById = new ArrayList<Member>();
+      memberById = new LinkedHashSet<Member>();
       memberById.add(null); // 0 is reserved; it's magic on Win32
       memberIdByName = new HashMap<String, Integer>();
 
@@ -238,8 +246,7 @@ public class DispatchClassInfo {
       for (Entry<String, LinkedHashMap<String, Member>> entry : members.entrySet()) {
         String name = entry.getKey();
 
-        List<Member> membersForName = new ArrayList<Member>(
-            entry.getValue().values());
+        List<Member> membersForName = new ArrayList<Member>(entry.getValue().values());
         addMemberIfUnique(name, membersForName); // backward compatibility
         addMemberIfUnique(name, filterOutSyntheticMembers(membersForName));
       }
