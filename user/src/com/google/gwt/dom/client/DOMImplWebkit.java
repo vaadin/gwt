@@ -50,8 +50,26 @@ class DOMImplWebkit extends DOMImplStandardBase {
   }-*/;
 
   /**
-   * Webkit based browsers require that we set the webkit-user-drag style
-   * attribute to make an element draggable.
+   * Chrome's subpixel rendering is returning floating point pixels here so using (x) | 0 to coerce
+   * the value to an integer.
+   */
+  @Override
+  public int getAbsoluteLeft(Element elem) {
+    return super.getAbsoluteLeft(elem) | 0;
+  }
+
+  /**
+   * Chrome's subpixel rendering is returning floating point pixels here so using (x) | 0 to coerce
+   * the value to an integer.
+   */
+  @Override
+  public int getAbsoluteTop(Element elem) {
+    return super.getAbsoluteTop(elem) | 0;
+  }
+
+  /**
+   * Webkit based browsers require that we set the webkit-user-drag style attribute to make an
+   * element draggable.
    */
   @Override
   public void setDraggable(Element elem, String draggable) {
