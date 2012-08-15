@@ -15,6 +15,9 @@
  */
 package com.google.gwt.dev.shell;
 
+import com.google.gwt.dev.util.JsniRef;
+import com.google.gwt.dev.util.StringInterner;
+
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
@@ -27,9 +30,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map.Entry;
-
-import com.google.gwt.dev.util.JsniRef;
-import com.google.gwt.dev.util.StringInterner;
 
 /**
  * Helper class for dispatching methods to Java objects. It takes methods on
