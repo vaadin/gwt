@@ -38,9 +38,9 @@ public class DispatchClassInfo {
 
   private final int clsId;
 
-  private LinkedHashMap<Member, Integer> memberToId;
+  private HashMap<Member, Integer> memberToId;
 
-  private LinkedHashMap<Integer, Member> idToMember;
+  private HashMap<Integer, Member> idToMember;
 
   private HashMap<String, Integer> memberIdByName;
 
@@ -88,7 +88,7 @@ public class DispatchClassInfo {
       Member m = membersForName.get(0);
       if (m == null) {
         id = 0;
-      } else if (idToMember.containsKey(membersForName.get(0))) {
+      } else if (idToMember.containsKey(m)) {
         id = memberToId.get(m).intValue();
       } else {
         id = memberToId.size() - 1;
@@ -240,12 +240,12 @@ public class DispatchClassInfo {
 
   private void lazyInitTargetMembers() {
     if (idToMember == null) {
-      idToMember = new LinkedHashMap<Integer, Member>();
+      idToMember = new HashMap<Integer, Member>(Integer.MAX_VALUE / 2);
       idToMember.put(0, null); // 0 is reserved; it's magic on Win32
-      memberToId = new LinkedHashMap<Member, Integer>();
+      memberToId = new HashMap<Member, Integer>(Integer.MAX_VALUE / 2);
       memberToId.put(null, 0);
 
-      memberIdByName = new HashMap<String, Integer>();
+      memberIdByName = new HashMap<String, Integer>(Integer.MAX_VALUE / 2);
 
       LinkedHashMap<String, LinkedHashMap<String, Member>> members = findMostDerivedMembers(
           cls, true);
