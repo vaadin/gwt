@@ -240,12 +240,12 @@ public class DispatchClassInfo {
 
   private void lazyInitTargetMembers() {
     if (idToMember == null) {
-      idToMember = new HashMap<Integer, Member>(Integer.MAX_VALUE / 2);
+      idToMember = new HashMap<Integer, Member>(32767);
       idToMember.put(0, null); // 0 is reserved; it's magic on Win32
-      memberToId = new HashMap<Member, Integer>(Integer.MAX_VALUE / 2);
+      memberToId = new HashMap<Member, Integer>(32767);
       memberToId.put(null, 0);
 
-      memberIdByName = new HashMap<String, Integer>(Integer.MAX_VALUE / 2);
+      memberIdByName = new HashMap<String, Integer>(32767);
 
       LinkedHashMap<String, LinkedHashMap<String, Member>> members = findMostDerivedMembers(
           cls, true);
