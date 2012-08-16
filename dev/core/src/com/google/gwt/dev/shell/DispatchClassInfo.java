@@ -38,9 +38,9 @@ public class DispatchClassInfo {
 
   private final int clsId;
 
-  private HashMap<Member, Integer> memberToId;
+  private HashMap<Integer, Member> memberByMemberId;
 
-  private HashMap<Integer, Member> idToMember;
+  private HashMap<Member, Integer> memberIdByMember;
 
   private HashMap<String, Integer> memberIdByName;
 
@@ -56,18 +56,16 @@ public class DispatchClassInfo {
   public Member getMember(int id) {
     lazyInitTargetMembers();
     id &= 0xffff;
-    return idToMember.get(id);
+    return memberByMemberId.get(id);
   }
 
   public int getMemberId(String mangledMemberName) {
     lazyInitTargetMembers();
-
     Integer id = memberIdByName.get(mangledMemberName);
     if (id == null) {
       return -1;
     }
-
-    return id.intValue() - 1;
+    return id.intValue();
   }
 
   private void addMember(
@@ -84,18 +82,14 @@ public class DispatchClassInfo {
 
   private void addMemberIfUnique(String name, List<Member> membersForName) {
     if (membersForName.size() == 1) {
-      int id = -1;
       Member m = membersForName.get(0);
-      if (m == null) {
-        id = 0;
-      } else if (idToMember.containsKey(m)) {
-        id = memberToId.get(m).intValue();
-      } else {
-        id = memberToId.size() - 1;
+      Integer id = memberIdByMember.get(m);
+      if (id == null) {
+        id = memberByMemberId.size();
       }
       memberIdByName.put(StringInterner.get().intern(name), id);
-      memberToId.put(m, id);
-      idToMember.put(id, m);
+      memberIdByMember.put(m, id);
+      memberByMemberId.put(id, m);
     }
   }
 
@@ -239,12 +233,9 @@ public class DispatchClassInfo {
   }
 
   private void lazyInitTargetMembers() {
-    if (idToMember == null) {
-      idToMember = new HashMap<Integer, Member>(32767);
-      idToMember.put(0, null); // 0 is reserved; it's magic on Win32
-      memberToId = new HashMap<Member, Integer>(32767);
-      memberToId.put(null, 0);
-
+    if (memberIdByMember == null) {
+      memberByMemberId = new HashMap<Integer, Member>(32767);
+      memberIdByMember = new HashMap<Member, Integer>(32767);
       memberIdByName = new HashMap<String, Integer>(32767);
 
       LinkedHashMap<String, LinkedHashMap<String, Member>> members = findMostDerivedMembers(
