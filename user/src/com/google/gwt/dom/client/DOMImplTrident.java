@@ -132,8 +132,8 @@ abstract class DOMImplTrident extends DOMImpl {
 
   @Override
   public native NativeEvent createMouseEvent(Document doc, String type,
-      boolean canBubble, boolean cancelable, int detail, int screenX,
-      int screenY, int clientX, int clientY, boolean ctrlKey, boolean altKey,
+      boolean canBubble, boolean cancelable, int detail, double screenX,
+      double screenY, double clientX, double clientY, boolean ctrlKey, boolean altKey,
       boolean shiftKey, boolean metaKey, int button, Element relatedTarget) /*-{
     // NOTE: IE doesn't support changing bubbling and canceling behavior (this
     // is documented publicly in Document.createMouseEvent()).
