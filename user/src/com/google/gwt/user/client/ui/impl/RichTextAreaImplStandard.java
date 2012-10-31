@@ -101,10 +101,10 @@ public abstract class RichTextAreaImplStandard extends RichTextAreaImpl implemen
       if(_this.@com.google.gwt.user.client.ui.impl.RichTextAreaImpl::elem.contentWindow != null){
            // Turn on design mode.
           _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImpl::elem.contentWindow.document.designMode = 'On';
+          
+           // Send notification that the iframe has reached design mode.
+          _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImplStandard::onElementInitialized()();
       }
-        
-      // Send notification that the iframe has reached design mode.
-      _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImplStandard::onElementInitialized()();
     }), 1);
   }-*/;
 
