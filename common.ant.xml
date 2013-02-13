@@ -30,7 +30,7 @@
   <condition property="gwt.version" value="${env.GWT_VERSION}" else="0.0.0">
     <isset property="env.GWT_VERSION" />
   </condition>
-  <condition property="gwt.tools.check" value="${env.GWT_TOOLS}" else="${gwt.root}/../tools">
+  <condition property="gwt.tools.check" value="${env.GWT_TOOLS}" else="${gwt.root}/../gwt-tools">
     <isset property="env.GWT_TOOLS" />
   </condition>
   <property name="gwt.tools" location="${gwt.tools.check}" />
