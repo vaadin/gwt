@@ -151,7 +151,7 @@ abstract class DOMImpl {
   }
 
   public int eventGetScreenY(NativeEvent evt) {
-    return (int) eventGetSubpixelScreenY(evt);
+    return (int) eventGetSubpixelScreenY(evt) | 0;
   }
   
   public native boolean eventGetShiftKey(NativeEvent evt) /*-{
