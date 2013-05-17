@@ -49,12 +49,27 @@ class DOMImplIE9 extends DOMImplStandardBase {
   }
 
   @Override
+  public int getScrollLeft(Document doc) {
+    return (int) getSubpixelScrollLeft(doc) | 0;
+  }
+
+  @Override
+  public int getScrollLeft(Element elem) {
+    return (int) getSubpixelScrollLeft(elem) | 0;
+  }
+
+  @Override
   public double getSubpixelScrollLeft(Element elem) {
     double left = getScrollLeftImpl(elem);
     if (isRTL(elem)) {
       left = -left;
     }
     return left;
+  }
+
+  @Override
+  public int getScrollTop(Document doc) {
+    return (int) getSubpixelScrollTop(doc) | 0;
   }
 
   @Override
