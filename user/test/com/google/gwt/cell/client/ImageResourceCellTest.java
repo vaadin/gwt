@@ -18,7 +18,7 @@ package com.google.gwt.cell.client;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.resources.client.ClientBundle;
 import com.google.gwt.resources.client.ImageResource;
-import com.google.gwt.user.client.ui.ImageResourceRenderer;
+import com.google.gwt.user.client.ui.AbstractImagePrototype;
 
 /**
  * Tests for {@link ImageResourceCell}.
@@ -56,7 +56,7 @@ public class ImageResourceCellTest extends CellTestBase<ImageResource> {
 
   @Override
   protected String getExpectedInnerHtml() {
-    return new ImageResourceRenderer().render(getImages().prettyPiccy()).asString();
+    return AbstractImagePrototype.create(getImages().prettyPiccy()).getHTML();
   }
 
   @Override
