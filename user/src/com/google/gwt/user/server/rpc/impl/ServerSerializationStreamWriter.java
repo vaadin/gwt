@@ -442,7 +442,7 @@ public final class ServerSerializationStreamWriter extends
         charVector.add(JS_QUOTE_CHAR);
         charVector.add('+');
         charVector.add(JS_QUOTE_CHAR);
-        if(array != null){
+        if (array != null) {
           array.setJavaScript(true);
         }
       }
