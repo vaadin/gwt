@@ -405,4 +405,10 @@ public final class ClientSerializationStreamReader extends
     // index is 1-based
     return index > 0 ? decoder.getStringTable().get(index - 1) : null;
   }  
+
+  private static int readVersion(String encodedString) {
+    String versionStr =
+        encodedString.substring(encodedString.lastIndexOf(",") + 1, encodedString.lastIndexOf("]"));
+    return Integer.parseInt(versionStr.trim());
+  }
 }
