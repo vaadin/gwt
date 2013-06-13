@@ -89,12 +89,7 @@ public abstract class AbstractSerializationStreamWriter extends
   }
 
   public void writeDouble(double fieldValue) {
-    if (getVersion() >= SERIALIZATION_STREAM_JSON_VERSION
-        && (Double.isNaN(fieldValue) || Double.isInfinite(fieldValue))) {
-      writeString(String.valueOf(fieldValue));
-    } else {
-      append(String.valueOf(fieldValue));
-    }
+    append(String.valueOf(fieldValue));
   }
 
   public void writeFloat(float fieldValue) {

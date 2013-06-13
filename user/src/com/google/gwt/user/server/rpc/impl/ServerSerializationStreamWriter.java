@@ -565,10 +565,6 @@ public final class ServerSerializationStreamWriter extends
     charVector.add(JS_ESCAPE_CHAR);
     if (ch < NUMBER_OF_JS_ESCAPED_CHARS && JS_CHARS_ESCAPED[ch] != 0) {
       charVector.add(JS_CHARS_ESCAPED[ch]);
-    } else if (ch < 256) {
-      charVector.add('x');
-      charVector.add(NIBBLE_TO_HEX_CHAR[(ch >> 4) & 0x0F]);
-      charVector.add(NIBBLE_TO_HEX_CHAR[ch & 0x0F]);
     } else {
       charVector.add('u');
       charVector.add(NIBBLE_TO_HEX_CHAR[(ch >> 12) & 0x0F]);
@@ -642,10 +638,20 @@ public final class ServerSerializationStreamWriter extends
       writeDouble(parts[1]);
     } else {
       StringBuilder sb = new StringBuilder();
-      sb.append('\'');
+      sb.append('"');
       sb.append(Base64Utils.toBase64(value));
-      sb.append('\'');
+      sb.append('"');
       append(sb.toString());
+    }
+  }
+
+  @Override
+  public void writeDouble(double fieldValue) {
+    if (getVersion() >= SERIALIZATION_STREAM_JSON_VERSION
+        && (Double.isNaN(fieldValue) || Double.isInfinite(fieldValue))) {
+      append('"' + String.valueOf(fieldValue) + '"');
+    } else {
+      super.writeDouble(fieldValue);
     }
   }
 

@@ -358,14 +358,21 @@ public final class ClientSerializationStreamReader extends
   
   @Override
   public double readDouble() {    
-    JsNumberLiteral literal = (JsNumberLiteral) decoder.getValues().get(--index);
-    return literal.getValue();
+    JsValueLiteral valueLiteral = decoder.getValues().get(--index);
+    if (valueLiteral instanceof JsNumberLiteral) {
+      JsNumberLiteral literal = (JsNumberLiteral) valueLiteral;
+      return literal.getValue();
+    } else if (valueLiteral instanceof JsStringLiteral) {
+      JsStringLiteral literal = (JsStringLiteral) valueLiteral;
+      return Double.parseDouble(literal.getValue());
+    } else {
+      throw new RuntimeException("Can't read double from " + valueLiteral.getKind() + " literal");
+    }
   }
   
   @Override
   public float readFloat() {    
-    JsNumberLiteral literal = (JsNumberLiteral) decoder.getValues().get(--index);
-    return (float) literal.getValue();
+    return (float) readDouble();
   }
   
   @Override
