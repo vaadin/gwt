@@ -18,6 +18,8 @@ package com.google.gwt.core.client.impl;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.core.client.RunAsyncCallback;
+import com.google.gwt.core.client.Scheduler;
+import com.google.gwt.core.client.Scheduler.ScheduledCommand;
 
 /**
  * <p>
@@ -55,7 +57,7 @@ public class AsyncFragmentLoader {
    * been installed, so that {@link AsyncFragmentLoader} can distinguish
    * successful from unsuccessful downloads.
    */
-  public interface LoadTerminatedHandler {
+  public static interface LoadTerminatedHandler {
     void loadTerminated(Throwable reason);
   }
 
@@ -295,15 +297,12 @@ public class AsyncFragmentLoader {
    */
   private static AsyncFragmentLoader makeBrowserLoader(int numFragments, int initialLoad[]) {
     if (GWT.isClient()) {
-      return new AsyncFragmentLoader(numFragments, initialLoad,
-          (LoadingStrategy) GWT.create(LoadingStrategy.class), (Logger) GWT.create(Logger.class),
-          (OnSuccessExecutor) GWT.create(OnSuccessExecutor.class));
+      return new AsyncFragmentLoader(numFragments, initialLoad, (LoadingStrategy) GWT
+          .create(LoadingStrategy.class), (Logger) GWT.create(Logger.class));
     } else {
       return null;
     }
   }
-
-  private final OnSuccessExecutor onSuccessExecutor;
 
   /**
    * Callbacks indexed by fragment number.
@@ -372,12 +371,11 @@ public class AsyncFragmentLoader {
   private final BoundedIntQueue requestedExclusives;
 
   public AsyncFragmentLoader(int numEntries, int[] initialLoadSequence,
-      LoadingStrategy loadingStrategy, Logger logger, OnSuccessExecutor executor) {
+      LoadingStrategy loadingStrategy, Logger logger) {
     this.numEntries = numEntries;
     this.initialLoadSequence = initialLoadSequence;
     this.loadingStrategy = loadingStrategy;
     this.logger = logger;
-    this.onSuccessExecutor = executor;
     int numEntriesPlusOne = numEntries + 1;
     this.allCallbacks = new Object[numEntriesPlusOne][];
     this.requestedExclusives = new BoundedIntQueue(numEntriesPlusOne);
@@ -591,7 +589,7 @@ public class AsyncFragmentLoader {
   private void runAsyncImpl(final int fragment, RunAsyncCallback callback) {
     if (isLoaded[fragment]) {
       assert allCallbacks[fragment] == null;
-      this.onSuccessExecutor.execute(this, callback);
+      executeOnSuccessAsynchronously(callback);
       return;
     }
 
@@ -619,7 +617,18 @@ public class AsyncFragmentLoader {
     }
   }
 
-  void executeOnSuccess0(RunAsyncCallback callback) {
+  /**
+   * Executes onSuccess asynchronously.
+   */
+  private void executeOnSuccessAsynchronously(final RunAsyncCallback callback) {
+    Scheduler.get().scheduleDeferred(new ScheduledCommand() {
+      @Override public void execute() {
+        executeOnSuccess(callback);
+      }
+    });
+  }
+
+  private void executeOnSuccess(RunAsyncCallback callback) {
     /*
      * Calls on {@link RunAsyncCallback#onSuccess} from {@link AsyncFragmentLoader} is special
      * treated (See RescueVisitor in ControlFlowAnalyzer) so that code splitter will not follow them
