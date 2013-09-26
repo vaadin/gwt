@@ -1,6 +1,6 @@
 <project name="ant-gwt" default="build" basedir=".">
   <property name="gwt.root" location="../.." />
-  <property name="project.tail" value="build-tools/ant-gwt" />
+  <property name="project.tail" value="build_tools/ant_gwt" />
   <import file="${gwt.root}/common.ant.xml" />
 
   <property name="gwt.junit.testcase.antgwt.includes" value="**/*Test.class" />
@@ -16,8 +16,8 @@
   </target>
 
   <target name="compile.tests" depends="build, compile.emma.if.enabled" description="Compiles the test code for this project">
-    <mkdir dir="${javac.junit.out}" />  	
-    <gwt.javac srcdir="test" destdir="${javac.junit.out}">
+    <mkdir dir="${javac.junit.out}" />
+    <gwt.javac srcdir="test" destdir="${javac.junit.out}" includeantruntime="true">
       <classpath>
         <pathelement location="${javac.out}" />
         <pathelement location="${gwt.tools.lib}/junit/junit-4.8.2.jar" />    
