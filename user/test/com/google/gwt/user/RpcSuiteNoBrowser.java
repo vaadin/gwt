@@ -16,10 +16,9 @@
 package com.google.gwt.user;
 
 import com.google.gwt.dev.BootStrapPlatform;
-import com.google.gwt.user.client.rpc.FailedRequestTest;
-import com.google.gwt.user.client.rpc.FailingRequestBuilderTest;
 import com.google.gwt.user.client.rpc.impl.ClientSerializationStreamReaderTest;
 import com.google.gwt.user.rebind.rpc.BlacklistTypeFilterTest;
+import com.google.gwt.user.rebind.rpc.SerializationUtilsTest;
 import com.google.gwt.user.rebind.rpc.SerializableTypeOracleBuilderTest;
 import com.google.gwt.user.rebind.rpc.TypeHierarchyUtilsTest;
 import com.google.gwt.user.server.Base64Test;
@@ -28,6 +27,7 @@ import com.google.gwt.user.server.rpc.AbstractXsrfProtectedServiceServletTest;
 import com.google.gwt.user.server.rpc.RPCRequestTest;
 import com.google.gwt.user.server.rpc.RPCServletUtilsTest;
 import com.google.gwt.user.server.rpc.RPCTest;
+import com.google.gwt.user.server.rpc.RPCTypeCheckTest;
 import com.google.gwt.user.server.rpc.RemoteServiceServletTest;
 import com.google.gwt.user.server.rpc.SerializationPolicyLoaderTest;
 import com.google.gwt.user.server.rpc.impl.LegacySerializationPolicyTest;
@@ -54,17 +54,17 @@ public class RpcSuiteNoBrowser {
   public static Test suite() {
     TestSuite suite = new TestSuite("Non-browser tests for com.google.gwt.user.client.rpc");
     suite.addTestSuite(BlacklistTypeFilterTest.class);
+    suite.addTestSuite(SerializationUtilsTest.class);
     suite.addTestSuite(SerializableTypeOracleBuilderTest.class);
     suite.addTestSuite(TypeHierarchyUtilsTest.class);
     suite.addTestSuite(RPCTest.class);
+    suite.addTestSuite(RPCTypeCheckTest.class);
     suite.addTestSuite(RemoteServiceServletTest.class);
     suite.addTestSuite(LegacySerializationPolicyTest.class);
     suite.addTestSuite(StandardSerializationPolicyTest.class);
     suite.addTestSuite(SerializationPolicyLoaderTest.class);
     suite.addTestSuite(RPCServletUtilsTest.class);
     suite.addTestSuite(RPCRequestTest.class);
-    suite.addTestSuite(FailedRequestTest.class);
-    suite.addTestSuite(FailingRequestBuilderTest.class);
     suite.addTestSuite(Base64Test.class);
     suite.addTestSuite(UtilTest.class);
     suite.addTestSuite(AbstractXsrfProtectedServiceServletTest.class);
