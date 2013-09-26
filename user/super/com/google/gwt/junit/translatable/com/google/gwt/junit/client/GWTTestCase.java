@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -95,11 +95,6 @@ public abstract class GWTTestCase extends TestCase {
   private boolean mainTestHasRun = false;
 
   /**
-   * Test result.
-   */
-  private JUnitResult result;
-
-  /**
    * Tracks whether this test is completely done.
    */
   private boolean testIsFinished = false;
@@ -114,6 +109,16 @@ public abstract class GWTTestCase extends TestCase {
    * from event handlers. We will create a new one for each test method.
    */
   private TestCaseUncaughtExceptionHandler uncaughtHandler;
+
+  /**
+   * Name of the test class.
+   */
+  private String testClass;
+
+  public void init(String testClass, String testName) {
+    this.testClass = testClass;
+    setName(testName);
+  }
 
   // CHECKSTYLE_OFF
   /**
@@ -159,21 +164,8 @@ public abstract class GWTTestCase extends TestCase {
   }
   // CHECKSTYLE_ON
 
-  @Deprecated
-  public void addCheckpoint(String msg) {
-  }
-
   public boolean catchExceptions() {
     return true;
-  }
-
-  @Deprecated
-  public void clearCheckpoints() {
-  }
-
-  @Deprecated
-  public String[] getCheckpoints() {
-    return new String[0];
   }
 
   public abstract String getModuleName();
@@ -189,19 +181,15 @@ public abstract class GWTTestCase extends TestCase {
     // No tearDown call here; we do it from reportResults.
   }
 
+  @Override
+  protected void doRunTest(String name) throws Throwable {
+    GWTRunner.get().executeTestMethod(this, testClass, name);
+  }
+
   public void setForcePureJava(boolean forcePureJava) {
     // Ignore completely. The test is being run in GWT mode,
     // hence assumed not to be pure Java.
   }
-
-  // CHECKSTYLE_OFF
-  protected JUnitResult __getOrCreateTestResult() {
-    if (result == null) {
-      result = new JUnitResult();
-    }
-    return result;
-  }
-  // CHECKSTYLE_ON
 
   protected final void delayTestFinish(int timeoutMillis) {
     if (supportsAsync()) {
@@ -267,7 +255,7 @@ public abstract class GWTTestCase extends TestCase {
   /**
    * Cleans up any outstanding state, reports ex to the remote runner, and kicks
    * off the next test.
-   * 
+   *
    * @param ex The results of this test.
    */
   private void reportResultsAndRunNextMethod(Throwable ex) {
@@ -281,7 +269,7 @@ public abstract class GWTTestCase extends TestCase {
     GWT.setUncaughtExceptionHandler(null);
     uncaughtHandler = null;
 
-    JUnitResult myResult = __getOrCreateTestResult();
+    JUnitResult myResult = new JUnitResult();
     if (ex != null) {
       myResult.setException(ex);
     }
@@ -314,7 +302,7 @@ public abstract class GWTTestCase extends TestCase {
    * A helper method to determine if we should catch exceptions. Wraps the call
    * into user code with a try/catch; if the user's code throws an exception, we
    * just ignore the exception and use the default behavior.
-   * 
+   *
    * @return <code>true</code> if exceptions should be handled normally,
    *         <code>false</code> if they should be allowed to escape.
    */

@@ -17,6 +17,7 @@ package com.google.gwt.core.client.impl;
 
 import com.google.gwt.core.client.Duration;
 import com.google.gwt.core.client.GWT;
+import com.google.gwt.core.client.GWT.UncaughtExceptionHandler;
 import com.google.gwt.core.client.JavaScriptObject;
 
 /**
@@ -24,6 +25,8 @@ import com.google.gwt.core.client.JavaScriptObject;
  * considered public or stable.
  */
 public final class Impl {
+
+  public static boolean moduleUnloaded = false;
 
   private static final int WATCHDOG_ENTRY_DEPTH_CHECK_INTERVAL_MS = 2000;
 
@@ -43,6 +46,25 @@ public final class Impl {
    */
   private static int watchdogEntryDepthTimerId = -1;
 
+  private static UnloadSupport unloadSupport = GWT.isScript() ?
+      (UnloadSupport) GWT.create(UnloadSupport.class) : new UnloadSupport();
+
+  static {
+     exportUnloadModule();
+  }
+
+  public static void clearInterval(int timerId) {
+    unloadSupport.clearInterval(timerId);
+  }
+
+  public static void clearTimeout(int timerId) {
+    unloadSupport.clearTimeout(timerId);
+  }
+
+  public static void dispose(Disposable d) {
+    unloadSupport.dispose(d);
+  }
+
   /**
    * This method should be used whenever GWT code is entered from a JS context
    * and there is no GWT code in the same module on the call stack. Examples
@@ -57,7 +79,7 @@ public final class Impl {
    * The function passed to this method will be invoked via
    * <code>Function.apply()</code> with the current <code>this</code> value and
    * the invocation arguments passed to <code>$entry</code>.
-   * 
+   *
    * @param jsFunction a JS function to invoke, which is typically a JSNI
    *          reference to a static Java method
    * @return the value returned when <code>jsFunction</code> is invoked, or
@@ -77,6 +99,10 @@ public final class Impl {
       }
     };
   }-*/;
+
+  public static void exportUnloadModule() {
+    unloadSupport.exportUnloadModule();
+  }
 
   /**
    * Gets an identity-based hash code on the passed-in Object by adding an
@@ -133,7 +159,7 @@ public final class Impl {
    * Returns the obfuscated name of members in the compiled output. This is a
    * thin wrapper around JNameOf AST nodes and is therefore meaningless to
    * implement in Development Mode.
-   * 
+   *
    * @param jsniIdent a string literal specifying a type, field, or method. Raw
    *          type names may also be used to obtain the name of the type's seed
    *          function.
@@ -157,10 +183,43 @@ public final class Impl {
   }-*/;
 
   /**
+   * UncaughtExceptionHandler that is used by unit tests to spy on uncaught
+   * exceptions.
+   */
+  private static UncaughtExceptionHandler uncaughtExceptionHandlerForTest;
+
+  /**
+   * Set an uncaught exception handler to spy on uncaught exceptions in unit
+   * tests.
+   * <p>
+   * Setting this method will not interfere with any exception handling logic;
+   * i.e. {@link GWT#getUncaughtExceptionHandler()} will still return null if a
+   * handler is not set via {@link GWT#setUncaughtExceptionHandler}.
+   */
+  public static void setUncaughtExceptionHandlerForTest(
+      UncaughtExceptionHandler handler) {
+    uncaughtExceptionHandlerForTest = handler;
+  }
+
+  public static void maybeReportUncaughtException(
+      UncaughtExceptionHandler handler, Throwable t) {
+    if (uncaughtExceptionHandlerForTest != null) {
+      uncaughtExceptionHandlerForTest.onUncaughtException(t);
+    }
+    if (handler != null) {
+      handler.onUncaughtException(t);
+    }
+  }
+
+  /**
    * Indicates if <code>$entry</code> has been called.
    */
   public static boolean isEntryOnStack() {
     return entryDepth > 0;
+  }
+
+  public static boolean isModuleUnloaded() {
+    return moduleUnloaded;
   }
 
   /**
@@ -182,6 +241,25 @@ public final class Impl {
       return $entry = @com.google.gwt.core.client.impl.Impl::entry(Lcom/google/gwt/core/client/JavaScriptObject;);
     }
   }-*/;
+
+  public static void scheduleDispose(Disposable d) {
+    unloadSupport.scheduleDispose(d);
+  }
+
+  public static int setInterval(JavaScriptObject func, int time) {
+    return unloadSupport.setInterval(func, time);
+  }
+
+  public static int setTimeout(JavaScriptObject func, int time) {
+    return unloadSupport.setTimeout(func, time);
+  }
+
+  public static void unloadModule() {
+    if (unloadSupport.isUnloadSupported()) {
+      moduleUnloaded = true;
+      unloadSupport.disposeAll();
+    }
+  }
 
   private static native Object apply(Object jsFunction, Object thisObj,
       Object args) /*-{
@@ -223,7 +301,11 @@ public final class Impl {
    * Implements {@link #entry(JavaScriptObject)}.
    */
   private static Object entry0(Object jsFunction, Object thisObj,
-      Object arguments) throws Throwable {
+      Object args) throws Throwable {
+    // if module is unloaded, don't run anything
+    if (unloadSupport.isUnloadSupported() && Impl.isModuleUnloaded()) {
+      return null;
+    }
     boolean initialEntry = enter();
 
     try {
@@ -239,14 +321,14 @@ public final class Impl {
          * doing something useful with it.
          */
         try {
-          return apply(jsFunction, thisObj, arguments);
+          return apply(jsFunction, thisObj, args);
         } catch (Throwable t) {
-          GWT.getUncaughtExceptionHandler().onUncaughtException(t);
+          GWT.maybeReportUncaughtException(t);
           return undefined();
         }
       } else {
         // Can't handle any exceptions, let them percolate normally
-        return apply(jsFunction, thisObj, arguments);
+        return apply(jsFunction, thisObj, args);
       }
 
       /*
@@ -294,7 +376,7 @@ public final class Impl {
   }-*/;
 
   private static native void watchdogEntryDepthCancel(int timerId) /*-{
-    $wnd.clearTimeout(timerId);
+    @com.google.gwt.core.client.impl.Impl::clearTimeout(I)(timerId);
   }-*/;
 
   private static void watchdogEntryDepthRun() {
@@ -307,7 +389,7 @@ public final class Impl {
   }
 
   private static native int watchdogEntryDepthSchedule() /*-{
-    return $wnd.setTimeout(function() {
+    return @com.google.gwt.core.client.impl.Impl::setTimeout(Lcom/google/gwt/core/client/JavaScriptObject;I)(function() {
       @com.google.gwt.core.client.impl.Impl::watchdogEntryDepthRun()();
     }, 10);
   }-*/;

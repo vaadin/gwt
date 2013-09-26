@@ -133,6 +133,7 @@ import com.google.gwt.dev.js.ast.JsLabel;
 import com.google.gwt.dev.js.ast.JsName;
 import com.google.gwt.dev.js.ast.JsNameOf;
 import com.google.gwt.dev.js.ast.JsNameRef;
+import com.google.gwt.dev.js.ast.JsNode;
 import com.google.gwt.dev.js.ast.JsParameter;
 import com.google.gwt.dev.js.ast.JsProgram;
 import com.google.gwt.dev.js.ast.JsVars;
@@ -140,6 +141,7 @@ import com.google.gwt.dev.js.ast.JsVisitor;
 import com.google.gwt.dev.util.DefaultTextOutput;
 import com.google.gwt.dev.util.Empty;
 import com.google.gwt.dev.util.Memory;
+import com.google.gwt.dev.util.Pair;
 import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.arg.OptionOptimize;
 import com.google.gwt.dev.util.collect.Lists;
@@ -332,9 +334,11 @@ public class JavaToJavaScriptCompiler {
 
       // (7) Generate a JavaScript code DOM from the Java type declarations
       jprogram.typeOracle.recomputeAfterOptimizations();
-      JavaToJavaScriptMap jjsmap =
+      Pair<? extends JavaToJavaScriptMap, Set<JsNode>> genAstResult =
           GenerateJavaScriptAST.exec(jprogram, jsProgram, options.getOutput(), symbolTable,
               propertyOracles);
+
+      JavaToJavaScriptMap jjsmap = genAstResult.getLeft();
 
       // (8) Normalize the JS AST.
       // Fix invalid constructs created during JS AST gen.
@@ -354,7 +358,7 @@ public class JavaToJavaScriptCompiler {
 
       // (9) Optimize the JS AST.
       if (optimizationLevel > OptionOptimize.OPTIMIZE_LEVEL_DRAFT) {
-        optimizeJs(options, jsProgram);
+        optimizeJs(options, jsProgram, genAstResult.getRight());
 
         /*
          * Coalesce redundant labels in switch statements.
@@ -422,7 +426,7 @@ public class JavaToJavaScriptCompiler {
       switch (options.getOutput()) {
         case OBFUSCATED:
           obfuscateMap = JsStringInterner.exec(jprogram, jsProgram, isIE6orUnknown);
-          JsObfuscateNamer.exec(jsProgram);
+          JsObfuscateNamer.exec(jsProgram, propertyOracles);
           if (options.isAggressivelyOptimize()) {
             if (JsStackEmulator.getStackMode(propertyOracles) == JsStackEmulator.StackMode.STRIP) {
               boolean changed = false;
@@ -433,18 +437,18 @@ public class JavaToJavaScriptCompiler {
               if (changed) {
                 JsUnusedFunctionRemover.exec(jsProgram);
                 // run again
-                JsObfuscateNamer.exec(jsProgram);
+                JsObfuscateNamer.exec(jsProgram, propertyOracles);
               }
             }
           }
           break;
         case PRETTY:
           // We don't intern strings in pretty mode to imprmakeSouove readability
-          JsPrettyNamer.exec(jsProgram);
+          JsPrettyNamer.exec(jsProgram, propertyOracles);
           break;
         case DETAILED:
           obfuscateMap = JsStringInterner.exec(jprogram, jsProgram, isIE6orUnknown);
-          JsVerboseNamer.exec(jsProgram);
+          JsVerboseNamer.exec(jsProgram, propertyOracles);
           break;
         default:
           throw new InternalCompilerException("Unknown output mode");
@@ -485,21 +489,32 @@ public class JavaToJavaScriptCompiler {
       PermutationResult toReturn =
           new PermutationResultImpl(js, permutation, makeSymbolMap(symbolTable, jsProgram), ranges);
       CompilationMetricsArtifact compilationMetrics = null;
+
       // TODO: enable this when ClosureCompiler is enabled
-      if (!options.isClosureCompilerEnabled() && options.isCompilerMetricsEnabled()) {
-        compilationMetrics = new CompilationMetricsArtifact(permutation.getId());
-        compilationMetrics.setCompileElapsedMilliseconds(System.currentTimeMillis()
-            - startTimeMilliseconds);
-        compilationMetrics.setElapsedMilliseconds(System.currentTimeMillis()
-            - ManagementFactory.getRuntimeMXBean().getStartTime());
-        compilationMetrics.setJsSize(sizeBreakdowns);
-        compilationMetrics.setPermutationDescription(permutation.prettyPrint());
-        toReturn.addArtifacts(Lists.create(unifiedAst.getModuleMetrics(), unifiedAst
-            .getPrecompilationMetrics(), compilationMetrics));
+      if (options.isCompilerMetricsEnabled()) {
+        if (options.isClosureCompilerEnabled()) {
+          logger.log(TreeLogger.WARN, "Incompatible options: -XenableClosureCompiler and "
+              + "-XcompilerMetric; ignoring -XcompilerMetric.");
+        } else {
+          compilationMetrics = new CompilationMetricsArtifact(permutation.getId());
+          compilationMetrics.setCompileElapsedMilliseconds(System.currentTimeMillis()
+              - startTimeMilliseconds);
+          compilationMetrics.setElapsedMilliseconds(System.currentTimeMillis()
+              - ManagementFactory.getRuntimeMXBean().getStartTime());
+          compilationMetrics.setJsSize(sizeBreakdowns);
+          compilationMetrics.setPermutationDescription(permutation.prettyPrint());
+          toReturn.addArtifacts(Lists.create(unifiedAst.getModuleMetrics(), unifiedAst
+              .getPrecompilationMetrics(), compilationMetrics));
+        }
       }
 
       // TODO: enable this when ClosureCompiler is enabled
-      if (!options.isClosureCompilerEnabled()) {
+      if (options.isClosureCompilerEnabled()) {
+        if (options.isSoycEnabled()) {
+          logger.log(TreeLogger.WARN, "Incompatible options: -XenableClosureCompiler and "
+              + "-compileReport; ignoring -compileReport.");
+        }
+      } else {
         toReturn.addArtifacts(makeSoycArtifacts(logger, permutationId, jprogram, js, sizeBreakdowns,
             options.isSoycExtra() ? sourceInfoMaps : null, dependencies, jjsmap, obfuscateMap,
             unifiedAst.getModuleMetrics(), unifiedAst.getPrecompilationMetrics(), compilationMetrics,
@@ -507,10 +522,15 @@ public class JavaToJavaScriptCompiler {
       }
 
       // TODO: enable this when ClosureCompiler is enabled
-      if (!options.isClosureCompilerEnabled() && isSourceMapsEnabled) {
-        logger.log(TreeLogger.INFO, "Source Maps Enabled");
-        toReturn.addArtifacts(SourceMapRecorder.makeSourceMapArtifacts(sourceInfoMaps,
-            permutationId));
+      if (isSourceMapsEnabled) {
+        if (options.isClosureCompilerEnabled()) {
+          logger.log(TreeLogger.WARN, "Incompatible options: -XenableClosureCompiler and "
+              + "compiler.useSourceMaps=true; ignoring compiler.useSourceMaps=true.");
+        } else {
+          logger.log(TreeLogger.INFO, "Source Maps Enabled");
+          toReturn.addArtifacts(SourceMapRecorder.makeSourceMapArtifacts(sourceInfoMaps,
+              permutationId));
+        }
       }
 
       logTrackingStats(logger);
@@ -617,11 +637,11 @@ public class JavaToJavaScriptCompiler {
 
     try {
       // (2) Assemble the Java AST.
-      UnifyAst unifyAst = new UnifyAst(jprogram, jsProgram, options, rpo);
+      UnifyAst unifyAst = new UnifyAst(logger, jprogram, jsProgram, options, rpo);
       unifyAst.addRootTypes(allRootTypes);
       // TODO: move this into UnifyAst?
       findEntryPoints(logger, rpo, declEntryPts, jprogram);
-      unifyAst.exec(logger);
+      unifyAst.exec();
 
       List<String> finalTypeOracleTypes = Lists.create();
       if (precompilationMetrics != null) {
@@ -743,7 +763,8 @@ public class JavaToJavaScriptCompiler {
     draftOptimizeEvent.end();
   }
 
-  protected static void optimize(JJSOptions options, JProgram jprogram) throws InterruptedException {
+  protected static void optimize(JJSOptions options, JProgram jprogram)
+      throws InterruptedException {
     Event optimizeEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE);
 
     List<OptimizerStats> allOptimizerStats = new ArrayList<OptimizerStats>();
@@ -784,7 +805,8 @@ public class JavaToJavaScriptCompiler {
     optimizeEvent.end();
   }
 
-  protected static void optimizeJs(JJSOptions options, JsProgram jsProgram)
+  protected static void optimizeJs(JJSOptions options, JsProgram jsProgram,
+      Collection<JsNode> toInline)
       throws InterruptedException {
     List<OptimizerStats> allOptimizerStats = new ArrayList<OptimizerStats>();
     int counter = 0;
@@ -800,7 +822,7 @@ public class JavaToJavaScriptCompiler {
       // Remove unused functions, possible
       stats.add(JsStaticEval.exec(jsProgram));
       // Inline JavaScript function invocations
-      stats.add(JsInliner.exec(jsProgram));
+      stats.add(JsInliner.exec(jsProgram, toInline));
       // Remove unused functions, possible
       stats.add(JsUnusedFunctionRemover.exec(jsProgram));
 

@@ -29,9 +29,9 @@ import com.google.gwt.dev.cfg.BindingProperty;
 import com.google.gwt.dev.cfg.ModuleDef;
 import com.google.gwt.dev.cfg.Properties;
 import com.google.gwt.dev.cfg.Property;
+import com.google.gwt.dev.javac.CompilationProblemReporter;
 import com.google.gwt.dev.javac.CompilationState;
 import com.google.gwt.dev.javac.CompilationUnit;
-import com.google.gwt.dev.javac.CompilationProblemReporter;
 import com.google.gwt.dev.shell.CheckForUpdates;
 import com.google.gwt.dev.shell.jetty.JettyLauncher;
 import com.google.gwt.dev.util.arg.ArgHandlerDeployDir;
@@ -118,13 +118,9 @@ public class JUnitShell extends DevMode {
    * A strategy for running the test.
    */
   public interface Strategy {
-    String getModuleInherit();
-
     String getSyntheticModuleExtension();
 
     void processModule(ModuleDef module);
-
-    void processResult(TestCase testCase, JUnitResult result);
   }
 
   static class ArgProcessor extends ArgProcessorBase {
@@ -653,35 +649,6 @@ public class JUnitShell extends DevMode {
   }
 
   /**
-   * Entry point for {@link com.google.gwt.junit.client.GWTTestCase}. Gets or
-   * creates the singleton {@link JUnitShell} and invokes its
-   * {@link #runTestImpl(GWTTestCase, TestResult)}.
-   * 
-   * @deprecated use {@link #runTest(GWTTestCase, TestResult)} instead
-   */
-  @Deprecated
-  public static void runTest(String moduleName, TestCase testCase,
-      TestResult testResult) throws UnableToCompleteException {
-    runTest(moduleName, testCase, testResult,
-        ((GWTTestCase) testCase).getStrategy());
-  }
-
-  /**
-   * @deprecated use {@link #runTest(GWTTestCase, TestResult)} instead
-   */
-  @Deprecated
-  public static void runTest(String moduleName, TestCase testCase,
-      TestResult testResult, Strategy strategy)
-      throws UnableToCompleteException {
-    GWTTestCase gwtTestCase = (GWTTestCase) testCase;
-    assert moduleName != null : "moduleName cannot be null";
-    assert strategy != null : "strategy cannot be null";
-    assert moduleName.equals(gwtTestCase.getModuleName()) : "moduleName does not match GWTTestCase#getModuleName()";
-    assert strategy.equals(gwtTestCase.getStrategy()) : "strategy does not match GWTTestCase#getStrategy()";
-    runTest(gwtTestCase, testResult);
-  }
-
-  /**
    * Retrieves the JUnitShell. This should only be invoked during TestRunner
    * execution of JUnit tests.
    */
@@ -821,9 +788,14 @@ public class JUnitShell extends DevMode {
   private boolean developmentMode = true;
 
   /**
-   * If true, no launches have yet been successful.
+   * Used to make sure we don't start the runStyle more than once.
    */
-  private boolean firstLaunch = true;
+  private boolean runStyleStarted;
+
+  /**
+   * If true, we haven't started all the clients yet. (Used for manual mode.)
+   */
+  private boolean waitingForClients = true;
 
   /**
    * If true, the last attempt to launch failed.
@@ -978,17 +950,18 @@ public class JUnitShell extends DevMode {
   protected boolean notDone() {
     int activeClients = messageQueue.getNumClientsRetrievedTest(currentTestInfo);
     int expectedClients = messageQueue.getNumClients();
-    if (firstLaunch && runStyle instanceof RunStyleManual) {
+    if (runStyle instanceof RunStyleManual && waitingForClients) {
       String[] newClients = messageQueue.getNewClients();
       int printIndex = activeClients - newClients.length + 1;
       for (String newClient : newClients) {
         System.out.println(printIndex + " - " + newClient);
         ++printIndex;
       }
-      if (activeClients != expectedClients) {
+      if (activeClients < expectedClients) {
         // Wait forever for first contact; user-driven.
         return true;
       }
+      waitingForClients = false;
     }
 
     // Limit permutations after all clients have connected.
@@ -1016,7 +989,6 @@ public class JUnitShell extends DevMode {
             "Too many clients: expected " + expectedClients + ", found "
                 + activeClients);
       }
-      firstLaunch = false;
 
       /*
        * It's now safe to release any reference to the last module since all
@@ -1143,15 +1115,6 @@ public class JUnitShell extends DevMode {
     }
   }
 
-  /**
-   * @deprecated TODO(fabbott) delete me
-   */
-  @Deprecated
-  @SuppressWarnings("unused")
-  void setNumClients(int numClients) {
-    throw new UnsupportedOperationException("This method should be deleted.");
-  }
-
   void setStandardsMode(boolean standardsMode) {
     this.standardsMode = standardsMode;
   }
@@ -1253,8 +1216,7 @@ public class JUnitShell extends DevMode {
     return true;
   }
 
-  private void processTestResult(TestCase testCase, TestResult testResult,
-      Strategy strategy) {
+  private void processTestResult(TestCase testCase, TestResult testResult) {
 
     Map<ClientStatus, JUnitResult> results = messageQueue.getResults(currentTestInfo);
     assert results != null;
@@ -1294,8 +1256,6 @@ public class JUnitShell extends DevMode {
         }
         testResult.addError(testCase, exception);
       }
-
-      strategy.processResult(testCase, result);
     }
   }
 
@@ -1350,13 +1310,13 @@ public class JUnitShell extends DevMode {
     numTries++;
     if (messageQueue.hasResults(currentTestInfo)) {
       // Already have a result.
-      processTestResult(testCase, testResult, strategy);
+      processTestResult(testCase, testResult);
       return;
     }
     compileStrategy.maybeAddTestBlockForCurrentTest(testCase, batchingStrategy);
 
     try {
-      if (firstLaunch) {
+      if (!runStyleStarted) {
         runStyle.launchModule(currentModule.getName());
       }
     } catch (UnableToCompleteException e) {
@@ -1364,6 +1324,7 @@ public class JUnitShell extends DevMode {
       testResult.addError(testCase, new JUnitFatalLaunchException(e));
       return;
     }
+    runStyleStarted = true;
 
     boolean mustRetry = mustRetry(numTries);
     // Wait for test to complete
@@ -1400,7 +1361,7 @@ public class JUnitShell extends DevMode {
       }
     }
     assert (messageQueue.hasResults(currentTestInfo));
-    processTestResult(testCase, testResult, testCase.getStrategy());
+    processTestResult(testCase, testResult);
   }
 
   /**

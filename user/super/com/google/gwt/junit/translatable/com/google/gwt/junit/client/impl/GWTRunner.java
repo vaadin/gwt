@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -20,6 +20,7 @@ import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.Scheduler;
 import com.google.gwt.http.client.UrlBuilder;
 import com.google.gwt.junit.client.GWTTestCase;
+import com.google.gwt.junit.client.impl.GWTRunnerProxy.TestAccessor;
 import com.google.gwt.junit.client.impl.JUnitHost.ClientInfo;
 import com.google.gwt.junit.client.impl.JUnitHost.InitialResponse;
 import com.google.gwt.junit.client.impl.JUnitHost.TestBlock;
@@ -36,12 +37,12 @@ import java.util.HashMap;
 
 /**
  * The entry point class for GWTTestCases.
- * 
+ *
  * This is the main test running logic. Each time a test completes, the results
  * are reported back through {@link #junitHost}, and the next method to run is
  * returned. This process repeats until the next method to run is null.
  */
-public abstract class GWTRunner implements EntryPoint {
+public class GWTRunner implements EntryPoint {
 
   private final class InitialResponseListener implements
       AsyncCallback<InitialResponse> {
@@ -72,7 +73,7 @@ public abstract class GWTRunner implements EntryPoint {
 
     /**
      * The number of times we've failed to communicate with the server on the
-     * current test batch. 
+     * current test batch.
      */
     private int curRetryCount = 0;
 
@@ -81,6 +82,7 @@ public abstract class GWTRunner implements EntryPoint {
      */
     public void onFailure(Throwable caught) {
       if (maxRetryCount < 0 || curRetryCount < maxRetryCount) {
+        reportWarning("Retrying syncing back to junit backend. (Exception: " + caught + ")");
         // Try the call again
         curRetryCount++;
         new Timer() {
@@ -90,8 +92,7 @@ public abstract class GWTRunner implements EntryPoint {
           }
         }.schedule(1000);
       } else {
-        // Give up and mark the test complete on the client side.
-        markComplete();
+        reportFatalError("Cannot sync back to junit backend: " + caught);
       }
     }
 
@@ -105,19 +106,8 @@ public abstract class GWTRunner implements EntryPoint {
       currentResults.clear();
       if (currentBlock != null && currentBlock.getTests().length > 0) {
         doRunTest();
-      } else {
-        markComplete();
       }
     }
-
-    /**
-     * Set a global expando so the test infrastructure knows that the test is
-     * complete.
-     */
-    private native void markComplete() /*-{
-      $doc.title = "Completed Tests";
-      $wnd._gwt_test_complete = true;
-    }-*/;
   }
 
   /**
@@ -153,23 +143,6 @@ public abstract class GWTRunner implements EntryPoint {
 
   public static GWTRunner get() {
     return sInstance;
-  }
-
-  /**
-   * Convert unserializable exceptions (usually from dev mode) into generic
-   * serializable ones.
-   */
-  private static void ensureSerializable(ExceptionWrapper wrapper,
-      SerializationStreamWriter writer) {
-    if (wrapper == null) {
-      return;
-    }
-    ensureSerializable(wrapper.causeWrapper, writer);
-    try {
-      writer.writeObject(wrapper.exception);
-    } catch (SerializationException e) {
-      wrapper.exception = new Exception(wrapper.exception.toString());
-    }
   }
 
   /**
@@ -216,12 +189,14 @@ public abstract class GWTRunner implements EntryPoint {
    * The maximum number of times to retry communication with the server per
    * test batch.
    */
-  private int maxRetryCount = -1;
+  private int maxRetryCount;
 
   /**
    * If true, run a single test case with no RPC.
    */
   private boolean serverless = false;
+
+  private TestAccessor testAccessor;
 
   // TODO(FINDBUGS): can this be a private constructor to avoid multiple
   // instances?
@@ -238,9 +213,12 @@ public abstract class GWTRunner implements EntryPoint {
   }
 
   public void onModuleLoad() {
+    GWTRunnerProxy proxy = GWT.create(GWTRunnerProxy.class);
+    testAccessor = proxy.createTestAccessor();
+
     clientInfo = new ClientInfo(parseQueryParamInteger(
-        SESSIONID_QUERY_PARAM, -1), getUserAgentProperty());
-    maxRetryCount = parseQueryParamInteger(RETRYCOUNT_QUERY_PARAM, -1);
+        SESSIONID_QUERY_PARAM, -1), proxy.getUserAgentProperty());
+    maxRetryCount = parseQueryParamInteger(RETRYCOUNT_QUERY_PARAM, 3);
     currentBlock = checkForQueryParamTestToRun();
     if (currentBlock != null) {
       /*
@@ -262,13 +240,11 @@ public abstract class GWTRunner implements EntryPoint {
       // That's it, we're done
       return;
     }
-    if (result != null && failureMessage != null) {
+    if (failureMessage != null) {
       RuntimeException ex = new RuntimeException(failureMessage);
       result.setException(ex);
-    } else if (!GWT.isProdMode() && result.exceptionWrapper != null) {
-      SerializationStreamFactory fac = (SerializationStreamFactory) junitHost;
-      SerializationStreamWriter writer = fac.createStreamWriter();
-      ensureSerializable(result.exceptionWrapper, writer);
+    } else if (result.exceptionWrapper != null) {
+      ensureSerializable(result.exceptionWrapper);
     }
     TestInfo currentTest = getCurrentTest();
     currentResults.put(currentTest, result);
@@ -286,16 +262,31 @@ public abstract class GWTRunner implements EntryPoint {
   }
 
   /**
-   * Implemented by the generated subclass. Creates an instance of the specified
-   * test class by fully qualified name.
+   * Convert unserializable exceptions into generic serializable ones.
    */
-  protected abstract GWTTestCase createNewTestCase(String testClass);
+  private void ensureSerializable(ExceptionWrapper wrapper) {
+    if (wrapper == null) {
+      return;
+    }
+
+    ensureSerializable(wrapper.causeWrapper);
+    try {
+      SerializationStreamFactory fac = (SerializationStreamFactory) junitHost;
+      SerializationStreamWriter dummyWriter = fac.createStreamWriter();
+      dummyWriter.writeObject(wrapper.exception);
+    } catch (SerializationException e) {
+      wrapper.exception = new Exception(wrapper.exception.toString() +
+          " (unserializable exception)");
+    }
+  }
 
   /**
-   * Implemented by the generated subclass. Get the value of the user agent
-   * property.
+   * Executes a test on provided test class instance.
    */
-  protected abstract String getUserAgentProperty();
+  public void executeTestMethod(GWTTestCase testCase, String className, String methodName)
+      throws Throwable {
+    testAccessor.invoke(testCase, className, methodName);
+  }
 
   private TestBlock checkForQueryParamTestToRun() {
     String testClass = Window.Location.getParameter(TESTCLASS_QUERY_PARAM);
@@ -324,7 +315,7 @@ public abstract class GWTRunner implements EntryPoint {
        */
       String currentPath = Window.Location.getPath();
       String pathSuffix = currentPath.substring(currentPath.lastIndexOf('/'));
-      
+
       UrlBuilder builder = Window.Location.createUrlBuilder();
       builder.setParameter(BLOCKINDEX_QUERY_PARAM,
           Integer.toString(currentBlock.getIndex())).setPath(
@@ -348,7 +339,7 @@ public abstract class GWTRunner implements EntryPoint {
   /**
    * Parse an integer from a query parameter, returning the default value if
    * the parameter cannot be found.
-   * 
+   *
    * @param paramName the parameter name
    * @param defaultValue the default value
    * @return the integer value of the parameter
@@ -371,22 +362,17 @@ public abstract class GWTRunner implements EntryPoint {
     // Dynamically create a new test case.
     TestInfo currentTest = getCurrentTest();
     GWTTestCase testCase = null;
-    Throwable caught = null;
     try {
-      testCase = createNewTestCase(currentTest.getTestClass());
+      testCase = testAccessor.newInstance(currentTest.getTestClass());
     } catch (Throwable e) {
-      caught = e;
-    }
-    if (testCase == null) {
       RuntimeException ex = new RuntimeException(currentTest
-          + ": could not instantiate the requested class", caught);
+          + ": could not instantiate the requested class", e);
       JUnitResult result = new JUnitResult();
       result.setException(ex);
       reportResultsAndGetNextMethod(result);
       return;
     }
-
-    testCase.setName(currentTest.getTestMethod());
+    testCase.init(currentTest.getTestClass(), currentTest.getTestMethod());
     testCase.__doRunTest();
   }
 
@@ -408,4 +394,11 @@ public abstract class GWTRunner implements EntryPoint {
     }
   }
 
+  private static native void reportFatalError(String errorMsg)/*-{
+    $wnd.junitError("/fatal", errorMsg);
+  }-*/;
+
+  private static native void reportWarning(String errorMsg)/*-{
+    $wnd.junitError("", errorMsg);
+  }-*/;
 }

@@ -215,9 +215,12 @@ public abstract class Number implements Serializable {
     }
 
     int toReturn = __parseInt(s, radix);
+    // isTooLow is separated into its own variable to avoid a bug in BlackBerry OS 7. See
+    // https://code.google.com/p/google-web-toolkit/issues/detail?id=7291.
+    boolean isTooLow = toReturn < lowerBound;
     if (__isNaN(toReturn)) {
       throw NumberFormatException.forInputString(s);
-    } else if (toReturn < lowerBound || toReturn > upperBound) {
+    } else if (isTooLow || toReturn > upperBound) {
       throw NumberFormatException.forInputString(s);
     }
 
@@ -238,6 +241,8 @@ public abstract class Number implements Serializable {
       throw new NumberFormatException("radix " + radix + " out of range");
     }
 
+    final String orig = s;
+
     int length = s.length();
     boolean negative = (length > 0) && (s.charAt(0) == '-');
     if (negative) {
@@ -245,7 +250,7 @@ public abstract class Number implements Serializable {
       length--;
     }
     if (length == 0) {
-      throw NumberFormatException.forInputString(s);
+      throw NumberFormatException.forInputString(orig);
     }
 
     // Strip leading zeros
@@ -257,7 +262,7 @@ public abstract class Number implements Serializable {
     // Immediately eject numbers that are too long -- this avoids more complex
     // overflow handling below
     if (length > __ParseLong.maxLengthForRadix[radix]) {
-      throw NumberFormatException.forInputString(s);
+      throw NumberFormatException.forInputString(orig);
     }
 
     // Validate the digits
@@ -275,18 +280,20 @@ public abstract class Number implements Serializable {
       if (c >= 'A' && c < maxUpperCaseDigit) {
         continue;
       }
-      throw NumberFormatException.forInputString(s);
+      throw NumberFormatException.forInputString(orig);
     }
 
     long toReturn = 0;
     int maxDigits = __ParseLong.maxDigitsForRadix[radix];
     long radixPower = __ParseLong.maxDigitsRadixPower[radix];
-    long maxValue = __ParseLong.maxValueForRadix[radix];
+    long minValue = -__ParseLong.maxValueForRadix[radix];
 
     boolean firstTime = true;
     int head = length % maxDigits;
     if (head > 0) {
-      toReturn = __parseInt(s.substring(0, head), radix);
+      // accumulate negative numbers, as -Long.MAX_VALUE == Long.MIN_VALUE + 1
+      // (in other words, -Long.MIN_VALUE overflows, see issue 7308)
+      toReturn = - __parseInt(s.substring(0, head), radix);
       s = s.substring(head);
       length -= head;
       firstTime = false;
@@ -298,23 +305,27 @@ public abstract class Number implements Serializable {
       length -= maxDigits;
       if (!firstTime) {
         // Check whether multiplying by radixPower will overflow
-        if (toReturn > maxValue) {
+        if (toReturn < minValue) {
           throw new NumberFormatException(s);
         }
         toReturn *= radixPower;
       } else {
         firstTime = false;
       }
-      toReturn += head;
+      toReturn -= head;
     }
-
-    // A negative value means we overflowed Long.MAX_VALUE
-    if (toReturn < 0) {
-      throw NumberFormatException.forInputString(s);
+    
+    // A positive value means we overflowed Long.MIN_VALUE
+    if (toReturn > 0) {
+      throw NumberFormatException.forInputString(orig);
     }
-
-    if (negative) {
+    
+    if (!negative) {
       toReturn = -toReturn;
+      // A negative value means we overflowed Long.MAX_VALUE
+      if (toReturn < 0) {
+        throw NumberFormatException.forInputString(orig);
+      }
     }
     return toReturn;
   }
