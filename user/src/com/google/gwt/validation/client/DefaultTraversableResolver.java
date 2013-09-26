@@ -15,23 +15,32 @@
  */
 package com.google.gwt.validation.client;
 
+import java.lang.annotation.ElementType;
+
+import javax.validation.Path;
+import javax.validation.Path.Node;
+import javax.validation.TraversableResolver;
+
 /**
  * <strong>EXPERIMENTAL</strong> and subject to change. Do not use this in
  * production code.
  * <p>
- * Visibility looked at when discovering constraints.
- * <p>
- * Exactly the same as the
- * <a href="http://docs.jboss.org/hibernate/validator/4.3/api/org/hibernate/validator/internal/metadata/core/ConstraintOrigin.html">
- * Hibernate implementation</a>.
+ * Default {@link TraversableResolver}. Always allows full traversal.
  */
-public enum ConstraintOrigin {
-  /**
-   * Constraint is defined on the root class
-   */
-  DEFINED_LOCALLY,
-  /**
-   * Constraint is defined in a super-class or interface of the root class.
-   */
-  DEFINED_IN_HIERARCHY
+public final class DefaultTraversableResolver implements TraversableResolver {
+
+  @Override
+  public boolean isCascadable(Object traversableObject,
+      Node traversableProperty, Class<?> rootBeanType,
+      Path pathToTraversableObject, ElementType elementType) {
+    return true;
+  }
+
+  @Override
+  public boolean isReachable(Object traversableObject,
+      Node traversableProperty, Class<?> rootBeanType,
+      Path pathToTraversableObject, ElementType elementType) {
+    return true;
+  }
+
 }

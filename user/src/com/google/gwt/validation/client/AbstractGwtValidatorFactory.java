@@ -104,16 +104,20 @@ public abstract class AbstractGwtValidatorFactory implements ValidatorFactory {
         GWT.<ConstraintValidatorFactory>create(ConstraintValidatorFactory.class);
     TraversableResolver configTraversableResolver = configState.getTraversableResolver();
     this.traversableResolver = configTraversableResolver != null ?
-        configTraversableResolver : GWT.<TraversableResolver>create(TraversableResolver.class);
+        configTraversableResolver : new DefaultTraversableResolver();
     MessageInterpolator configMessageInterpolator = configState.getMessageInterpolator();
     this.messageInterpolator = configMessageInterpolator != null ?
         configMessageInterpolator : new GwtMessageInterpolator();
   }
 
+  /**
+   * Unsupported. Always throws an {@link UnsupportedOperationException}.
+   * 
+   * @throws UnsupportedOperationException
+   */
   @Override
   public final <T> T unwrap(Class<T> type) {
-    // TODO(nchalko) implement
-    return null;
+    throw new UnsupportedOperationException("GWT Validation does not support upwrap()");
   }
 
   @Override

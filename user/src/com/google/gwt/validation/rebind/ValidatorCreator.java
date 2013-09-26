@@ -59,8 +59,9 @@ public final class ValidatorCreator extends AbstractCreator {
   public ValidatorCreator(JClassType validatorType, //
       GwtValidation gwtValidation, //
       TreeLogger logger, //
-      GeneratorContext context) throws UnableToCompleteException {
-    super(context, logger, validatorType);
+      GeneratorContext context,
+      BeanHelperCache cache) throws UnableToCompleteException {
+    super(context, logger, validatorType, cache);
     this.gwtValidation = gwtValidation;
 
     List<BeanHelper> temp = Lists.newArrayList();
@@ -141,6 +142,9 @@ public final class ValidatorCreator extends AbstractCreator {
 
     // getMessageInterpolator(),
     sw.println("getMessageInterpolator(), ");
+
+    // getTraversableResolver(),
+    sw.println("getTraversableResolver(), ");
 
     // this);
     sw.println("this);");
@@ -242,7 +246,7 @@ public final class ValidatorCreator extends AbstractCreator {
     sw.println("checkNotNull(groups, \"groups\");");
     sw.println("checkGroups(groups);");
 
-    for (BeanHelper bean : BeanHelperCache.getForThread().getAllBeans()) {
+    for (BeanHelper bean : cache.getAllBeans()) {
       writeGwtValidate(sw, bean);
     }
 

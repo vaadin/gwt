@@ -13,26 +13,25 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.validation.client.spi;
-
-import com.google.gwt.core.client.GWT;
-
-import javax.validation.ValidationProviderResolver;
-import javax.validation.spi.BootstrapState;
+package com.google.gwt.validation.client.impl;
 
 /**
  * <strong>EXPERIMENTAL</strong> and subject to change. Do not use this in
  * production code.
  * <p>
- * GWT {@link BootstrapState}.
+ * Visibility looked at when discovering constraints.
+ * <p>
+ * Exactly the same as the
+ * <a href="http://docs.jboss.org/hibernate/validator/4.3/api/org/hibernate/validator/internal/metadata/core/ConstraintOrigin.html">
+ * Hibernate implementation</a>.
  */
-public final class GwtBootStrapState implements BootstrapState {
-
-  public ValidationProviderResolver getDefaultValidationProviderResolver() {
-    return GWT.create(ValidationProviderResolver.class);
-  }
-
-  public ValidationProviderResolver getValidationProviderResolver() {
-    return null;
-  }
+public enum ConstraintOrigin {
+  /**
+   * Constraint is defined on the root class
+   */
+  DEFINED_LOCALLY,
+  /**
+   * Constraint is defined in a super-class or interface of the root class.
+   */
+  DEFINED_IN_HIERARCHY
 }
