@@ -17,9 +17,6 @@ package com.google.gwt.junit.client;
 
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.GWT.UncaughtExceptionHandler;
-import com.google.gwt.junit.DoNotRunWith;
-import com.google.gwt.junit.ExpectedFailure;
-import com.google.gwt.junit.Platform;
 
 import junit.framework.AssertionFailedError;
 
@@ -38,6 +35,7 @@ public class GWTTestCaseUncaughtExceptionHandlerTest extends GWTTestCaseTestBase
   private boolean throwsInGwtSetUp;
   private boolean throwsInGwtTearDown;
   private boolean addsCustomHandlerInGwtSetup;
+  private boolean optsOut;
 
   @Override
   public void setName(String name) {
@@ -55,6 +53,8 @@ public class GWTTestCaseUncaughtExceptionHandlerTest extends GWTTestCaseTestBase
       throwsInGwtSetUp = true;
     } else if ("throwsInGwtTearDown".equals(confToken)) {
       throwsInGwtTearDown = true;
+    } else if ("optsOut".equals(confToken)) {
+      optsOut = true;
     } else {
       throw new RuntimeException("Unexpected token in test name: " + confToken);
     }
@@ -77,14 +77,21 @@ public class GWTTestCaseUncaughtExceptionHandlerTest extends GWTTestCaseTestBase
     }
   }
 
+  @Override
+  protected void reportUncaughtException(Throwable ex) {
+    if (optsOut) {
+      return;
+    }
+    super.reportUncaughtException(ex);
+  }
+
   @ExpectedFailure(withMessage = "fail_uncaught")
   public void testFailViaUncaughtException() {
     failViaUncaughtException("fail_uncaught");
   }
 
-  // Suppressed due to http://code.google.com/p/google-web-toolkit/issues/detail?id=5016
   @ExpectedFailure(withMessage = "fail_uncaught")
-  public void _suppressed_testFailViaUncaughtExceptionWithCustomHandler() {
+  public void testFailViaUncaughtExceptionWithCustomHandler() {
     // Set our own handler
     GWT.setUncaughtExceptionHandler(myHandler);
 
@@ -92,9 +99,8 @@ public class GWTTestCaseUncaughtExceptionHandlerTest extends GWTTestCaseTestBase
     failViaUncaughtException("fail_uncaught");
   }
 
-  // Suppressed due to http://code.google.com/p/google-web-toolkit/issues/detail?id=5016
   @ExpectedFailure(withMessage = "fail_uncaught")
-  public void _suppressed_testFailViaUncaughtException_addsCustomHandlerInGwtSetup() {
+  public void testFailViaUncaughtException_addsCustomHandlerInGwtSetup() {
     // Verify our own handler is still there
     assertSame(myHandler, GWT.getUncaughtExceptionHandler());
 
@@ -102,11 +108,7 @@ public class GWTTestCaseUncaughtExceptionHandlerTest extends GWTTestCaseTestBase
     failViaUncaughtException("fail_uncaught");
   }
 
-  // Suppressed for HtmlUnit due to
-  // http://code.google.com/p/google-web-toolkit/issues/detail?id=8007
-  @DoNotRunWith(Platform.HtmlUnitUnknown)
-  public void testFailViaUncaughtExceptionOptout() {
-    GWT.setUncaughtExceptionHandler(null);
+  public void testFailViaUncaughtException_optsOut() {
     failViaUncaughtException("should not fail");
   }
 
@@ -127,9 +129,8 @@ public class GWTTestCaseUncaughtExceptionHandlerTest extends GWTTestCaseTestBase
     // gwtSetUp is configured to throw exception
   }
 
-  // Suppressed due to http://code.google.com/p/google-web-toolkit/issues/detail?id=5016
   @ExpectedFailure(withMessage = "fail_uncaught_setUp")
-  public void _suppressed_testFailViaUncaughtException_throwsInGwtSetUp_addsCustomHandlerInGwtSetup() {
+  public void testFailViaUncaughtException_throwsInGwtSetUp_addsCustomHandlerInGwtSetup() {
     // gwtSetUp is configured to throw exception
   }
 
@@ -141,6 +142,7 @@ public class GWTTestCaseUncaughtExceptionHandlerTest extends GWTTestCaseTestBase
 
   @ExpectedFailure(withMessage = "fail_uncaught")
   public void testFailWithGetUncaughtExceptionHandler() {
+    // For legacy behavior, this should still fail
     GWT.getUncaughtExceptionHandler()
         .onUncaughtException(new AssertionFailedError("fail_uncaught"));
   }

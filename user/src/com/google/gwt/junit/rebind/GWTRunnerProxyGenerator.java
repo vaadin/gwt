@@ -33,15 +33,16 @@ import com.google.gwt.junit.client.GWTTestCase.TestModuleInfo;
 import com.google.gwt.junit.client.impl.GWTRunnerProxy;
 import com.google.gwt.junit.client.impl.GWTRunnerProxy.JsniTestAccessor;
 import com.google.gwt.junit.client.impl.JUnitHost.TestInfo;
+import com.google.gwt.junit.client.impl.MissingTestPlaceHolder;
 import com.google.gwt.user.rebind.ClassSourceFileComposerFactory;
 import com.google.gwt.user.rebind.SourceWriter;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * This class generates a JSNI based {@link GWTRunnerProxy} implementation.
@@ -55,6 +56,7 @@ public class GWTRunnerProxyGenerator extends Generator {
 
   private static final String PROXY = GWTRunnerProxy.class.getCanonicalName();
   private static final String JSNI_TEST_ACCESSOR = JsniTestAccessor.class.getCanonicalName();
+  private static final String MISSING_TEST = MissingTestPlaceHolder.class.getCanonicalName();
 
   private static final JType[] NO_PARAMS = new JType[0];
 
@@ -114,7 +116,7 @@ public class GWTRunnerProxyGenerator extends Generator {
     SourceWriter sourceWriter =
         getSourceWriter(logger, context, packageName, generatedBaseClass, null, null);
     if (sourceWriter != null) {
-      writeMethodCreateTestAccessor(logger, context, moduleName, sourceWriter);
+      writeMethodCreateTestAccessor(sourceWriter, getTestClasses(logger, context, moduleName));
       sourceWriter.commit(logger);
     }
 
@@ -156,15 +158,13 @@ public class GWTRunnerProxyGenerator extends Generator {
    * }-{@literal*}/;
    * </pre>
    */
-  private void writeMethodCreateTestAccessor(
-      TreeLogger logger, GeneratorContext context, String moduleName, SourceWriter sw) {
-    Set<JClassType> testClasses = getTestClasses(logger, context, moduleName);
+  private void writeMethodCreateTestAccessor(SourceWriter sw, Map<String, JClassType> testClasses) {
     sw.println("public native final %s createTestAccessor() /*-{", JSNI_TEST_ACCESSOR);
     sw.indent();
     sw.println("return {");
-    for (JClassType jClassType : testClasses) {
-      sw.println("'%s': {", jClassType.getQualifiedBinaryName());
-      writeFunctionMap(sw, jClassType);
+    for (Map.Entry<String, JClassType> entry : testClasses.entrySet()) {
+      sw.println("'%s': {", entry.getKey());
+      writeFunctionMap(sw, entry.getValue());
       sw.println("},");
     }
     sw.println("};");
@@ -193,31 +193,35 @@ public class GWTRunnerProxyGenerator extends Generator {
     sw.println("}");
   }
 
-  private Set<JClassType> getTestClasses(
-      TreeLogger logger, GeneratorContext context, String moduleName) {
+  private Map<String, JClassType> getTestClasses(
+      TreeLogger logger, GeneratorContext context, String moduleName)
+      throws UnableToCompleteException {
     // Check the global set of active tests for this module.
     TestModuleInfo moduleInfo = GWTTestCase.getTestsForModule(moduleName);
     Set<TestInfo> moduleTests = (moduleInfo == null) ? null : moduleInfo.getTests();
     if (moduleTests == null || moduleTests.isEmpty()) {
-      // Fall back to pulling in all types in the module.
-      JClassType[] allTestTypes = getAllPossibleTestTypes(context.getTypeOracle());
-      return getTestTypesForModule(logger, moduleName, allTestTypes);
-    } else {
-      Set<JClassType> testClasses = new LinkedHashSet<JClassType>();
-      for (TestInfo testInfo : moduleTests) {
-        testClasses.add(context.getTypeOracle().findType(testInfo.getTestClass()));
-      }
-      return testClasses;
+      logger.log(TreeLogger.ERROR, "No active tests found in module: " + moduleName);
+      throw new UnableToCompleteException();
     }
+    Map<String, JClassType> testClasses = new LinkedHashMap<String, JClassType>();
+    for (TestInfo testInfo : moduleTests) {
+      String testClassName = testInfo.getTestClass();
+      testClasses.put(testClassName, getTestClass(context.getTypeOracle(), testClassName));
+    }
+    return testClasses;
   }
 
-  private JClassType[] getAllPossibleTestTypes(TypeOracle typeOracle) {
-    JClassType gwtTestType = typeOracle.findType(GWTTestCase.class.getName());
-    if (gwtTestType != null) {
-      return gwtTestType.getSubtypes();
-    } else {
-      return new JClassType[0];
-    }
+  /**
+   * Returns the test class. If the class is not found in {@link TypeOracle}, then a place holder is
+   * returned in order to continue code generation.
+   * <p>
+   * If we don't continue code generation, we usually can't see the real cause of the compilation
+   * error in the logs. This also provides the benefit of continuing testing with the rest of test
+   * classes that still compiles.
+   */
+  private JClassType getTestClass(TypeOracle typeOracle, String testClassName) {
+    JClassType type = typeOracle.findType(testClassName);
+    return type != null ? type : typeOracle.findType(MISSING_TEST);
   }
 
   private SourceWriter getSourceWriter(TreeLogger logger,
@@ -240,34 +244,6 @@ public class GWTRunnerProxyGenerator extends Generator {
       composerFactory.addImplementedInterface(interfaceName);
     }
     return composerFactory.createSourceWriter(ctx, printWriter);
-  }
-
-  private Set<JClassType> getTestTypesForModule(
-      TreeLogger logger, String moduleName, JClassType[] allTestTypes) {
-    // Must use sorted set to prevent nondeterminism.
-    Set<JClassType> testClasses = new TreeSet<JClassType>();
-    for (JClassType classType : allTestTypes) {
-      if (!classType.isPublic() || classType.isAbstract() || !classType.isDefaultInstantiable()) {
-        continue;
-      }
-
-      String className = getPackagePrefix(classType) + classType.getName().replace('.', '$');
-
-      try {
-        Class<?> testClass = Class.forName(className);
-        GWTTestCase instantiated = (GWTTestCase) testClass.newInstance();
-        if (!moduleName.equals(instantiated.getModuleName())) {
-          continue;
-        }
-      } catch (Throwable e) {
-        logger.log(TreeLogger.INFO, "Error determining if test class '" + className
-            + "' is a part of the current module; skipping; expect subsequent errors "
-            + "if this test class is run", e);
-        continue;
-      }
-      testClasses.add(classType);
-    }
-    return testClasses;
   }
 
   private static List<JMethod> getTestMethods(JClassType requestedClass) {

@@ -252,15 +252,33 @@ public class JavaToJavaScriptCompiler {
   private static final String ENUM_NAME_OBFUSCATION_PROPERTY = "compiler.enum.obfuscate.names";
 
   /**
+   * Continuing to apply optimizations till the rate of change reaches this value causes the AST to
+   * reach a fixed point.
+   */
+  private static final int FIXED_POINT_CHANGE_RATE = 0;
+
+  /**
+   * Ending optimization passes when the rate of change has reached this value results in
+   * gaining nearly all of the impact while avoiding the long tail of costly but low-impact passes.
+   */
+  private static final float EFFICIENT_CHANGE_RATE = 0.01f;
+
+  /**
+   * Limits the number of optimization passes against the possible danger of an AST that does not
+   * converge.
+   */
+  private static final int MAX_PASSES = 100;
+
+  /**
    * Compiles a particular permutation, based on a precompiled unified AST.
    *
    * @param logger the logger to use
-   * @param unifiedAst the result of a
-   *          {@link #precompile(TreeLogger, ModuleDef, RebindPermutationOracle, String[], String[], JJSOptions, boolean, PrecompilationMetricsArtifact)}
+   * @param unifiedAst the result of a {@link #precompile(TreeLogger, ModuleDef,
+   *          RebindPermutationOracle, String[], String[], JJSOptions, boolean,
+   *          PrecompilationMetricsArtifact)}
    * @param permutation the permutation to compile
    * @return the output JavaScript
-   * @throws UnableToCompleteException if an error other than
-   *           {@link OutOfMemoryError} occurs
+   * @throws UnableToCompleteException if an error other than {@link OutOfMemoryError} occurs
    */
   public static PermutationResult compilePermutation(TreeLogger logger, UnifiedAst unifiedAst,
       Permutation permutation) throws UnableToCompleteException {
@@ -280,9 +298,9 @@ public class JavaToJavaScriptCompiler {
     long permStart = System.currentTimeMillis();
     try {
       if (JProgram.isTracingEnabled()) {
-        System.out.println("------------------------------------------------------------");
-        System.out.println("|                     (new permuation)                     |");
-        System.out.println("------------------------------------------------------------");
+        System.out.println("-------------------------------------------------------------");
+        System.out.println("|                     (new permutation)                     |");
+        System.out.println("-------------------------------------------------------------");
         System.out.println("Properties: " + permutation.prettyPrint());
       }
 
@@ -443,7 +461,7 @@ public class JavaToJavaScriptCompiler {
           }
           break;
         case PRETTY:
-          // We don't intern strings in pretty mode to imprmakeSouove readability
+          // We don't intern strings in pretty mode to improve readability
           JsPrettyNamer.exec(jsProgram, propertyOracles);
           break;
         case DETAILED:
@@ -768,11 +786,16 @@ public class JavaToJavaScriptCompiler {
     Event optimizeEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE);
 
     List<OptimizerStats> allOptimizerStats = new ArrayList<OptimizerStats>();
-    int counter = 0;
-    int optimizationLevel = options.getOptimizationLevel();
+    int passCount = 0;
+    int nodeCount = getNodeCount(jprogram);
+    int lastNodeCount;
+
+    boolean atMaxLevel = options.getOptimizationLevel() == OptionOptimize.OPTIMIZE_LEVEL_MAX;
+    int passLimit = atMaxLevel ? MAX_PASSES : options.getOptimizationLevel();
+    float minChangeRate = atMaxLevel ? FIXED_POINT_CHANGE_RATE : EFFICIENT_CHANGE_RATE;
     while (true) {
-      counter++;
-      if (optimizationLevel < OptionOptimize.OPTIMIZE_LEVEL_MAX && counter > optimizationLevel) {
+      passCount++;
+      if (passCount > passLimit) {
         break;
       }
       if (Thread.interrupted()) {
@@ -781,9 +804,14 @@ public class JavaToJavaScriptCompiler {
       }
       AstDumper.maybeDumpAST(jprogram);
       OptimizerStats stats =
-          optimizeLoop("Pass " + counter, jprogram, options.isAggressivelyOptimize());
+          optimizeLoop("Pass " + passCount, jprogram, options.isAggressivelyOptimize(), nodeCount);
       allOptimizerStats.add(stats);
-      if (!stats.didChange()) {
+      lastNodeCount = nodeCount;
+      nodeCount = getNodeCount(jprogram);
+
+      float nodeChangeRate = stats.getNumMods() / (float) lastNodeCount;
+      float sizeChangeRate = (lastNodeCount - nodeCount) / (float) lastNodeCount;
+      if (nodeChangeRate <= minChangeRate && sizeChangeRate <= minChangeRate) {
         break;
       }
     }
@@ -849,15 +877,15 @@ public class JavaToJavaScriptCompiler {
 
   protected static OptimizerStats optimizeLoop(String passName, JProgram jprogram,
       boolean isAggressivelyOptimize) {
-    Event optimizeEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE, "phase", "loop");
-
-    // Count the number of nodes in the AST so we can measure the efficiency of
-    // the optimizers.
-    Event countEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE, "phase", "countNodes");
     TreeStatistics treeStats = new TreeStatistics();
     treeStats.accept(jprogram);
     int numNodes = treeStats.getNodeCount();
-    countEvent.end();
+    return optimizeLoop("Early Optimization", jprogram, false, numNodes);
+  }
+
+  protected static OptimizerStats optimizeLoop(String passName, JProgram jprogram,
+      boolean isAggressivelyOptimize, int numNodes) {
+    Event optimizeEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE, "phase", "loop");
 
     // Recompute clinits each time, they can become empty.
     jprogram.typeOracle.recomputeAfterOptimizations();
@@ -909,6 +937,15 @@ public class JavaToJavaScriptCompiler {
 
     optimizeEvent.end();
     return stats;
+  }
+
+  private static int getNodeCount(JProgram jProgram) {
+    Event countEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE, "phase", "countNodes");
+    TreeStatistics treeStats = new TreeStatistics();
+    treeStats.accept(jProgram);
+    int numNodes = treeStats.getNodeCount();
+    countEvent.end();
+    return numNodes;
   }
 
   private static MultipleDependencyGraphRecorder chooseDependencyRecorder(boolean soycEnabled,
@@ -1252,7 +1289,7 @@ public class JavaToJavaScriptCompiler {
       dashboard.generateForOnePermutation();
       if (moduleMetricsArtifact != null && precompilationMetricsArtifact != null
           && compilationMetrics != null) {
-        dashboard.generateCompilerMetricsForOnePermuation(moduleMetricsArtifact,
+        dashboard.generateCompilerMetricsForOnePermutation(moduleMetricsArtifact,
             precompilationMetricsArtifact, compilationMetrics);
       }
       soycArtifacts.addAll(outDir.getArtifacts());
@@ -1335,17 +1372,17 @@ public class JavaToJavaScriptCompiler {
         @Override
         public void endVisit(JsLabel x, JsContext ctx) {
           nameUsed.add(x.getName().getIdent());
-        };
+        }
 
         @Override
         public void endVisit(JsParameter x, JsContext ctx) {
           nameUsed.add(x.getName().getIdent());
-        };
+        }
 
         @Override
         public void endVisit(JsVars.JsVar x, JsContext ctx) {
           nameUsed.add(x.getName().getIdent());
-        };
+        }
 
       }.accept(jsProgram.getFragmentBlock(i));
     }
