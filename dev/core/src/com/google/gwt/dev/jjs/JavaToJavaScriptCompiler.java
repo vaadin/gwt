@@ -418,7 +418,9 @@ public class JavaToJavaScriptCompiler {
         // merging.
         if (fragmentsMerge > 0) {
           CodeSplitter2.exec(logger, jprogram, jsProgram, jjsmap, fragmentsMerge,
-              chooseDependencyRecorder(options.isSoycEnabled(), baos));
+              chooseDependencyRecorder(options.isSoycEnabled(), baos),
+              findIntegerConfigurationProperty(propertyOracles, logger,
+                  CodeSplitter2.LEFTOVERMERGE_SIZE, 0));
         } else {
           CodeSplitter.exec(logger, jprogram, jsProgram, jjsmap, chooseDependencyRecorder(options
               .isSoycEnabled(), baos));
@@ -445,7 +447,7 @@ public class JavaToJavaScriptCompiler {
         case OBFUSCATED:
           obfuscateMap = JsStringInterner.exec(jprogram, jsProgram, isIE6orUnknown);
           JsObfuscateNamer.exec(jsProgram, propertyOracles);
-          if (options.isAggressivelyOptimize()) {
+          if (options.shouldRemoveDuplicateFunctions()) {
             if (JsStackEmulator.getStackMode(propertyOracles) == JsStackEmulator.StackMode.STRIP) {
               boolean changed = false;
               for (int i = 0; i < jsProgram.getFragmentCount(); i++) {
@@ -586,6 +588,25 @@ public class JavaToJavaScriptCompiler {
     }
     return toReturn;
   }
+
+  /**
+   * Look for a configuration property in all property oracles.
+   */
+  public static int findIntegerConfigurationProperty(
+      PropertyOracle[] propertyOracles, TreeLogger logger,
+      String name, int def) {
+    int toReturn = def;
+    for (PropertyOracle oracle : propertyOracles) {
+      try {
+        com.google.gwt.core.ext.ConfigurationProperty property = oracle.getConfigurationProperty(name);
+        toReturn = Integer.parseInt(property.getValues().get(0));
+      } catch (Exception e) {
+        break;
+      }
+    }
+    return toReturn;
+  }
+
 
   public static UnifiedAst precompile(TreeLogger logger, ModuleDef module,
       RebindPermutationOracle rpo, String[] declEntryPts, String[] additionalRootTypes,
@@ -741,7 +762,7 @@ public class JavaToJavaScriptCompiler {
            * perfectly parallelize the permutation compiles, so let's avoid
            * doing potentially superlinear optimizations on the unified AST.
            */
-          optimizeLoop("Early Optimization", jprogram, false);
+          optimizeLoop("Early Optimization", jprogram, options);
         }
       }
 
@@ -803,8 +824,7 @@ public class JavaToJavaScriptCompiler {
         throw new InterruptedException();
       }
       AstDumper.maybeDumpAST(jprogram);
-      OptimizerStats stats =
-          optimizeLoop("Pass " + passCount, jprogram, options.isAggressivelyOptimize(), nodeCount);
+      OptimizerStats stats = optimizeLoop("Pass " + passCount, jprogram, options, nodeCount);
       allOptimizerStats.add(stats);
       lastNodeCount = nodeCount;
       nodeCount = getNodeCount(jprogram);
@@ -816,7 +836,7 @@ public class JavaToJavaScriptCompiler {
       }
     }
 
-    if (options.isAggressivelyOptimize()) {
+    if (options.shouldOptimizeDataflow()) {
       // Just run it once, because it is very time consuming
       allOptimizerStats.add(DataflowOptimizer.exec(jprogram));
     }
@@ -876,15 +896,15 @@ public class JavaToJavaScriptCompiler {
   }
 
   protected static OptimizerStats optimizeLoop(String passName, JProgram jprogram,
-      boolean isAggressivelyOptimize) {
+      JJSOptions options) {
     TreeStatistics treeStats = new TreeStatistics();
     treeStats.accept(jprogram);
     int numNodes = treeStats.getNodeCount();
-    return optimizeLoop("Early Optimization", jprogram, false, numNodes);
+    return optimizeLoop("Early Optimization", jprogram, options, numNodes);
   }
 
   protected static OptimizerStats optimizeLoop(String passName, JProgram jprogram,
-      boolean isAggressivelyOptimize, int numNodes) {
+      JJSOptions options, int numNodes) {
     Event optimizeEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE, "phase", "loop");
 
     // Recompute clinits each time, they can become empty.
@@ -919,16 +939,13 @@ public class JavaToJavaScriptCompiler {
     // inlining
     stats.add(MethodInliner.exec(jprogram).recordVisits(numNodes));
 
-    if (isAggressivelyOptimize) {
+    if (options.shouldInlineLiteralParameters()) {
       // remove same parameters value
       stats.add(SameParameterValueOptimizer.exec(jprogram).recordVisits(numNodes));
+    }
 
-      /*
-       * Enum ordinalization.
-       *
-       * TODO(jbrosenberg): graduate this out of the 'isAggressivelyOptimize'
-       * block, over time.
-       */
+    if (options.shouldOrdinalizeEnums()) {
+      // ordinalize enums.
       stats.add(EnumOrdinalizer.exec(jprogram).recordVisits(numNodes));
     }
 
@@ -1084,20 +1101,17 @@ public class JavaToJavaScriptCompiler {
   }
 
   /**
-   * Generate JavaScript code from the given JavaScript ASTs. Also produces
-   * information about that transformation.
-   *
+   * Generate JavaScript code from the given JavaScript ASTs. Also produces information about that
+   * transformation.
+   * 
    * @param options The options this compiler instance is running with
    * @param jprogram The original Java program AST
    * @param jsProgram The AST to convert to source code
-   * @param jjsMap A map between the JavaScript AST and the Java AST it came
-*          from
+   * @param jjsMap A map between the JavaScript AST and the Java AST it came from
    * @param js An array to hold the output JavaScript
    * @param ranges An array to hold the statement ranges for that JavaScript
-   * @param sizeBreakdowns An array to hold the size breakdowns for that
-*          JavaScript
-   * @param sourceInfoMaps An array to hold the source info maps for that
-*          JavaScript
+   * @param sizeBreakdowns An array to hold the size breakdowns for that JavaScript
+   * @param sourceInfoMaps An array to hold the source info maps for that JavaScript
    * @param splitBlocks true if current permutation is for IE6 or unknown
    * @param sourceMapsEnabled
    */
@@ -1148,7 +1162,7 @@ public class JavaToJavaScriptCompiler {
       Event functionClusterEvent = SpeedTracerLogger.start(CompilerEventType.FUNCTION_CLUSTER);
       // TODO(cromwellian) move to the Js AST, re-enable sourcemaps + clustering
       if (!sourceMapsEnabled
-          && options.isAggressivelyOptimize()
+          && options.shouldClusterSimilarFunctions()
           // only cluster for obfuscated mode
           && options.getOutput() == JsOutputOption.OBFUSCATED) {
         transformer = new JsFunctionClusterer(transformer);

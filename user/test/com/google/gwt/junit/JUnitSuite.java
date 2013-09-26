@@ -17,6 +17,7 @@ package com.google.gwt.junit;
 
 import com.google.gwt.junit.client.DevModeOnCompiledScriptTest;
 import com.google.gwt.junit.client.GWTTestCaseAsyncTest;
+import com.google.gwt.junit.client.GWTTestCaseInheritanceTest;
 import com.google.gwt.junit.client.GWTTestCaseSetupTearDownTest;
 import com.google.gwt.junit.client.GWTTestCaseStackTraceTest;
 import com.google.gwt.junit.client.GWTTestCaseTest;
@@ -36,8 +37,9 @@ public class JUnitSuite {
     suite.addTestSuite(GWTTestCaseTest.class);
     suite.addTestSuite(GWTTestCaseStackTraceTest.class);
     suite.addTestSuite(GWTTestCaseUncaughtExceptionHandlerTest.class);
-    suite.addTest(new TestSuiteWithOrder(GWTTestCaseAsyncTest.class));
     suite.addTest(new TestSuiteWithOrder(GWTTestCaseSetupTearDownTest.class));
+    suite.addTest(new TestSuiteWithOrder(GWTTestCaseInheritanceTest.class));
+    suite.addTest(new TestSuiteWithOrder(GWTTestCaseAsyncTest.class));
 
     suite.addTestSuite(DevModeOnCompiledScriptTest.class);
 
@@ -45,9 +47,14 @@ public class JUnitSuite {
     suite.addTestSuite(BatchingStrategyTest.class);
     suite.addTestSuite(CompileStrategyTest.class);
 
+    // TODO(rluble): Make Selenium tests work or deprecate. They are missing the Selenium
+    // dependency.
+
+    // suite.addTestSuite(RunStyleSeleniumTest.class);
+
+    suite.addTestSuite(FakeCssMakerTest.class);
     suite.addTestSuite(FakeMessagesMakerTest.class);
     suite.addTestSuite(GWTMockUtilitiesTest.class);
-    suite.addTestSuite(JUnitMessageQueueTest.class);
     suite.addTestSuite(GWTTestCaseNoClientTest.class);
 
     // Intended only to be run manually. See class comments
@@ -59,6 +66,9 @@ public class JUnitSuite {
 
     suite.addTestSuite(PropertyDefiningStrategyTest.class);
     suite.addTestSuite(PropertyDefiningGWTTest.class);
+
+    suite.addTestSuite(JUnitMessageQueueTest.class);
+    suite.addTestSuite(JUnitShellTest.class);
 
     return suite;
   }

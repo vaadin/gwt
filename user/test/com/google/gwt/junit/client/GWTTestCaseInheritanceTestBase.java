@@ -1,33 +1,33 @@
 /*
- * Copyright 2008 Google Inc.
- * 
+ * Copyright 2013 Google Inc.
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.dev.util.arg;
+package com.google.gwt.junit.client;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * An option to control whether or not runAsync code-splitting will be employed
- * by the compilation.
+ * A test class that is inherited by {@link GWTTestCaseInheritanceTest}.
  */
-public interface OptionRunAsyncEnabled {
+class GWTTestCaseInheritanceTestBase extends GWTTestCaseTestBase {
 
-  /**
-   * Returns true if the compiler should code-split at runAsync boundaries.
-   */
-  boolean isRunAsyncEnabled();
+  static List<String> executions = new ArrayList<String>();
 
-  /**
-   * Sets whether or not the compiler should code-split at runAsync boundaries.
-   */
-  void setRunAsyncEnabled(boolean enabled);
+  public void testBasic() { }
+
+  public void testOverridden() { }
+
+  public static void testStatic() { }
 }
