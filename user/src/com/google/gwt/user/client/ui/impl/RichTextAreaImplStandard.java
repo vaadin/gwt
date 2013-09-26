@@ -65,15 +65,18 @@ public abstract class RichTextAreaImplStandard extends RichTextAreaImpl implemen
     return $doc.createElement('iframe');
   }-*/;
 
-  public void createLink(String url) {
+  @Override
+public void createLink(String url) {
     execCommand("CreateLink", url);
   }
 
-  public String getBackColor() {
+  @Override
+public String getBackColor() {
     return queryCommandValue("BackColor");
   }
 
-  public String getForeColor() {
+  @Override
+public String getForeColor() {
     return queryCommandValue("ForeColor");
   }
 
@@ -95,40 +98,45 @@ public abstract class RichTextAreaImplStandard extends RichTextAreaImpl implemen
     var _this = this;
     _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImplStandard::onElementInitializing()();
     setTimeout($entry(function() {
-      
-      // We need to check to see if the content window still is there. It might not be if the RTA first
-      // was attached to the DOM and then quickly was removed before the timeout fired.
-      if(_this.@com.google.gwt.user.client.ui.impl.RichTextAreaImpl::elem.contentWindow != null){
-           // Turn on design mode.
-          _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImpl::elem.contentWindow.document.designMode = 'On';
-          
-           // Send notification that the iframe has reached design mode.
-          _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImplStandard::onElementInitialized()();
+      // We need to check to see if the content window still is there. It might not be if the RTA
+      // first was attached to the DOM and then quickly was removed before the timeout fired.
+      if (_this.@com.google.gwt.user.client.ui.impl.RichTextAreaImpl::elem.contentWindow != null) {
+        // Turn on design mode.
+        _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImpl::elem.contentWindow.document.designMode = 'On';
+
+        // Send notification that the iframe has reached design mode.
+        _this.@com.google.gwt.user.client.ui.impl.RichTextAreaImplStandard::onElementInitialized()();
       }
     }), 1);
   }-*/;
 
-  public void insertHorizontalRule() {
+  @Override
+public void insertHorizontalRule() {
     execCommand("InsertHorizontalRule", null);
   }
 
-  public void insertHTML(String html) {
+  @Override
+public void insertHTML(String html) {
     execCommand("InsertHTML", html);
   }
 
-  public void insertImage(String url) {
+  @Override
+public void insertImage(String url) {
     execCommand("InsertImage", url);
   }
 
-  public void insertOrderedList() {
+  @Override
+public void insertOrderedList() {
     execCommand("InsertOrderedList", null);
   }
 
-  public void insertUnorderedList() {
+  @Override
+public void insertUnorderedList() {
     execCommand("InsertUnorderedList", null);
   }
 
-  public boolean isBold() {
+  @Override
+public boolean isBold() {
     return queryCommandState("Bold");
   }
 
@@ -138,51 +146,63 @@ public abstract class RichTextAreaImplStandard extends RichTextAreaImpl implemen
         : !beforeInitPlaceholder.getPropertyBoolean("disabled");
   }
 
-  public boolean isItalic() {
+  @Override
+public boolean isItalic() {
     return queryCommandState("Italic");
   }
 
-  public boolean isStrikethrough() {
+  @Override
+public boolean isStrikethrough() {
     return queryCommandState("Strikethrough");
   }
 
-  public boolean isSubscript() {
+  @Override
+public boolean isSubscript() {
     return queryCommandState("Subscript");
   }
 
-  public boolean isSuperscript() {
+  @Override
+public boolean isSuperscript() {
     return queryCommandState("Superscript");
   }
 
-  public boolean isUnderlined() {
+  @Override
+public boolean isUnderlined() {
     return queryCommandState("Underline");
   }
 
-  public void leftIndent() {
+  @Override
+public void leftIndent() {
     execCommand("Outdent", null);
   }
 
-  public void redo() {
+  @Override
+public void redo() {
     execCommand("Redo", "false");
   }
 
-  public void removeFormat() {
+  @Override
+public void removeFormat() {
     execCommand("RemoveFormat", null);
   }
 
-  public void removeLink() {
+  @Override
+public void removeLink() {
     execCommand("Unlink", "false");
   }
 
-  public void rightIndent() {
+  @Override
+public void rightIndent() {
     execCommand("Indent", null);
   }
 
-  public void selectAll() {
+  @Override
+public void selectAll() {
     execCommand("SelectAll", null);
   }
 
-  public void setBackColor(String color) {
+  @Override
+public void setBackColor(String color) {
     execCommand("BackColor", color);
   }
 
@@ -206,15 +226,18 @@ public abstract class RichTextAreaImplStandard extends RichTextAreaImpl implemen
     }
   }
 
-  public void setFontName(String name) {
+  @Override
+public void setFontName(String name) {
     execCommand("FontName", name);
   }
 
-  public void setFontSize(FontSize fontSize) {
+  @Override
+public void setFontSize(FontSize fontSize) {
     execCommand("FontSize", Integer.toString(fontSize.getNumber()));
   }
 
-  public void setForeColor(String color) {
+  @Override
+public void setForeColor(String color) {
     execCommand("ForeColor", color);
   }
 
@@ -227,7 +250,8 @@ public abstract class RichTextAreaImplStandard extends RichTextAreaImpl implemen
     }
   }
 
-  public void setJustification(Justification justification) {
+  @Override
+public void setJustification(Justification justification) {
     if (justification == Justification.CENTER) {
       execCommand("JustifyCenter", null);
     } else if (justification == Justification.FULL) {
@@ -248,31 +272,38 @@ public abstract class RichTextAreaImplStandard extends RichTextAreaImpl implemen
     }
   }
 
-  public void toggleBold() {
+  @Override
+public void toggleBold() {
     execCommand("Bold", "false");
   }
 
-  public void toggleItalic() {
+  @Override
+public void toggleItalic() {
     execCommand("Italic", "false");
   }
 
-  public void toggleStrikethrough() {
+  @Override
+public void toggleStrikethrough() {
     execCommand("Strikethrough", "false");
   }
 
-  public void toggleSubscript() {
+  @Override
+public void toggleSubscript() {
     execCommand("Subscript", "false");
   }
 
-  public void toggleSuperscript() {
+  @Override
+public void toggleSuperscript() {
     execCommand("Superscript", "false");
   }
 
-  public void toggleUnderline() {
+  @Override
+public void toggleUnderline() {
     execCommand("Underline", "False");
   }
 
-  public void undo() {
+  @Override
+public void undo() {
     execCommand("Undo", "false");
   }
 
