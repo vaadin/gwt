@@ -1,5 +1,5 @@
 /*
- * Copyright 2010 Google Inc.
+ * Copyright 2012 Google Inc.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -13,15 +13,32 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.sample.validation.shared;
-
-import com.google.gwt.validation.client.constraints.NotGwtCompatibleValidator;
+package com.google.gwt.editor.client;
 
 /**
- * Always invalid.
- * <p>
- * Server validator is overriden so it compiles, but it is always invalid.
+ * Simple parameterized data object used in 
+ * {@link SimpleBeanEditorTest#testEditorWithParameterizedModels()}.
+ *
+ * @param <T> type of the item
  */
-public class ServerValidator extends
-   NotGwtCompatibleValidator<ServerConstraint, Person> {
+public class TaggedItem<T> {
+  private T item;
+  private String tag;
+
+  public T getItem() {
+    return item;
+  }
+
+  public String getTag() {
+    return tag;
+  }
+
+  public void setItem(T item) {
+    this.item = item;
+  }
+
+  public void setTag(String tag) {
+    this.tag = tag;
+  }
 }
+

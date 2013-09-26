@@ -33,18 +33,6 @@ class RoleImpl implements Role {
     this.roleName = roleName;
   }
 
-  /**
-   * Gets the role for the element {@code element}. If none is set, "" is returned.
-   *
-   * @param element HTML element
-   * @return The role attribute value
-   */
-  @Override
-  public String get(Element element) {
-    assert element != null : "Element cannot be null.";
-    return element.getAttribute(ATTR_NAME_ROLE);
-  }
-
   @Override
   public String getAriaAtomicProperty(Element element) {
     return Property.ATOMIC.get(element);
@@ -125,11 +113,6 @@ class RoleImpl implements Role {
     return Property.RELEVANT.get(element);
   }
 
-  /**
-   * Gets the role name
-   *
-   * @return The role name
-   */
   @Override
   public String getName() {
     return roleName;
@@ -140,11 +123,6 @@ class RoleImpl implements Role {
     return ExtraAttribute.TABINDEX.get(element);
   }
 
-  /**
-   * Removes the role for element {@code element}
-   *
-   * @param element HTML element
-   */
   @Override
   public void remove(Element element) {
     assert element != null : "Element cannot be null.";
@@ -236,11 +214,6 @@ class RoleImpl implements Role {
     ExtraAttribute.TABINDEX.remove(element);
   }
 
-  /**
-   * Sets the role to element {@code element}
-   *
-   * @param element HTML element
-   */
   @Override
   public void set(Element element) {
     assert element != null : "Element cannot be null.";
@@ -258,12 +231,12 @@ class RoleImpl implements Role {
   }
 
   @Override
-  public void setAriaControlsProperty(Element element, IdReference... value) {
+  public void setAriaControlsProperty(Element element, Id... value) {
     Property.CONTROLS.set(element, value);
   }
 
   @Override
-  public void setAriaDescribedbyProperty(Element element, IdReference... value) {
+  public void setAriaDescribedbyProperty(Element element, Id... value) {
     Property.DESCRIBEDBY.set(element, value);
   }
 
@@ -278,7 +251,7 @@ class RoleImpl implements Role {
   }
 
   @Override
-  public void setAriaFlowtoProperty(Element element, IdReference... value) {
+  public void setAriaFlowtoProperty(Element element, Id... value) {
     Property.FLOWTO.set(element, value);
   }
 
@@ -303,7 +276,7 @@ class RoleImpl implements Role {
   }
 
   @Override
-  public void setAriaLabelledbyProperty(Element element, IdReference... value) {
+  public void setAriaLabelledbyProperty(Element element, Id... value) {
     Property.LABELLEDBY.set(element, value);
   }
 
@@ -318,7 +291,7 @@ class RoleImpl implements Role {
   }
 
   @Override
-  public void setAriaOwnsProperty(Element element, IdReference... value) {
+  public void setAriaOwnsProperty(Element element, Id... value) {
     Property.OWNS.set(element, value);
   }
 

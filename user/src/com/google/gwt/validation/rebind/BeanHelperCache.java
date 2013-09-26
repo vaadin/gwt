@@ -36,13 +36,10 @@ import javax.validation.metadata.BeanDescriptor;
 import javax.validation.metadata.PropertyDescriptor;
 
 /**
- * <strong>EXPERIMENTAL</strong> and subject to change. Do not use this in
- * production code.
- *
- * <p> A cache and factory for BeanHelpers. There should be one BeanHelperCache per
- * compilation run.</p>
- *
- * <p>(public for tests.)</p>
+ * A cache and factory for BeanHelpers. There should be one BeanHelperCache per
+ * compilation run.
+ * <p>
+ * (public for tests)
  */
 public class BeanHelperCache { // public for testing
 
@@ -127,6 +124,8 @@ public class BeanHelperCache { // public for testing
 
       // now recurse on all Cascaded elements
       for (PropertyDescriptor p : bean.getConstrainedProperties()) {
+        // TODO(idol) only bother creating objects for properties that have constrains in the groups
+        // specified in @GwtValidation, but not others
         if (p.isCascaded()) {
           doCreateHelperForProp(p, helper, logger, context);
         }
