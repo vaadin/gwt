@@ -15,6 +15,7 @@
  */
 package com.google.gwt.dom.client;
 
+import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.safehtml.shared.SafeUri;
 
 /**
@@ -32,9 +33,43 @@ public class AnchorElement extends Element {
    * automatically typecast it.
    */
   public static AnchorElement as(Element elem) {
-    assert elem.getTagName().equalsIgnoreCase(TAG);
+    assert is(elem);
     return (AnchorElement) elem;
   }
+
+  /**
+   * Determines whether the given {@link JavaScriptObject} can be cast to
+   * this class. A <code>null</code> object will cause this method to
+   * return <code>false</code>.
+   */
+  public static boolean is(JavaScriptObject o) {
+    if (Element.is(o)) {
+      return is((Element) o);
+    }
+    return false;
+  }
+
+  /**
+   * Determine whether the given {@link Node} can be cast to this class.
+   * A <code>null</code> node will cause this method to return
+   * <code>false</code>.
+   */
+  public static boolean is(Node node) {
+    if (Element.is(node)) {
+      return is((Element) node);
+    }
+    return false;
+  }
+  
+  /**
+   * Determine whether the given {@link Element} can be cast to this class.
+   * A <code>null</code> node will cause this method to return
+   * <code>false</code>.
+   */
+  public static boolean is(Element elem) {
+    return elem != null && elem.hasTagName(TAG);
+  }
+
 
   protected AnchorElement() {
   }
@@ -113,21 +148,21 @@ public class AnchorElement extends Element {
 
   /**
    * The absolute URI of the linked resource.
-   * 
+   *
    * @see <a href="http://www.w3.org/TR/1999/REC-html401-19991224/struct/links.html#adef-href">W3C HTML Specification</a>
    */
-  public final native void setHref(String href) /*-{
-    this.href = href;
-  }-*/;
+  public final void setHref(SafeUri href) {
+    setHref(href.asString());
+  }
 
   /**
    * The absolute URI of the linked resource.
    *
    * @see <a href="http://www.w3.org/TR/1999/REC-html401-19991224/struct/links.html#adef-href">W3C HTML Specification</a>
    */
-  public final void setSafeHref(SafeUri href) {
-    setHref(href.asString());
-  }
+  public final native void setHref(String href) /*-{
+    this.href = href;
+  }-*/;
 
   /**
    * Language code of the linked resource.

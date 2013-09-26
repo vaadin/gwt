@@ -19,6 +19,7 @@ package com.google.gwt.dev.codeserver;
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.dev.CompilerOptions;
 import com.google.gwt.dev.jjs.JsOutputOption;
+import com.google.gwt.dev.util.arg.SourceLevel;
 
 import java.io.File;
 import java.util.List;
@@ -152,12 +153,6 @@ abstract class UnmodifiableCompilerOptions implements CompilerOptions {
   }
 
   @Override
-  public final void setOutDir(File outDir) {
-    throw new UnsupportedOperationException();
-  }
-
-
-  @Override
   public final void setOutput(JsOutputOption obfuscated) {
     throw new UnsupportedOperationException();
   }
@@ -169,6 +164,11 @@ abstract class UnmodifiableCompilerOptions implements CompilerOptions {
 
   @Override
   public final void setRunAsyncEnabled(boolean enabled) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public final void setSourceLevel(SourceLevel sourceLevel) {
     throw new UnsupportedOperationException();
   }
 
@@ -189,11 +189,6 @@ abstract class UnmodifiableCompilerOptions implements CompilerOptions {
 
   @Override
   public final void setStrict(boolean strict) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public final void setUseGuiLogger(boolean useGuiLogger) {
     throw new UnsupportedOperationException();
   }
 

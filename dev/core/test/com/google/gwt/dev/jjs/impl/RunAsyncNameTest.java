@@ -19,12 +19,12 @@ import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.javac.testing.impl.MockJavaResource;
 import com.google.gwt.dev.jjs.ast.JProgram;
+import com.google.gwt.dev.jjs.impl.codesplitter.ReplaceRunAsyncs;
 import com.google.gwt.dev.util.UnitTestTreeLogger;
 
 /**
  * This class tests naming of runAsync calls. Mostly it tests names that are
  * invalid.
- *
  */
 public class RunAsyncNameTest extends JJSTestBase {
   @Override

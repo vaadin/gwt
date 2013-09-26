@@ -15,6 +15,7 @@
  */
 package com.google.gwt.core.client;
 
+import com.google.gwt.core.client.Scheduler.ScheduledCommand;
 import com.google.gwt.core.client.impl.Impl;
 
 /**
@@ -234,21 +235,29 @@ public final class GWT {
   }
 
   /**
-   * Logs a message to the development shell logger in Development Mode. Calls
-   * are optimized out in Production Mode.
+   * Logs a message to the development shell logger in Development Mode, or to
+   * the console in Super Dev Mode. Calls are optimized out in Production Mode.
    */
   public static void log(String message) {
     com.google.gwt.core.shared.GWT.log(message);
   }
 
   /**
-   * Logs a message to the development shell logger in Development Mode. Calls
-   * are optimized out in Production Mode.
+   * Logs a message to the development shell logger in Development Mode, or to
+   * the console in Super Dev Mode. Calls are optimized out in Production Mode.
    */
   public static void log(String message, Throwable e) {
     com.google.gwt.core.shared.GWT.log(message, e);
   }
 
+  /**
+   * Emits a JavaScript "debugger" statement on the line that called this method.
+   * If the user has the browser's debugger open, the debugger will stop when the
+   * GWT application executes that line. There is no effect in Dev Mode or in
+   * server-side code.
+   */
+  public static void debugger() {
+  }
 
   /**
    * The same as {@link #runAsync(RunAsyncCallback)}, except with an extra
@@ -257,15 +266,24 @@ public final class GWT {
    * should use the same name.
    */
   @SuppressWarnings("unused") // parameter will be used following replacement
-  public static void runAsync(Class<?> name, RunAsyncCallback callback) {
-    callback.onSuccess();
+  public static void runAsync(Class<?> name, final RunAsyncCallback callback) {
+    runAsyncImpl(callback);
   }
+
 
   /**
    * Run the specified callback once the necessary code for it has been loaded.
    */
-  public static void runAsync(RunAsyncCallback callback) {
-    callback.onSuccess();
+  public static void runAsync(final RunAsyncCallback callback) {
+    runAsyncImpl(callback);
+  }
+
+  private static void runAsyncImpl(final RunAsyncCallback callback) {
+    Scheduler.get().scheduleDeferred(new ScheduledCommand() {
+      @Override public void execute() {
+        callback.onSuccess();
+      }
+    });
   }
 
   /**

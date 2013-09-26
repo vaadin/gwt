@@ -15,6 +15,7 @@
  */
 package com.google.web.bindery.requestfactory.gwt.client;
 
+import com.google.gwt.regexp.shared.RegExp;
 import com.google.web.bindery.autobean.shared.AutoBeanCodex;
 import com.google.web.bindery.autobean.shared.AutoBeanUtils;
 import com.google.web.bindery.requestfactory.shared.EntityProxy;
@@ -126,6 +127,9 @@ public class RequestFactoryTest extends RequestFactoryTestBase {
 
   private class FailFixAndRefire<T> extends Receiver<T> {
 
+    private final RegExp THREE = RegExp.compile("\\b3\\b");
+    private final RegExp THIRTY = RegExp.compile("\\b30\\b");
+
     private final SimpleFooProxy proxy;
     private final Request<T> request;
     private boolean voidReturnExpected;
@@ -140,7 +144,8 @@ public class RequestFactoryTest extends RequestFactoryTestBase {
       assertEquals(1, errors.size());
       ConstraintViolation<?> error = errors.iterator().next();
       assertEquals("userName", error.getPropertyPath().toString());
-      assertEquals("size must be between 3 and 30", error.getMessage());
+      assertTrue(THREE.test(error.getMessage()));
+      assertTrue(THIRTY.test(error.getMessage()));
       assertEquals("{javax.validation.constraints.Size.message}", error.getMessageTemplate());
       assertSame(proxy, error.getRootBean());
       assertSame(proxy, error.getLeafBean());
@@ -172,7 +177,8 @@ public class RequestFactoryTest extends RequestFactoryTestBase {
       assertEquals(1, errors.size());
       com.google.web.bindery.requestfactory.shared.Violation error = errors.iterator().next();
       assertEquals("userName", error.getPath());
-      assertEquals("size must be between 3 and 30", error.getMessage());
+      assertTrue(THREE.test(error.getMessage()));
+      assertTrue(THIRTY.test(error.getMessage()));
       assertEquals(proxy.stableId(), error.getProxyId());
 
       // Now re-used the request to fix the edit
@@ -1272,10 +1278,13 @@ public class RequestFactoryTest extends RequestFactoryTestBase {
 
   /**
    * Ensures that a service method can respond with a null value.
+   * <p>
+   * Also tests that using a with() works as expected; see
+   * https://code.google.com/p/google-web-toolkit/issues/detail?id=8104
    */
   public void testNullEntityProxyResult() {
     delayTestFinish(DELAY_TEST_FINISH);
-    simpleFooRequest().returnNullSimpleFoo().fire(new NullReceiver());
+    simpleFooRequest().returnNullSimpleFoo().with("fooField").fire(new NullReceiver());
   }
 
   public void testNullEntityFieldResult() {
@@ -1482,6 +1491,43 @@ public class RequestFactoryTest extends RequestFactoryTestBase {
         finishTestAndReset();
       }
     });
+  }
+
+  /**
+   * Test EntityProxyId is passed and nothing else.
+   */
+  public void testEntityProxyIdRequest() {
+    delayTestFinish(DELAY_TEST_FINISH);
+
+    req.simpleFooRequest().findSimpleFooById(1L).fire(
+        new Receiver<SimpleFooProxy>() {
+          @Override
+          public void onSuccess(SimpleFooProxy foo) {
+            Request<SimpleFooProxy> fooReq = req.simpleFooRequest().receiveEntityProxyId(foo.stableId());
+            fooReq.fire(new Receiver<SimpleFooProxy>() {
+              @Override
+              public void onSuccess(SimpleFooProxy v) {
+                assertEquals("receiveEntityProxyId", v.getUserName());
+                finishTestAndReset();
+              }
+            });
+          }
+        });
+  }
+
+  /**
+   * Test null EntityProxyId is passed correctly.
+   */
+  public void testNullEntityProxyIdRequest() {
+    delayTestFinish(DELAY_TEST_FINISH);
+
+    req.simpleFooRequest().receiveNullEntityProxyId(null).fire(
+        new Receiver<Void>() {
+          @Override
+          public void onSuccess(Void foo) {
+            finishTestAndReset();
+          }
+        });
   }
 
   /**
@@ -3148,6 +3194,19 @@ public class RequestFactoryTest extends RequestFactoryTestBase {
         SimpleFooRequest context = simpleFooRequest();
         Request<Void> editRequest = context.persist().using(returned);
         new FailFixAndRefire<Void>(returned, context, editRequest).doVoidTest();
+      }
+    });
+  }
+
+  public void testEnumsUsedAsTypeParameter() {
+    delayTestFinish(DELAY_TEST_FINISH);
+
+    List<SimpleEnum> list = Arrays.asList(SimpleEnum.FOO, SimpleEnum.BAR);
+    final Request<Void> fooReq = simpleFooRequest().enumsUsedAsTypeParameter(list);
+    fooReq.fire(new Receiver<Void>() {
+      @Override
+      public void onSuccess(Void v) {
+        finishTestAndReset();
       }
     });
   }

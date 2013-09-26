@@ -31,6 +31,7 @@ import com.google.gwt.dev.jjs.ast.JMethod;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JVisitor;
 import com.google.gwt.dev.util.Strings;
+import com.google.gwt.dev.util.arg.SourceLevel;
 import com.google.gwt.dev.util.log.AbstractTreeLogger;
 import com.google.gwt.dev.util.log.PrintWriterTreeLogger;
 
@@ -237,7 +238,7 @@ public abstract class JJSTestBase extends TestCase {
     addBuiltinClasses(sourceOracle);
     CompilationState state =
         CompilationStateBuilder.buildFrom(logger, sourceOracle.getResources(),
-            getAdditionalTypeProviderDelegate());
+            getAdditionalTypeProviderDelegate(), sourceLevel);
     JProgram program =
         JavaAstConstructor.construct(logger, state, "test.EntryPoint",
             "com.google.gwt.lang.Exceptions");
@@ -253,12 +254,29 @@ public abstract class JJSTestBase extends TestCase {
       }
     });
 
+    sourceOracle.addOrReplace(new MockJavaResource("java.lang.AutoCloseable") {
+      @Override
+      public CharSequence getContent() {
+        return ""
+            + "package java.lang;"
+            + "public interface AutoCloseable { "
+            + "  void close() throws Exception;"
+            + "}";
+      }
+    });
+
     sourceOracle.addOrReplace(new MockJavaResource("com.google.gwt.lang.Exceptions") {
       @Override
       public CharSequence getContent() {
-        return "package com.google.gwt.lang;" +
-          "public class Exceptions { static boolean throwAssertionError() { throw new RuntimeException(); } }";
-      }
+        return ""
+            + "package com.google.gwt.lang;"
+            + "public class Exceptions { "
+            + "  static RuntimeException makeAssertionError() { return new RuntimeException(); }"
+            + "  static Throwable safeClose(AutoCloseable resource, Throwable mainException) {"
+            + "    return mainException;"
+            + "  } "
+            + "}";
+        }
     });
 
     sourceOracle.addOrReplace(new MockJavaResource("java.lang.String") {
@@ -282,4 +300,9 @@ public abstract class JJSTestBase extends TestCase {
   protected AdditionalTypeProviderDelegate getAdditionalTypeProviderDelegate() {
     return null;
   }
+
+  /**
+   * Java source level compatibility option.
+   */
+  protected SourceLevel sourceLevel = SourceLevel.DEFAULT_SOURCE_LEVEL;
 }

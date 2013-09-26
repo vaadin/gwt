@@ -16,6 +16,7 @@
 package com.google.gwt.dev.jjs;
 
 import com.google.gwt.dev.util.arg.OptionOptimize;
+import com.google.gwt.dev.util.arg.SourceLevel;
 
 import java.io.Serializable;
 
@@ -34,7 +35,7 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   private int fragmentCount = -1;
   private int fragmentsMerge = -1;
   private boolean inlineLiteralParameters = true;
-  private int optimizationLevel = OptionOptimize.OPTIMIZE_LEVEL_MAX;
+  private int optimizationLevel = OptionOptimize.OPTIMIZE_LEVEL_DEFAULT;
   private boolean optimizeDataflow = true;
   private boolean optimizePrecompile = false;
   private boolean ordinalizeEnums = true;
@@ -45,6 +46,7 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   private boolean soycExtra = false;
   private boolean soycHtmlDisabled = false;
   private boolean strict = false;
+  private SourceLevel sourceLevel = SourceLevel.DEFAULT_SOURCE_LEVEL;
 
   public JJSOptionsImpl() {
   }
@@ -74,6 +76,7 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
     setSoycExtra(other.isSoycExtra());
     setSoycHtmlDisabled(other.isSoycHtmlDisabled());
     setStrict(other.isStrict());
+    setSourceLevel(other.getSourceLevel());
   }
 
   @Override
@@ -97,6 +100,10 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   }
 
   @Override
+  public SourceLevel getSourceLevel() {
+    return sourceLevel;
+  }
+
   @Deprecated
   public boolean isAggressivelyOptimize() {
     return aggressivelyOptimize;
@@ -245,6 +252,11 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   @Override
   public void setRunAsyncEnabled(boolean enabled) {
     runAsyncEnabled = enabled;
+  }
+
+  @Override
+  public void setSourceLevel(SourceLevel sourceLevel) {
+    this.sourceLevel = sourceLevel;
   }
 
   @Override

@@ -57,6 +57,16 @@ public final class Integer extends Number implements Comparable<Integer> {
     return x & 0x0000003f;
   }
 
+  public static int compare(int x, int y) {
+    if (x < y) {
+      return -1;
+    } else if (x > y) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+
   public static Integer decode(String s) throws NumberFormatException {
     return Integer.valueOf((int) __decodeAndValidateInt(s, MIN_VALUE, MAX_VALUE));
   }
@@ -287,13 +297,7 @@ public final class Integer extends Number implements Comparable<Integer> {
   }
 
   public int compareTo(Integer b) {
-    if (value < b.value) {
-      return -1;
-    } else if (value > b.value) {
-      return 1;
-    } else {
-      return 0;
-    }
+    return compare(value, b.value);
   }
 
   @Override

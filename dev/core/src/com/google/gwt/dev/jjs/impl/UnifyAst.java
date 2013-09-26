@@ -40,6 +40,7 @@ import com.google.gwt.dev.jjs.ast.JConstructor;
 import com.google.gwt.dev.jjs.ast.JDeclaredType;
 import com.google.gwt.dev.jjs.ast.JEnumType;
 import com.google.gwt.dev.jjs.ast.JExpression;
+import com.google.gwt.dev.jjs.ast.JExpressionStatement;
 import com.google.gwt.dev.jjs.ast.JField;
 import com.google.gwt.dev.jjs.ast.JFieldRef;
 import com.google.gwt.dev.jjs.ast.JGwtCreate;
@@ -61,8 +62,10 @@ import com.google.gwt.dev.jjs.ast.JReferenceType;
 import com.google.gwt.dev.jjs.ast.JReturnStatement;
 import com.google.gwt.dev.jjs.ast.JStringLiteral;
 import com.google.gwt.dev.jjs.ast.JThisRef;
+import com.google.gwt.dev.jjs.ast.JTryStatement;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.ast.JVariable;
+import com.google.gwt.dev.jjs.ast.js.JDebuggerStatement;
 import com.google.gwt.dev.jjs.ast.js.JsniFieldRef;
 import com.google.gwt.dev.jjs.ast.js.JsniMethodBody;
 import com.google.gwt.dev.jjs.ast.js.JsniMethodRef;
@@ -196,6 +199,17 @@ public class UnifyAst {
     }
 
     @Override
+    public void endVisit(JExpressionStatement x, Context ctx) {
+      if (x.getExpr() instanceof JMethodCall) {
+        JMethodCall call = (JMethodCall) x.getExpr();
+        if (gwtDebuggerMethods.contains(call.getTarget())) {
+          // We should see all calls here because GWT.debugger() returns void.
+          ctx.replaceMe(new JDebuggerStatement(x.getSourceInfo()));
+        }
+      }
+    }
+
+    @Override
     public void endVisit(JField x, Context ctx) {
       assert false : "Should not get here";
     }
@@ -234,6 +248,9 @@ public class UnifyAst {
         return;
       }
       if (magicMethodCalls.contains(target)) {
+        if (gwtDebuggerMethods.contains(target)) {
+          return; // handled in endVisit for JExpressionStatement
+        }
         JExpression result = handleMagicMethodCall(x);
         if (result == null) {
           // Error of some sort.
@@ -315,6 +332,20 @@ public class UnifyAst {
     @Override
     public void endVisit(JThisRef x, Context ctx) {
       assert !x.getType().isExternal();
+    }
+
+    @Override
+    public void endVisit(JTryStatement x, Context ctx) {
+      // Needs to resolve the Exceptions Types explicitly they are multiple in Java 7 and
+      // potentially different from the one in the exception variable.
+      for (JTryStatement.CatchClause clause : x.getCatchClauses()) {
+        List<JType> types = clause.getTypes();
+        for (int i = 0; i <  types.size(); i++) {
+          JReferenceType resolvedType = translate((JReferenceType) types.get(i));
+          assert resolvedType.replaces(types.get(i));
+          types.set(i, resolvedType);
+        }
+      }
     }
 
     @Override
@@ -447,6 +478,11 @@ public class UnifyAst {
   private static final String GWT_CREATE =
       "com.google.gwt.core.shared.GWT.create(Ljava/lang/Class;)Ljava/lang/Object;";
 
+  private static final String GWT_DEBUGGER_SHARED = "com.google.gwt.core.shared.GWT.debugger()V";
+
+  private static final String GWT_DEBUGGER_CLIENT = "com.google.gwt.core.client.GWT.debugger()V";
+
+
   private static final String GWT_IS_CLIENT = "com.google.gwt.core.shared.GWT.isClient()Z";
 
   private static final String GWT_IS_PROD_MODE = "com.google.gwt.core.shared.GWT.isProdMode()Z";
@@ -469,7 +505,7 @@ public class UnifyAst {
    * Methods for which the call site must be replaced with magic AST nodes.
    */
   private static final Set<String> MAGIC_METHOD_CALLS = new LinkedHashSet<String>(Arrays.asList(
-      GWT_CREATE, OLD_GWT_CREATE, IMPL_GET_NAME_OF));
+      GWT_CREATE, GWT_DEBUGGER_SHARED, GWT_DEBUGGER_CLIENT, OLD_GWT_CREATE, IMPL_GET_NAME_OF));
 
   /**
    * Methods with magic implementations that the compiler must insert.
@@ -499,7 +535,8 @@ public class UnifyAst {
   private final Set<JNode> liveFieldsAndMethods = new IdentityHashSet<JNode>();
 
   private final TreeLogger logger;
-  private Set<JMethod> magicMethodCalls = new IdentityHashSet<JMethod>();
+  private final Set<JMethod> magicMethodCalls = new IdentityHashSet<JMethod>();
+  private final Set<JMethod> gwtDebuggerMethods = new IdentityHashSet<JMethod>();
   private final Map<String, JMethod> methodMap = new HashMap<String, JMethod>();
   private final JJSOptions options;
   private final JProgram program;
@@ -599,7 +636,7 @@ public class UnifyAst {
     // EnumNameObfuscator
     flowInto(program.getIndexedMethod("Enum.obfuscatedName"));
 
-    // FixAssignmentToUnbox
+    // FixAssignmentsToUnboxOrCast
     AutoboxUtils autoboxUtils = new AutoboxUtils(program);
     for (JMethod method : autoboxUtils.getBoxMethods()) {
       flowInto(method);
@@ -912,6 +949,9 @@ public class UnifyAst {
       methodMap.put(sig, method);
       if (MAGIC_METHOD_CALLS.contains(sig)) {
         magicMethodCalls.add(method);
+        if (GWT_DEBUGGER_SHARED.equals(sig) || GWT_DEBUGGER_CLIENT.equals(sig)) {
+          gwtDebuggerMethods.add(method);
+        }
       }
       if (MAGIC_METHOD_IMPLS.contains(sig)) {
         if (sig.startsWith("com.google.gwt.core.client.GWT.")

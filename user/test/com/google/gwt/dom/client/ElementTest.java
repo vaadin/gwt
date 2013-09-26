@@ -34,11 +34,9 @@ public class ElementTest extends GWTTestCase {
     return "com.google.gwt.dom.DOMTest";
   }
 
-  public void testAddRemoveReplaceClassName() {
+  public void testAddClassName() {
     DivElement div = Document.get().createDivElement();
-
     div.setClassName("foo");
-    assertEquals("foo", div.getClassName());
 
     assertTrue(div.addClassName("bar"));
     assertEquals("foo bar", div.getClassName());
@@ -48,12 +46,13 @@ public class ElementTest extends GWTTestCase {
 
     assertFalse(div.addClassName("baz"));
     assertEquals("foo bar baz", div.getClassName());
+  }
 
-    div.replaceClassName("bar", "tintin");
-    assertTrue(div.getClassName().contains("tintin"));
-    assertFalse(div.getClassName().contains("bar"));
+  public void testRemoveClassName() {
+    DivElement div = Document.get().createDivElement();
+    div.setClassName("foo bar baz");
 
-    assertTrue(div.removeClassName("tintin"));
+    assertTrue(div.removeClassName("bar"));
     assertEquals("foo baz", div.getClassName());
 
     assertFalse(div.removeClassName("bar"));
@@ -64,6 +63,40 @@ public class ElementTest extends GWTTestCase {
 
     assertTrue(div.removeClassName("foo"));
     assertEquals("", div.getClassName());
+  }
+
+  public void testHasClassName() {
+    DivElement div = Document.get().createDivElement();
+    div.setClassName("foo bar");
+
+    assertTrue(div.hasClassName("bar"));
+    assertTrue(div.hasClassName("foo"));
+
+    div.setClassName("bar");
+    assertFalse(div.hasClassName("foo"));
+    assertTrue(div.hasClassName("bar"));
+  }
+
+  public void testToggleClassName() {
+    DivElement div = Document.get().createDivElement();
+    div.setClassName("foo bar baz");
+
+    div.toggleClassName("bar");
+    assertEquals("foo baz", div.getClassName());
+
+    div.toggleClassName("bar");
+    assertEquals("foo baz bar", div.getClassName());
+  }
+
+  public void testReplaceClassName() {
+    DivElement div = Document.get().createDivElement();
+    div.setClassName("foo bar baz");
+
+    div.replaceClassName("bar", "tintin");
+    assertEquals("foo baz tintin", div.getClassName());
+
+    div.replaceClassName("bar", "tintin2");
+    assertEquals("foo baz tintin tintin2", div.getClassName());
   }
 
   public void testIndexOfName() {
@@ -349,6 +382,18 @@ public class ElementTest extends GWTTestCase {
     assertFalse(div.hasAttribute(null));
   }
 
+  public void testHasTagName() {
+    DivElement div = Document.get().createDivElement();
+
+    // hasTagName is case-insensitive
+    assertTrue(div.hasTagName("div"));
+    assertTrue(div.hasTagName("DIV"));
+    assertTrue(div.hasTagName(DivElement.TAG));
+    assertTrue(div.hasTagName(div.getTagName()));
+
+    assertFalse(div.hasTagName("dove"));
+  }
+
   /**
    * Tests HeadingElement.as() (it has slightly more complex assertion logic
    * than most).
@@ -384,6 +429,12 @@ public class ElementTest extends GWTTestCase {
 
     // Element.is(null) is allowed and should return false.
     assertFalse(Element.is(null));
+    
+    // Element sub-classes like DivElement have is(...) and as(...) too
+    assertFalse(DivElement.is(Document.get()));
+    assertTrue(DivElement.is(div));
+    assertEquals("div", DivElement.as(div).getTagName().toLowerCase());
+    assertFalse(DivElement.is(null));
   }
 
   /**
@@ -552,6 +603,40 @@ public class ElementTest extends GWTTestCase {
 
     outer.setScrollLeft(32);
     assertEquals(0, outer.getScrollLeft());
+  }
+
+  @DoNotRunWith({Platform.HtmlUnitLayout})
+  public void testDocumentScrollLeftInRtl() {
+    Document.get().getDocumentElement().setDir("rtl");
+    Document.get().getBody().getStyle().setProperty("direction", "rtl");
+
+    final DivElement bigdiv = Document.get().createDivElement();
+
+    bigdiv.getStyle().setProperty("position", "absolute");
+    bigdiv.getStyle().setProperty("top", "0px");
+    bigdiv.getStyle().setProperty("right", "0px");
+    bigdiv.getStyle().setProperty("width", "10000px");  // Bigger than window size.
+    bigdiv.getStyle().setProperty("height", "400px");
+
+    Document.get().getBody().appendChild(bigdiv);
+
+    // The important thing is that setting and retrieving scrollLeft values in
+    // RTL mode works only for negative numbers, and that they round-trip
+    // correctly.
+    try {
+      assertEquals(0, Document.get().getScrollLeft());
+
+      Document.get().setScrollLeft(-32);
+      assertEquals(-32, Document.get().getScrollLeft());
+
+      Document.get().setScrollLeft(32);
+      assertEquals(0, Document.get().getScrollLeft());
+    } finally {
+      // Restore direction unconditionally to not break all other tests.
+      Document.get().getBody().removeChild(bigdiv);
+      Document.get().getBody().getStyle().setProperty("direction", "ltr");
+      Document.get().getDocumentElement().setDir("ltr");
+    }
   }
 
   /**

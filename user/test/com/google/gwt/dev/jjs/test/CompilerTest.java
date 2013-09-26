@@ -787,6 +787,14 @@ public class CompilerTest extends GWTTestCase {
     assertEquals(1, x);
   }
 
+  /** Ensure that only final fields are initializers when cstrs run, see issue 380. */
+  public void testFieldInitializationOrder() {
+    ArrayList<String> seenValues = new ArrayList<String>();
+    new FieldInitOrderChild(seenValues);
+    assertEquals("i1=1,i2=0,i3=null,i4=null,i5=1,i6=1,i7=1", seenValues.get(0));
+    assertEquals("i1=1,i2=1,i3=1,i4=2,i5=1,i6=2,i7=2", seenValues.get(1));
+  }
+
   public void testForStatement() {
     {
       int i;
@@ -816,6 +824,7 @@ public class CompilerTest extends GWTTestCase {
       assertEquals(j, 10);
     }
   }
+
 
   /**
    * Issue #615: Internal Compiler Error.
@@ -912,6 +921,57 @@ public class CompilerTest extends GWTTestCase {
           break;
       }
     }
+  }
+
+  private final class RefObject<T> {
+    T argvalue;
+
+    RefObject(T refarg) {
+        argvalue = refarg;
+    }
+  }
+
+  /**
+   * Test for issue 6471.
+   *
+   * Cast normally can not appear on the left hand side of an assignment (they are not allowed in
+   * Java source). However they might be present in the Java AST as a result of generics and
+   * erasure; hence they need to be handled in the proper places.
+   */
+  public void testLhsCastString() {
+
+    RefObject<String> prefix = new RefObject<String>("Hello");
+
+    // Due to erasure, prefix.argvalue is of type Object hence
+    // the compiler "inserts" a cast transforming it into
+    // ((String) prefix.argvalue) += ", goodbye!"
+    // This way a lhs can be a cast (which is illegal in Java source code).
+    prefix.argvalue += ", goodbye!";
+    assertEquals("Hello, goodbye!", prefix.argvalue);
+  }
+
+  public void testLhsCastInt() {
+
+    RefObject<Integer> prefix = new RefObject<Integer>(41);
+
+    // Due to erasure, prefix.argvalue is of type Object hence
+    // the compiler "inserts" a cast transforming it into
+    // ((Integer) prefix.argvalue) ++
+    // This way a lhs can be a cast (which is illegal in Java source code).
+    prefix.argvalue++;
+    assertEquals(new Integer(42), prefix.argvalue);
+  }
+
+  public void testLhsCastNested() {
+
+    RefObject<Integer> prefix = new RefObject<Integer>(41);
+
+    // Due to erasure, prefix.argvalue is of type Object hence
+    // the compiler "inserts" a cast transforming it into
+    // ((Integer) prefix.argvalue) ++
+    // This way a lhs can be a cast (which is illegal in Java source code).
+    Math.max(prefix.argvalue++,40);
+    assertEquals(new Integer(42), prefix.argvalue);
   }
 
   public void testLocalClasses() {

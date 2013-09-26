@@ -116,8 +116,13 @@ public class StringBuilder implements CharSequence, Appendable {
     return this;
   }
 
-  public StringBuilder append(StringBuilder x) {
+  public StringBuilder append(StringBuffer x) {
     impl.append(data, x);
+    return this;
+  }
+
+  public StringBuilder appendCodePoint(int x) {
+    impl.appendNonNull(data, new String(Character.toChars(x)));
     return this;
   }
 
@@ -231,7 +236,7 @@ public class StringBuilder implements CharSequence, Appendable {
     return this;
   }
 
-  public StringBuilder reserve() {
+  public StringBuilder reverse() {
     impl.reverse(data);
     return this;
   }

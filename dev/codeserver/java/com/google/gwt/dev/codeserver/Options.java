@@ -17,6 +17,9 @@
 package com.google.gwt.dev.codeserver;
 
 import com.google.gwt.dev.ArgProcessorBase;
+import com.google.gwt.dev.util.arg.ArgHandlerSource;
+import com.google.gwt.dev.util.arg.OptionSource;
+import com.google.gwt.dev.util.arg.SourceLevel;
 import com.google.gwt.util.tools.ArgHandler;
 import com.google.gwt.util.tools.ArgHandlerDir;
 import com.google.gwt.util.tools.ArgHandlerExtra;
@@ -46,6 +49,8 @@ public class Options {
   private String preferredHost = "localhost";
   private int port = 9876;
   private RecompileListener recompileListener = RecompileListener.NONE;
+  // Use the same default as the GWT compiler.
+  private SourceLevel sourceLevel = SourceLevel.DEFAULT_SOURCE_LEVEL;
 
   /**
    * Sets each option to the appropriate value, based on command-line arguments.
@@ -98,10 +103,24 @@ public class Options {
   }
 
   /**
+   * Whether the codeServer should allow missing source directories.
+   */
+  boolean shouldAllowMissingSourceDir() {
+    return allowMissingSourceDir;
+  }
+
+  /**
    * Whether the codeServer should start without precompiling modules.
    */
   boolean getNoPrecompile() {
     return noPrecompile;
+  }
+
+  /**
+   * Java source level compatibility,
+   */
+  SourceLevel getSourceLevel() {
+    return sourceLevel;
   }
 
   /**
@@ -147,6 +166,17 @@ public class Options {
       registerHandler(new AllowMissingSourceDirFlag());
       registerHandler(new SourceFlag());
       registerHandler(new ModuleNameArgument());
+      registerHandler(new ArgHandlerSource(new OptionSource() {
+        @Override
+        public SourceLevel getSourceLevel() {
+          return sourceLevel;
+        }
+
+        @Override
+        public void setSourceLevel(SourceLevel sourceLevel) {
+          Options.this.sourceLevel = sourceLevel;
+        }
+      }));
     }
 
     @Override
@@ -159,38 +189,48 @@ public class Options {
   private class NoPrecompileFlag extends ArgHandlerFlag {
 
     @Override
-    public String getTag() {
-      return "-noprecompile";
+    public String getLabel() {
+      return "precompile";
     }
 
     @Override
-    public String getPurpose() {
-      return "Disables pre-compilation of modules.";
+    public String getPurposeSnippet() {
+      return "Precompile modules.";
     }
 
     @Override
-    public boolean setFlag() {
-      noPrecompile = true;
+    public boolean setFlag(boolean value) {
+      noPrecompile = !value;
       return true;
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return !noPrecompile;
     }
   }
 
   private class CompileTestFlag extends ArgHandlerFlag {
 
     @Override
-    public String getTag() {
-      return "-compileTest";
+    public String getLabel() {
+      return "compileTest";
     }
 
     @Override
-    public String getPurpose() {
-      return "Just compile the modules and exit.";
+    public String getPurposeSnippet() {
+      return "Exits after compiling the modules. The exit code will be 0 if the compile succeeded.";
     }
 
     @Override
-    public boolean setFlag() {
-      isCompileTest = true;
+    public boolean setFlag(boolean value) {
+      isCompileTest = value;
       return true;
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return isCompileTest;
     }
   }
 
@@ -278,19 +318,24 @@ public class Options {
   private class AllowMissingSourceDirFlag extends ArgHandlerFlag {
 
     @Override
-    public String getTag() {
-      return "-allowMissingSrc";
+    public String getLabel() {
+      return "allowMissingSrc";
     }
 
     @Override
-    public String getPurpose() {
-      return "Disables the directory existence check for -src flags.";
+    public String getPurposeSnippet() {
+      return "Allows -src flags to reference missing directories.";
     }
 
     @Override
-    public boolean setFlag() {
-      allowMissingSourceDir = true;
+    public boolean setFlag(boolean value) {
+      allowMissingSourceDir = value;
       return true;
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return allowMissingSourceDir;
     }
   }
 

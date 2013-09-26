@@ -89,10 +89,7 @@ public class Element extends Node {
    * @see #setClassName(String)
    */
   public final boolean addClassName(String className) {
-    assert (className != null) : "Unexpectedly null class name";
-
-    className = className.trim();
-    assert (className.length() != 0) : "Unexpectedly empty class name";
+    className = trimClassName(className);
 
     // Get the current style string.
     String oldClassName = getClassName();
@@ -617,6 +614,18 @@ public class Element extends Node {
   }
 
   /**
+   * Checks if this element's class property contains specified class name.
+   *
+   * @param className the class name to be added
+   * @return <code>true</code> if this element has the specified class name
+   */
+  public final boolean hasClassName(String className) {
+    className = trimClassName(className);
+    int idx = indexOfName(getClassName(), className);
+    return idx != -1;
+  }
+
+  /**
    * Determines whether this element has the given tag name.
    * 
    * @param tagName the tag name, including namespace-prefix (if present)
@@ -624,7 +633,7 @@ public class Element extends Node {
    */
   public final boolean hasTagName(String tagName) {
     assert tagName != null : "tagName must not be null";
-    return tagName.equals(getTagName());
+    return tagName.equalsIgnoreCase(getTagName());
   }
 
   /**
@@ -643,10 +652,7 @@ public class Element extends Node {
    * @see #setClassName(String)
    */
   public final boolean removeClassName(String className) {
-    assert (className != null) : "Unexpectedly null class name";
-
-    className = className.trim();
-    assert (className.length() != 0) : "Unexpectedly empty class name";
+    className = trimClassName(className);
 
     // Get the current style string.
     String oldStyle = getClassName();
@@ -698,6 +704,25 @@ public class Element extends Node {
     }
 
     return idx;
+  }
+
+  private static String trimClassName(String className) {
+    assert (className != null) : "Unexpectedly null class name";
+    className = className.trim();
+    assert !className.isEmpty() : "Unexpectedly empty class name";
+    return className;
+  }
+
+  /**
+   * Add the class name if it doesn't exist or removes it if does.
+   *
+   * @param className the class name to be toggled
+   */
+  public final void toggleClassName(String className) {
+    boolean added = addClassName(className);
+    if (!added) {
+      removeClassName(className);
+    }
   }
 
   /**

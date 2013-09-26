@@ -20,8 +20,12 @@ import com.google.gwt.core.ext.DefaultConfigurationProperty;
 import com.google.gwt.core.ext.DefaultSelectionProperty;
 import com.google.gwt.core.ext.PropertyOracle;
 import com.google.gwt.core.ext.TreeLogger;
+import com.google.gwt.thirdparty.guava.common.base.Function;
+import com.google.gwt.thirdparty.guava.common.collect.Maps;
 
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Map;
 import java.util.TreeSet;
 
 /**
@@ -30,7 +34,7 @@ import java.util.TreeSet;
  */
 public class StaticPropertyOracle implements PropertyOracle, Serializable {
 
-  private final ConfigurationProperty[] configProps;
+  private final Map<String, ConfigurationProperty> configPropertiesByName;
 
   private final BindingProperty[] orderedProps;
 
@@ -47,8 +51,9 @@ public class StaticPropertyOracle implements PropertyOracle, Serializable {
       String[] orderedPropValues, ConfigurationProperty[] configProps) {
     this.orderedProps = orderedProps;
     this.orderedPropValues = orderedPropValues;
-    this.configProps = configProps;
-    
+    this.configPropertiesByName =
+        Maps.uniqueIndex(Arrays.asList(configProps), getConfigNameExtractor());
+
     // Reject illegal values at construction time
     int len = orderedProps.length;
     for (int i = 0; i < len; i++) {
@@ -61,15 +66,14 @@ public class StaticPropertyOracle implements PropertyOracle, Serializable {
     }
   }
 
-  public com.google.gwt.core.ext.ConfigurationProperty getConfigurationProperty(
-      String propertyName) throws BadPropertyValueException {
-    for (final ConfigurationProperty prop : configProps) {
-      if (prop.getName().equals(propertyName)) {
-        return new DefaultConfigurationProperty(prop.getName(),
-            prop.getValues());
-      }
+  @Override
+  public com.google.gwt.core.ext.ConfigurationProperty getConfigurationProperty(String propertyName)
+      throws BadPropertyValueException {
+    ConfigurationProperty config = configPropertiesByName.get(propertyName);
+    if (config == null) {
+      throw new BadPropertyValueException(propertyName);
     }
-    throw new BadPropertyValueException(propertyName);
+    return new DefaultConfigurationProperty(config.getName(), config.getValues());
   }
 
   /**
@@ -84,54 +88,6 @@ public class StaticPropertyOracle implements PropertyOracle, Serializable {
    */
   public String[] getOrderedPropValues() {
     return orderedPropValues;
-  }
-
-  @Deprecated
-  public String getPropertyValue(TreeLogger logger, String propertyName)
-      throws BadPropertyValueException {
-    // In practice there will probably be so few properties that a linear
-    // search is at least as fast as a map lookup by name would be.
-    // If that turns out not to be the case, the ctor could build a
-    // name-to-index map.
-    //
-    for (int i = 0; i < orderedProps.length; i++) {
-      BindingProperty prop = orderedProps[i];
-      if (prop.getName().equals(propertyName)) {
-        String value = orderedPropValues[i];
-        if (prop.isAllowedValue(value)) {
-          return value;
-        } else {
-          throw new BadPropertyValueException(propertyName, value);
-        }
-      }
-    }
-
-    for (ConfigurationProperty configProp : configProps) {
-      if (configProp.getName().equals(propertyName)) {
-        return configProp.getValue();
-      }
-    }
-
-    // Didn't find it.
-    //
-    throw new BadPropertyValueException(propertyName);
-  }
-
-  @Deprecated
-  public String[] getPropertyValueSet(TreeLogger logger, String propertyName)
-      throws BadPropertyValueException {
-    for (int i = 0; i < orderedProps.length; i++) {
-      BindingProperty prop = orderedProps[i];
-      if (prop.getName().equals(propertyName)) {
-        return prop.getDefinedValues();
-      }
-    }
-
-    // Configuration properties throw exception per javadoc.
-
-    // Didn't find it.
-    //
-    throw new BadPropertyValueException(propertyName);
   }
 
   public com.google.gwt.core.ext.SelectionProperty getSelectionProperty(
@@ -170,5 +126,14 @@ public class StaticPropertyOracle implements PropertyOracle, Serializable {
           orderedPropValues[i]).append(" ");
     }
     return sb.toString();
+  }
+
+  private static Function<ConfigurationProperty, String> getConfigNameExtractor() {
+    return new Function<ConfigurationProperty, String>() {
+      @Override
+      public String apply(ConfigurationProperty config) {
+        return config.getName();
+      }
+    };
   }
 }

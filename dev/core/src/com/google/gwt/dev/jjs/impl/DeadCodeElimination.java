@@ -417,7 +417,11 @@ public class DeadCodeElimination {
 
       // Normal optimizations.
       JDeclaredType targetType = target.getEnclosingType();
-      if (targetType == program.getTypeJavaLangString()) {
+      if (targetType == program.getTypeJavaLangString() ||
+          (x.getInstance() != null &&
+              x.getInstance().getType() instanceof JReferenceType &&
+              ((JReferenceType) x.getInstance().getType()).getUnderlyingType()
+                  == program.getTypeJavaLangString())) {
         tryOptimizeStringCall(x, ctx, target);
       } else if (JProgram.isClinit(target)) {
         // Eliminate the call if the target is now empty.
@@ -579,24 +583,31 @@ public class DeadCodeElimination {
     @Override
     public void endVisit(JTryStatement x, Context ctx) {
       // 1) Remove catch blocks whose exception type is not instantiable.
-      List<JLocalRef> catchArgs = x.getCatchArgs();
-      List<JBlock> catchBlocks = x.getCatchBlocks();
-      Iterator<JLocalRef> itA = catchArgs.iterator();
-      Iterator<JBlock> itB = catchBlocks.iterator();
-      while (itA.hasNext()) {
-        JLocalRef localRef = itA.next();
-        itB.next();
-        JReferenceType type = (JReferenceType) localRef.getType();
-        if (!program.typeOracle.isInstantiatedType(type) || type == program.getTypeNull()) {
-          itA.remove();
-          itB.remove();
+      List<JTryStatement.CatchClause> catchClauses = x.getCatchClauses();
+
+      Iterator<JTryStatement.CatchClause> itClauses = catchClauses.iterator();
+      while (itClauses.hasNext()) {
+        JTryStatement.CatchClause clause = itClauses.next();
+        // Go over the types in the multiexception and remove the ones that are not instantiable.
+        Iterator<JType> itTypes = clause.getTypes().iterator();
+        while (itTypes.hasNext()) {
+          JReferenceType type = (JReferenceType) itTypes.next();
+          if (!program.typeOracle.isInstantiatedType(type) || type == program.getTypeNull()) {
+            itTypes.remove();
+            madeChanges();
+          }
+        }
+
+        // if all exception types are gone then remove whole clause.
+        if (clause.getTypes().isEmpty()) {
+          itClauses.remove();
           madeChanges();
         }
       }
 
       // Compute properties regarding the state of this try statement
       boolean noTry = Simplifier.isEmpty(x.getTryBlock());
-      boolean noCatch = catchArgs.size() == 0;
+      boolean noCatch = catchClauses.size() == 0;
       boolean noFinally = Simplifier.isEmpty(x.getFinallyBlock());
 
       if (noTry) {
@@ -1243,7 +1254,7 @@ public class DeadCodeElimination {
     }
 
     /**
-     * Replace me only if the the updated expression is different.
+     * Replace me only if the updated expression is different.
      */
     private void maybeReplaceMe(JExpression x, JExpression updated, Context ctx) {
       if (updated != x) {

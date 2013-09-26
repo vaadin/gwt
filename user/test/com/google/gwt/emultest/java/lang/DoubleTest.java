@@ -107,6 +107,7 @@ public class DoubleTest extends GWTTestCase {
     assertTrue(fiveHundred.compareTo(fiveHundred) == 0);
   }
 
+  @SuppressWarnings("SelfEquality")
   public void testDoubleConstants() {
     assertTrue(Double.isNaN(Double.NaN));
     assertTrue(Double.isInfinite(Double.NEGATIVE_INFINITY));
@@ -119,6 +120,8 @@ public class DoubleTest extends GWTTestCase {
     // Double.MAX_EXPONENT);
     // jdk1.6 assertEquals(Math.getExponent(Double.MIN_NORMAL),
     // Double.MIN_EXPONENT);
+    // issue 8073 - used to fail in prod mode
+    assertFalse(Double.isInfinite(Double.NaN));
   }
 
   public void testParse() {

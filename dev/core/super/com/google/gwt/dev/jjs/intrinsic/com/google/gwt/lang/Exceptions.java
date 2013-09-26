@@ -22,15 +22,34 @@ import com.google.gwt.core.client.JavaScriptException;
  */
 final class Exceptions {
 
-  static Object caught(Object e) {
+  static Object wrap(Object e) {
     if (e instanceof Throwable) {
       return e;
     }
-    return new JavaScriptException(e);
+    return e == null ? new JavaScriptException(null) : getCachableJavaScriptException(e);
   }
 
-  static boolean throwAssertionError() {
-    throw new AssertionError();
+  static Object unwrap(Object e) {
+    if (e instanceof JavaScriptException) {
+      JavaScriptException jse = ((JavaScriptException) e);
+      if (jse.isThrownSet()) {
+        return jse.getThrown();
+      }
+    }
+    return e;
+  }
+
+  private static native JavaScriptException getCachableJavaScriptException(Object e)/*-{
+    var jse = e.__gwt$exception;
+    if (!jse) {
+      jse = @com.google.gwt.core.client.JavaScriptException::new(Ljava/lang/Object;)(e);
+      e.__gwt$exception = jse;
+    }
+    return jse;
+  }-*/;
+
+  static AssertionError makeAssertionError() {
+    return new AssertionError();
   }
 
   /*
@@ -38,32 +57,56 @@ final class Exceptions {
    * method names based on primitive type name.
    */
   // CHECKSTYLE_OFF
-  static boolean throwAssertionError_boolean(boolean message) {
-    throw new AssertionError(message);
+  static AssertionError makeAssertionError_boolean(boolean message) {
+    return new AssertionError(message);
   }
 
-  static boolean throwAssertionError_char(char message) {
-    throw new AssertionError(message);
+  static AssertionError makeAssertionError_char(char message) {
+    return new AssertionError(message);
   }
 
-  static boolean throwAssertionError_double(double message) {
-    throw new AssertionError(message);
+  static AssertionError makeAssertionError_double(double message) {
+    return new AssertionError(message);
   }
 
-  static boolean throwAssertionError_float(float message) {
-    throw new AssertionError(message);
+  static AssertionError makeAssertionError_float(float message) {
+    return new AssertionError(message);
   }
 
-  static boolean throwAssertionError_int(int message) {
-    throw new AssertionError(message);
+  static AssertionError makeAssertionError_int(int message) {
+    return new AssertionError(message);
   }
 
-  static boolean throwAssertionError_long(long message) {
-    throw new AssertionError(message);
+  static AssertionError makeAssertionError_long(long message) {
+    return new AssertionError(message);
   }
 
-  static boolean throwAssertionError_Object(Object message) {
-    throw new AssertionError(message);
+  static AssertionError makeAssertionError_Object(Object message) {
+    return new AssertionError(message);
+  }
+
+  /**
+   * Use by the try-with-resources construct. Look at
+   * {@link com.google.gwt.dev.jjs.impl.GwtAstBuilder.createCloseBlockFor}.
+   *
+   * @param resource a resource implementing the AutoCloseable interface.
+   * @param mainException  an exception being propagated.
+   * @return an exception to propagate or {@code null} if none.
+   */
+  static Throwable safeClose(AutoCloseable resource, Throwable mainException) {
+    if (resource == null) {
+      return mainException;
+    }
+
+    try {
+      resource.close();
+    } catch (Throwable e) {
+      if (mainException == null) {
+        return e;
+      }
+      mainException.addSuppressed(e);
+    }
+    return mainException;
   }
   // CHECKSTYLE_ON
 }

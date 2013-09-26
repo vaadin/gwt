@@ -33,12 +33,12 @@ import com.google.gwt.core.ext.linker.impl.PropertiesUtil;
 import com.google.gwt.core.ext.linker.impl.ResourceInjectionUtil;
 import com.google.gwt.core.ext.linker.impl.SelectionScriptLinker;
 import com.google.gwt.dev.About;
-import com.google.gwt.dev.js.JsToStringGenerationVisitor;
 import com.google.gwt.dev.util.DefaultTextOutput;
 import com.google.gwt.dev.util.TextOutput;
 import com.google.gwt.thirdparty.guava.common.base.Joiner;
 import com.google.gwt.thirdparty.guava.common.base.Splitter;
 import com.google.gwt.util.tools.Utility;
+import com.google.gwt.util.tools.shared.StringUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -191,7 +191,7 @@ public class CrossSiteIframeLinker extends SelectionScriptLinker {
 
    protected String getDeferredFragmentSuffix(TreeLogger logger, LinkerContext context,
       int fragment) {
-    return "\n//@ sourceURL=" + fragment + ".js\n";
+    return "\n//@ sourceURL=" + context.getModuleName() + "-" + fragment + ".js\n";
   }
 
   @Override
@@ -440,7 +440,7 @@ public class CrossSiteIframeLinker extends SelectionScriptLinker {
     // Magic comment serves several purposes:
     // 1. renames strongName to a stable name in browser debugger
     // 2. provides name to scripts installed via eval()
-    out.print("\n//@ sourceURL=0.js \n");
+    out.print("\n//@ sourceURL=" + context.getModuleName() + "-0.js\n");
     return out.toString();
   }
 
@@ -584,7 +584,7 @@ public class CrossSiteIframeLinker extends SelectionScriptLinker {
     return String.format("$wnd.%s.runAsyncCallback%d(%s)\n",
         context.getModuleFunctionName(),
         fragment,
-        JsToStringGenerationVisitor.javaScriptString(js));
+        StringUtils.javaScriptString(js));
   }
 
   @Override
@@ -608,7 +608,7 @@ public class CrossSiteIframeLinker extends SelectionScriptLinker {
       Iterable<String> chunks = Splitter.on(getScriptChunkSeparator(logger, context)).split(script);
       List<String> newChunks = new ArrayList<String>();
       for (String chunk : chunks) {
-        newChunks.add(JsToStringGenerationVisitor.javaScriptString(chunk));
+        newChunks.add(StringUtils.javaScriptString(chunk));
       }
       out.append(Joiner.on(",\n").join(newChunks));
       out.append("]);\n");

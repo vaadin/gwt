@@ -55,7 +55,7 @@ public class AsyncFragmentLoader {
    * been installed, so that {@link AsyncFragmentLoader} can distinguish
    * successful from unsuccessful downloads.
    */
-  public static interface LoadTerminatedHandler {
+  public interface LoadTerminatedHandler {
     void loadTerminated(Throwable reason);
   }
 
@@ -262,7 +262,7 @@ public class AsyncFragmentLoader {
    * of GWT generated JavaScript (i.e our vanilla JUnit tests, or if referenced
    * in a server context), this field is {@code null}. When compiled to
    * JavaScript, the parameters to this call are rewritten by
-   * {@link com.google.gwt.dev.jjs.impl.ReplaceRunAsyncs}. So this must be a
+   * {@link com.google.gwt.dev.jjs.impl.codesplitter.ReplaceRunAsyncs}. So this must be a
    * method call of exactly two arguments to succeed when invoked in web mode.
    */
   public static AsyncFragmentLoader BROWSER_LOADER = makeBrowserLoader(1, new int[]{});
@@ -295,12 +295,15 @@ public class AsyncFragmentLoader {
    */
   private static AsyncFragmentLoader makeBrowserLoader(int numFragments, int initialLoad[]) {
     if (GWT.isClient()) {
-      return new AsyncFragmentLoader(numFragments, initialLoad, (LoadingStrategy) GWT
-          .create(LoadingStrategy.class), (Logger) GWT.create(Logger.class));
+      return new AsyncFragmentLoader(numFragments, initialLoad,
+          (LoadingStrategy) GWT.create(LoadingStrategy.class), (Logger) GWT.create(Logger.class),
+          (OnSuccessExecutor) GWT.create(OnSuccessExecutor.class));
     } else {
       return null;
     }
   }
+
+  private final OnSuccessExecutor onSuccessExecutor;
 
   /**
    * Callbacks indexed by fragment number.
@@ -316,7 +319,7 @@ public class AsyncFragmentLoader {
    * The sequence of fragments to load initially, before anything else can be
    * loaded. This array will hold the initial sequence of bases followed by the
    * leftovers fragment. It is filled in by
-   * {@link com.google.gwt.dev.jjs.impl.CodeSplitter} modifying the initializer
+   * {@link com.google.gwt.dev.jjs.impl.codesplitter.CodeSplitter} modifying the initializer
    * to {@link #BROWSER_LOADER}. The list does <em>not</em> include the
    * leftovers fragment, which must be loaded once all of these are finished.
    */
@@ -369,11 +372,12 @@ public class AsyncFragmentLoader {
   private final BoundedIntQueue requestedExclusives;
 
   public AsyncFragmentLoader(int numEntries, int[] initialLoadSequence,
-      LoadingStrategy loadingStrategy, Logger logger) {
+      LoadingStrategy loadingStrategy, Logger logger, OnSuccessExecutor executor) {
     this.numEntries = numEntries;
     this.initialLoadSequence = initialLoadSequence;
     this.loadingStrategy = loadingStrategy;
     this.logger = logger;
+    this.onSuccessExecutor = executor;
     int numEntriesPlusOne = numEntries + 1;
     this.allCallbacks = new Object[numEntriesPlusOne][];
     this.requestedExclusives = new BoundedIntQueue(numEntriesPlusOne);
@@ -587,7 +591,7 @@ public class AsyncFragmentLoader {
   private void runAsyncImpl(final int fragment, RunAsyncCallback callback) {
     if (isLoaded[fragment]) {
       assert allCallbacks[fragment] == null;
-      callback.onSuccess();
+      this.onSuccessExecutor.execute(this, callback);
       return;
     }
 
@@ -613,6 +617,17 @@ public class AsyncFragmentLoader {
         }
       });
     }
+  }
+
+  void executeOnSuccess0(RunAsyncCallback callback) {
+    /*
+     * Calls on {@link RunAsyncCallback#onSuccess} from {@link AsyncFragmentLoader} is special
+     * treated (See RescueVisitor in ControlFlowAnalyzer) so that code splitter will not follow them
+     * on fragment analysis. That is, if don't call onSuccess from here and instead call it directly
+     * from the scheduled command, then it will make the code splitter put the split point code in
+     * the initial fragment.
+     */
+    callback.onSuccess();
   }
 
   private void startLoadingFragment(int fragment) {

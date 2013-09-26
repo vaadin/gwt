@@ -33,6 +33,7 @@ import com.google.gwt.dev.resource.impl.ResourceFilter;
 import com.google.gwt.dev.resource.impl.ResourceOracleImpl;
 import com.google.gwt.dev.util.Empty;
 import com.google.gwt.dev.util.Util;
+import com.google.gwt.dev.util.arg.SourceLevel;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
@@ -364,15 +365,16 @@ public class ModuleDef {
   }
 
   public CompilationState getCompilationState(TreeLogger logger) throws UnableToCompleteException {
-    return getCompilationState(logger, false);
+    return getCompilationState(logger, false, SourceLevel.DEFAULT_SOURCE_LEVEL);
   }
 
-  public synchronized CompilationState getCompilationState(TreeLogger logger, boolean suppressErrors)
+  public synchronized CompilationState getCompilationState(TreeLogger logger,
+      boolean suppressErrors, SourceLevel sourceLevel)
       throws UnableToCompleteException {
     doRefresh();
     CompilationState compilationState =
         CompilationStateBuilder.buildFrom(logger, lazySourceOracle.getResources(), null,
-            suppressErrors);
+            suppressErrors, sourceLevel);
     checkForSeedTypes(logger, compilationState);
     return compilationState;
   }

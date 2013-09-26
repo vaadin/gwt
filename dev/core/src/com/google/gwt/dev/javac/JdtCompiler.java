@@ -21,21 +21,21 @@ import com.google.gwt.dev.jdt.TypeRefVisitor;
 import com.google.gwt.dev.jjs.InternalCompilerException;
 import com.google.gwt.dev.jjs.ast.JDeclaredType;
 import com.google.gwt.dev.util.Name.BinaryName;
+import com.google.gwt.dev.util.arg.SourceLevel;
 import com.google.gwt.dev.util.collect.Lists;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
+import com.google.gwt.thirdparty.guava.common.collect.ImmutableMap;
 import com.google.gwt.util.tools.Utility;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
-import org.eclipse.jdt.internal.compiler.ASTVisitor;
 import org.eclipse.jdt.internal.compiler.ClassFile;
 import org.eclipse.jdt.internal.compiler.CompilationResult;
 import org.eclipse.jdt.internal.compiler.Compiler;
 import org.eclipse.jdt.internal.compiler.DefaultErrorHandlingPolicies;
 import org.eclipse.jdt.internal.compiler.ICompilerRequestor;
 import org.eclipse.jdt.internal.compiler.ast.AbstractMethodDeclaration;
-import org.eclipse.jdt.internal.compiler.ast.Annotation;
 import org.eclipse.jdt.internal.compiler.ast.Argument;
 import org.eclipse.jdt.internal.compiler.ast.Block;
 import org.eclipse.jdt.internal.compiler.ast.Clinit;
@@ -45,7 +45,6 @@ import org.eclipse.jdt.internal.compiler.ast.Expression;
 import org.eclipse.jdt.internal.compiler.ast.FieldDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.Initializer;
 import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration;
-import org.eclipse.jdt.internal.compiler.ast.QualifiedAllocationExpression;
 import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants;
 import org.eclipse.jdt.internal.compiler.classfmt.ClassFileReader;
@@ -245,117 +244,6 @@ public class JdtCompiler {
     }
 
     /**
-     * Checks whether GwtIncompatible is in the array of {@code Annotation}.
-     *
-     * @param annotations an (possible null) array of {@code Annotation}
-     * @return {@code true} if there is an annotation of class {@code *.GwtIncompatible} in
-     *         array. {@code false} otherwise.
-     */
-    private static boolean hasGwtIncompatibleAnnotation(Annotation[] annotations) {
-      if (annotations == null) {
-        return false;
-      }
-      for (Annotation ann : annotations) {
-        String typeName = new String(ann.type.getLastToken());
-        if (typeName.equals("GwtIncompatible")) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    /**
-     * Modifies the methods array of type {@code tyDecl} to remove any GwtIncompatible methods.
-     */
-    private static void stripGwtIncompatibleMethods(TypeDeclaration tyDecl) {
-      if (tyDecl.methods == null) {
-        return;
-      }
-
-      List<AbstractMethodDeclaration> newMethods = new ArrayList<AbstractMethodDeclaration>();
-      for (AbstractMethodDeclaration methodDecl : tyDecl.methods) {
-         if (!hasGwtIncompatibleAnnotation(methodDecl.annotations)) {
-          newMethods.add(methodDecl);
-         }
-      }
-
-      if (newMethods.size() != tyDecl.methods.length) {
-        tyDecl.methods = newMethods.toArray(new AbstractMethodDeclaration[newMethods.size()]);
-      }
-    }
-
-    /**
-     * Modifies the fields array of type {@code tyDecl} to remove any GwtIncompatible fields.
-     */
-    private static void stripGwtIncompatibleFields(TypeDeclaration tyDecl) {
-      if (tyDecl.fields == null) {
-        return;
-      }
-
-      List<FieldDeclaration> newFields = new ArrayList<FieldDeclaration>();
-      for (FieldDeclaration fieldDecl : tyDecl.fields) {
-        if (!hasGwtIncompatibleAnnotation(fieldDecl.annotations)) {
-          newFields.add(fieldDecl);
-        }
-      }
-
-      if (newFields.size() != tyDecl.fields.length) {
-        tyDecl.fields = newFields.toArray(new FieldDeclaration[newFields.size()]);
-      }
-    }
-
-    /**
-     * Removes inner classes, methods and fields that are @GwtIncompatible from an anonymous
-     * inner class.
-     *
-     * @return The set of types with every element that was annotated by {@code GwtIncompatible}
-     *         removed.
-     */
-    private static void stripGwtIncompatibleAnonymousInnerClasses(
-        CompilationUnitDeclaration cud) {
-      ASTVisitor visitor = new ASTVisitor() {
-        @Override
-        public void endVisit(QualifiedAllocationExpression qualifiedAllocationExpression,
-            BlockScope scope) {
-          if (qualifiedAllocationExpression.anonymousType != null) {
-            stripGwtIncompatible(
-                new TypeDeclaration[]{qualifiedAllocationExpression.anonymousType});
-          }
-        }
-      };
-      cud.traverse(visitor, cud.scope);
-    }
-
-
-      /**
-      * Removes classes, inner classes, methods and fields that are @GwtIncompatible.
-      *
-      * @return The set of types with every element that was annotated by {@code GwtIncompatible}
-      *         removed.
-      */
-    private static TypeDeclaration[] stripGwtIncompatible(TypeDeclaration[] types) {
-      if (types == null) {
-        return types;
-      }
-
-      List<TypeDeclaration> newTypeDecls = new ArrayList<TypeDeclaration>();
-      for (TypeDeclaration tyDecl : types) {
-        if (!hasGwtIncompatibleAnnotation(tyDecl.annotations)) {
-          newTypeDecls.add(tyDecl);
-          tyDecl.memberTypes = stripGwtIncompatible(tyDecl.memberTypes);
-          stripGwtIncompatibleMethods(tyDecl);
-          stripGwtIncompatibleFields(tyDecl);
-        }
-      }
-
-      if (newTypeDecls.size() != types.length) {
-        return newTypeDecls.toArray(new TypeDeclaration[newTypeDecls.size()]);
-      } else {
-        return types;
-      }
-    }
-
-    /**
      * Overrides the main parsing entry point to filter out elements annotated with
      * {@code GwtIncompatible}.
      */
@@ -368,9 +256,14 @@ public class JdtCompiler {
       this.diet = false;
       CompilationUnitDeclaration decl = super.parse(sourceUnit, compilationResult);
       this.diet = saveDiet;
-      decl.types = stripGwtIncompatible(decl.types);
-      // Fix anonymous inner classes
-      stripGwtIncompatibleAnonymousInnerClasses(decl);
+      if (removeGwtIncompatible) {
+        // Remove @GwtIncompatible classes and members.
+        GwtIncompatiblePreprocessor.preproccess(decl);
+      }
+      if (removeUnusedImports) {
+        // Lastly remove any unused imports
+        UnusedImportsRemover.exec(decl);
+      }
       return decl;
     }
   }
@@ -385,9 +278,9 @@ public class JdtCompiler {
     private TreeLogger logger;
     private int abortCount = 0;
 
-    public CompilerImpl(TreeLogger logger) {
+    public CompilerImpl(TreeLogger logger, CompilerOptions compilerOptions) {
       super(new INameEnvironmentImpl(), DefaultErrorHandlingPolicies.proceedWithAllProblems(),
-          getCompilerOptions(), new ICompilerRequestorImpl(), new DefaultProblemFactory(
+          compilerOptions, new ICompilerRequestorImpl(), new DefaultProblemFactory(
               Locale.getDefault()));
       this.logger = logger;
     }
@@ -594,11 +487,17 @@ public class JdtCompiler {
   public static List<CompilationUnit> compile(TreeLogger logger,
       Collection<CompilationUnitBuilder> builders)
       throws UnableToCompleteException {
+    return compile(logger, builders, SourceLevel.DEFAULT_SOURCE_LEVEL);
+  }
+
+  public static List<CompilationUnit> compile(TreeLogger logger,
+      Collection<CompilationUnitBuilder> builders, SourceLevel sourceLevel)
+      throws UnableToCompleteException {
     Event jdtCompilerEvent = SpeedTracerLogger.start(CompilerEventType.JDT_COMPILER);
 
     try {
       DefaultUnitProcessor processor = new DefaultUnitProcessor();
-      JdtCompiler compiler = new JdtCompiler(processor);
+      JdtCompiler compiler = new JdtCompiler(processor, sourceLevel);
       compiler.doCompile(logger, builders);
       return processor.getResults();
     } finally {
@@ -606,14 +505,20 @@ public class JdtCompiler {
     }
   }
 
-  public static CompilerOptions getCompilerOptions() {
+
+  public static CompilerOptions getStandardCompilerOptions() {
     CompilerOptions options = new CompilerOptions() {
       {
         warningThreshold.clearAll();
       }
     };
-    options.originalSourceLevel = options.complianceLevel = options.sourceLevel =
-        options.targetJDK = ClassFileConstants.JDK1_6;
+
+    long jdtSourceLevel = jdtLevelByGwtLevel.get(SourceLevel.DEFAULT_SOURCE_LEVEL);
+
+    options.originalSourceLevel = jdtSourceLevel;
+    options.complianceLevel = jdtSourceLevel;
+    options.sourceLevel = jdtSourceLevel;
+    options.targetJDK = jdtSourceLevel;
 
     // Generate debug info for debugging the output.
     options.produceDebugAttributes =
@@ -628,6 +533,17 @@ public class JdtCompiler {
     options.reportUnusedDeclaredThrownExceptionIncludeDocCommentReference = false;
     options.reportUnusedDeclaredThrownExceptionExemptExceptionAndThrowable = false;
     options.inlineJsrBytecode = true;
+    return options;
+  }
+
+  public CompilerOptions getCompilerOptions() {
+    CompilerOptions options = getStandardCompilerOptions();
+    long jdtSourceLevel = jdtLevelByGwtLevel.get(sourceLevel);
+
+    options.originalSourceLevel = jdtSourceLevel;
+    options.complianceLevel = jdtSourceLevel;
+    options.sourceLevel = jdtSourceLevel;
+    options.targetJDK = jdtSourceLevel;
     return options;
   }
 
@@ -723,8 +639,33 @@ public class JdtCompiler {
 
   private final UnitProcessor processor;
 
-  public JdtCompiler(UnitProcessor processor) {
+  /**
+   * Java source level compatibility.
+   */
+  private final SourceLevel sourceLevel;
+
+  /**
+   * Controls whether the compiler strips GwtIncompatible annotations.
+   */
+  private static boolean removeGwtIncompatible = true;
+
+  /**
+   * Controls whether the compiler strips unused imports.
+   */
+  private static boolean removeUnusedImports = true;
+
+  /**
+   * Maps from SourceLevel, the GWT compiler Java source compatibility levels, to JDT
+   * Java source compatibility levels.
+   */
+  private static final Map<SourceLevel, Long> jdtLevelByGwtLevel =
+      ImmutableMap.<SourceLevel, Long>of(
+          SourceLevel.JAVA6, ClassFileConstants.JDK1_6,
+          SourceLevel.JAVA7, ClassFileConstants.JDK1_7);
+
+  public JdtCompiler(UnitProcessor processor, SourceLevel sourceLevel) {
     this.processor = processor;
+    this.sourceLevel = sourceLevel;
   }
 
   public void addCompiledUnit(CompilationUnit unit) {
@@ -936,7 +877,7 @@ public class JdtCompiler {
       icus.add(new Adapter(builder));
     }
 
-    compilerImpl = new CompilerImpl(logger);
+    compilerImpl = new CompilerImpl(logger, getCompilerOptions());
     try {
       compilerImpl.compile(icus.toArray(new ICompilationUnit[icus.size()]));
     } catch (AbortCompilation e) {
@@ -964,6 +905,20 @@ public class JdtCompiler {
 
   public void setAdditionalTypeProviderDelegate(AdditionalTypeProviderDelegate newDelegate) {
     additionalTypeProviderDelegate = newDelegate;
+  }
+
+  /**
+   * Sets whether the compiler should remove GwtIncompatible annotated classes amd members.
+   */
+  public static void setRemoveGwtIncompatible(boolean remove) {
+    removeGwtIncompatible = remove;
+  }
+
+  /**
+   * Sets whether the compiler should remove unused imports.
+   */
+  public static void setRemoveUnusedImports(boolean remove) {
+    removeUnusedImports = remove;
   }
 
   private void addBinaryTypes(Collection<CompiledClass> compiledClasses) {

@@ -15,6 +15,8 @@
  */
 package com.google.gwt.core.client;
 
+import com.google.gwt.junit.DoNotRunWith;
+import com.google.gwt.junit.Platform;
 import com.google.gwt.junit.client.GWTTestCase;
 import com.google.gwt.junit.client.WithProperties;
 import com.google.gwt.junit.client.WithProperties.Property;
@@ -28,7 +30,7 @@ import com.google.gwt.junit.client.WithProperties.Property;
  */
 public class JavaScriptExceptionTest extends GWTTestCase {
 
-  static native JavaScriptObject makeJSO() /*-{
+  private static native JavaScriptObject makeJSO() /*-{
     return {
       toString:function() {
         return "jso";
@@ -39,23 +41,71 @@ public class JavaScriptExceptionTest extends GWTTestCase {
     };
   }-*/;
 
-  static void throwJava(Throwable t) throws Throwable {
-    throw t;
+  private static Object makeJavaObject() {
+    Object o = new Object() {
+      @Override public String toString() {
+        return "myLameObject";
+      }
+    };
+    return o;
   }
 
-  static native void throwNative(Object e) /*-{
+  private static native void throwNative(Object e) /*-{
     throw e;
   }-*/;
 
-  static void throwSandwichJava(Object e) {
+  private static native void throwTypeError(Object e) /*-{
+    e.notExistsWillThrowTypeError();
+  }-*/;
+
+  private static void throwSandwichJava(Object e) {
     throwNative(e);
   }
 
-  static native void throwSandwichNative(Throwable t) /*-{
-    @com.google.gwt.core.client.JavaScriptExceptionTest::throwJava(Ljava/lang/Throwable;)(t);
+  private static Throwable catchJava(Runnable runnable) {
+    try {
+      runnable.run();
+    } catch (Throwable e) {
+      return e;
+    }
+    return null;
+  }
+
+  private static native Object catchNative(Runnable runnable) /*-{
+    try {
+      runnable.@java.lang.Runnable::run()();
+    } catch(e) {
+      return e;
+    }
   }-*/;
 
-  public void assertJsoProperties(boolean extraPropertiesShouldBePresent) {
+  private static Runnable createThrowRunnable(final Throwable e) {
+    return new Runnable() {
+      @Override public void run() {
+        throw sneakyThrow(e);
+      }
+
+      @SuppressWarnings("unchecked")
+      <T extends RuntimeException> T sneakyThrow(Throwable e) {
+        return (T) e;
+      }
+    };
+  }
+
+  private static Runnable createThrowNativeRunnable(final Object e) {
+    return new Runnable() {
+      @Override public void run() {
+        throwNative(e);
+      }
+    };
+  }
+
+  private static void assertJavaScriptException(Object expected, Throwable exception) {
+    assertTrue(exception instanceof JavaScriptException);
+    assertEquals(expected, ((JavaScriptException) exception).getThrown());
+  }
+
+  private static void assertJsoProperties(boolean extraPropertiesShouldBePresent) {
     JavaScriptObject jso = makeJSO();
     try {
       throwNative(jso);
@@ -63,26 +113,12 @@ public class JavaScriptExceptionTest extends GWTTestCase {
     } catch (JavaScriptException e) {
       assertEquals("myName", e.getName());
       assertDescription(e, "myDescription");
-      assertSame(jso, e.getException());
-      assertTrue(e.getMessage().contains("myName"));
-      assertTrue(e.getMessage().contains(e.getDescription()));
-      if (extraPropertiesShouldBePresent) {
-        assertTrue(
-            "message does not contain 'extraField', but should: "
-                + e.getMessage(), e.getMessage().contains("extraField"));
-        assertTrue(
-            "message does not contain 'extraData', but should:"
-                + e.getMessage(), e.getMessage().contains("extraData"));
-      } else {
-        assertFalse(
-            "message contains 'extraField', but shouldn't: " + e.getMessage(),
-            e.getMessage().contains("extraField"));
-        // CHECKSTYLE_OFF
-        assertFalse(
-            "message contains 'extraData', but shouldn't:" + e.getMessage(),
-            e.getMessage().contains("extraData"));
-        // CHECKSTYLE_ON
-      }
+      assertTrue(e.isThrownSet());
+      assertSame(jso, e.getThrown());
+      assertMessage(e, "myName", true /* should always contain */);
+      assertMessage(e, "extraData", extraPropertiesShouldBePresent);
+      assertMessage(e, "extraField", extraPropertiesShouldBePresent);
+      assertMessage(e, "__gwt$exception: <skipped>", extraPropertiesShouldBePresent);
     }
   }
 
@@ -107,13 +143,86 @@ public class JavaScriptExceptionTest extends GWTTestCase {
     return "com.google.gwt.core.Core";
   }
 
-  public void testJavaExceptionSandwich() {
+  public void testCatch() {
     RuntimeException e = new RuntimeException();
-    try {
-      throwSandwichNative(e);
-    } catch (Throwable t) {
-      assertSame(e, t);
+    assertSame(e, catchJava(createThrowRunnable(e)));
+
+    JavaScriptObject jso = makeJSO();
+    e = new JavaScriptException(jso);
+    assertJavaScriptException(jso, catchJava(createThrowRunnable(e)));
+  }
+
+  // java throw -> jsni catch -> jsni throw -> java catch
+  public void testJavaNativeJavaSandwichCatch() {
+    RuntimeException e = new RuntimeException();
+    assertSame(e, javaNativeJavaSandwich(e));
+
+    JavaScriptObject jso = makeJSO();
+    e = new JavaScriptException(jso);
+    assertJavaScriptException(jso, javaNativeJavaSandwich(e));
+  }
+
+  private Throwable javaNativeJavaSandwich(RuntimeException e) {
+    return catchJava(createThrowNativeRunnable(catchJava(createThrowRunnable(e))));
+  }
+
+  public void testCatchThrowNative() {
+    Object e;
+
+    e = makeJSO();
+    assertJavaScriptException(e, catchJava(createThrowNativeRunnable(e)));
+
+    e = "testing";
+    assertJavaScriptException(e, catchJava(createThrowNativeRunnable(e)));
+
+    e = null;
+    assertJavaScriptException(e, catchJava(createThrowNativeRunnable(e)));
+
+    e = makeJavaObject();
+    assertJavaScriptException(e, catchJava(createThrowNativeRunnable(e)));
+
+    e = new RuntimeException();
+    assertSame(e, catchJava(createThrowNativeRunnable(e)));
+
+    e = new JavaScriptException("exception message"); // Thrown is not set
+    assertSame(e, catchJava(createThrowNativeRunnable(e)));
+
+    e = new JavaScriptException(makeJSO());
+    assertSame(e, catchJava(createThrowNativeRunnable(e)));
+  }
+
+  // jsni throw -> java catch -> java throw -> jsni catch
+  public void testNativeJavaNativeSandwichCatch() {
+    Object e;
+
+    e = makeJSO();
+    assertSame(e, nativeJavaNativeSandwich(e));
+
+    e = "testing";
+    assertEquals(e, nativeJavaNativeSandwich(e));
+    if (GWT.isScript()) { // Devmode will not preserve the same String instance
+      assertSame(e, nativeJavaNativeSandwich(e));
     }
+
+    e = null;
+    assertSame(e, nativeJavaNativeSandwich(e));
+
+    e = makeJavaObject();
+    assertSame(e, nativeJavaNativeSandwich(e));
+
+    e = new RuntimeException();
+    assertSame(e, nativeJavaNativeSandwich(e));
+
+    e = new JavaScriptException("exception message"); // Thrown is not set
+    assertSame(e, nativeJavaNativeSandwich(e));
+
+    JavaScriptObject jso = makeJSO();
+    e = new JavaScriptException(jso);
+    assertSame(jso, nativeJavaNativeSandwich(e));
+  }
+
+  private Object nativeJavaNativeSandwich(Object e) {
+    return catchNative(createThrowRunnable(catchJava(createThrowNativeRunnable(e))));
   }
 
   @WithProperties({
@@ -128,7 +237,8 @@ public class JavaScriptExceptionTest extends GWTTestCase {
      */
     assertJsoProperties(false);
   }
-  
+
+  @DoNotRunWith(Platform.HtmlUnitUnknown)
   @WithProperties({
     @Property(name = "compiler.stackMode", value = "native")
   })
@@ -142,7 +252,8 @@ public class JavaScriptExceptionTest extends GWTTestCase {
      */
     assertJsoProperties(GWT.isScript());
   }
-  
+
+  @DoNotRunWith(Platform.HtmlUnitUnknown)
   @WithProperties({
     @Property(name = "compiler.stackMode", value = "strip")
   })
@@ -164,25 +275,22 @@ public class JavaScriptExceptionTest extends GWTTestCase {
     } catch (JavaScriptException e) {
       assertEquals("null", e.getName());
       assertDescription(e, "null");
-      assertEquals(null, e.getException());
+      assertTrue(e.isThrownSet());
+      assertEquals(null, e.getThrown());
       assertTrue(e.getMessage().contains("null"));
     }
   }
 
   public void testObject() {
-    Object o = new Object() {
-      @Override
-      public String toString() {
-        return "myLameObject";
-      }
-    };
+    Object o = makeJavaObject();
     try {
       throwNative(o);
       fail();
     } catch (JavaScriptException e) {
       assertEquals(o.getClass().getName(), e.getName());
       assertDescription(e, "myLameObject");
-      assertEquals(null, e.getException());
+      assertTrue(e.isThrownSet());
+      assertEquals(o, e.getThrown());
       assertTrue(e.getMessage().contains(o.getClass().getName()));
       assertTrue(e.getMessage().contains(e.getDescription()));
     }
@@ -195,19 +303,50 @@ public class JavaScriptExceptionTest extends GWTTestCase {
     } catch (JavaScriptException e) {
       assertEquals("String", e.getName());
       assertDescription(e, "foobarbaz");
-      assertEquals(null, e.getException());
+      assertTrue(e.isThrownSet());
+      assertEquals("foobarbaz", e.getThrown());
       assertTrue(e.getMessage().contains(e.getDescription()));
     }
   }
 
-  private void assertDescription(JavaScriptException e, String description) {
+  @DoNotRunWith(Platform.HtmlUnitUnknown)
+  public void testTypeError() {
+    try {
+      throwTypeError("myobj");
+      fail();
+    } catch (JavaScriptException e) {
+      assertTypeError(e);
+      e = (JavaScriptException) javaNativeJavaSandwich(e);
+      assertTypeError(e);
+    }
+  }
+
+  private static void assertTypeError(JavaScriptException e) {
+    assertEquals("TypeError", e.getName());
+    assertTrue(e.getDescription().contains("notExistsWillThrowTypeError"));
+    assertTrue(e.isThrownSet());
+    assertTrue(e.getMessage().contains(e.getDescription()));
+  }
+
+  private static void assertDescription(JavaScriptException e, String description) {
     if (!GWT.isScript()) {
       assertTrue("Should start with method name",
           e.getDescription().startsWith(
               "@com.google.gwt.core.client.JavaScriptExceptionTest::"
                   + "throwNative(Ljava/lang/Object;)"));
     }
-    assertTrue("Should end with " + description,
+    assertTrue("Should end with " + e.getDescription(),
         e.getDescription().endsWith(description));
+  }
+
+  private static void assertMessage(JavaScriptException e, String partOfMessage, boolean contains) {
+    String msg = e.getMessage();
+    if (contains) {
+      assertTrue("message contains '" + partOfMessage + "', but shouldn't: " + msg,
+          msg.contains(partOfMessage));
+    } else {
+      assertFalse("message does not contain '" + partOfMessage + "', but should: " + msg,
+          msg.contains(partOfMessage));
+    }
   }
 }

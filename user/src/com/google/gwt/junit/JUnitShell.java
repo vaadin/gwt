@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -25,6 +25,7 @@ import com.google.gwt.core.ext.typeinfo.TypeOracle;
 import com.google.gwt.core.shared.SerializableThrowable;
 import com.google.gwt.dev.ArgProcessorBase;
 import com.google.gwt.dev.Compiler;
+import com.google.gwt.dev.CompilerOptions;
 import com.google.gwt.dev.DevMode;
 import com.google.gwt.dev.cfg.BindingProperty;
 import com.google.gwt.dev.cfg.ModuleDef;
@@ -55,6 +56,7 @@ import com.google.gwt.dev.util.arg.ArgHandlerLogLevel;
 import com.google.gwt.dev.util.arg.ArgHandlerMaxPermsPerPrecompile;
 import com.google.gwt.dev.util.arg.ArgHandlerOptimize;
 import com.google.gwt.dev.util.arg.ArgHandlerScriptStyle;
+import com.google.gwt.dev.util.arg.ArgHandlerSource;
 import com.google.gwt.dev.util.arg.ArgHandlerWarDir;
 import com.google.gwt.dev.util.arg.ArgHandlerWorkDirOptional;
 import com.google.gwt.junit.JUnitMessageQueue.ClientStatus;
@@ -93,26 +95,26 @@ import java.util.regex.Pattern;
 /**
  * This class is responsible for hosting JUnit test case execution. There are
  * three main pieces to the JUnit system.
- * 
+ *
  * <ul>
  * <li>Test environment</li>
  * <li>Client classes</li>
  * <li>Server classes</li>
  * </ul>
- * 
+ *
  * <p>
  * The test environment consists of this class and the non-translatable version
  * of {@link com.google.gwt.junit.client.GWTTestCase}. These two classes
  * integrate directly into the real JUnit test process.
  * </p>
- * 
+ *
  * <p>
  * The client classes consist of the translatable version of
  * {@link com.google.gwt.junit.client.GWTTestCase}, translatable JUnit classes,
  * and the user's own {@link com.google.gwt.junit.client.GWTTestCase}-derived
  * class. The client communicates to the server via RPC.
  * </p>
- * 
+ *
  * <p>
  * The server consists of {@link com.google.gwt.junit.server.JUnitHostImpl}, an
  * RPC servlet which communicates back to the test environment through a
@@ -128,6 +130,104 @@ public class JUnitShell extends DevMode {
     String getSyntheticModuleExtension();
 
     void processModule(ModuleDef module);
+  }
+
+  private static class ArgHandlerRunCompiledJavascript extends ArgHandlerFlag {
+
+    private JUnitShell shell;
+
+    public ArgHandlerRunCompiledJavascript(JUnitShell shell) {
+      this.shell = shell;
+
+      addTagValue("-web", false);
+      addTagValue("-prod", false);
+    }
+
+    @Override
+    public String getPurposeSnippet() {
+      return "Runs tests in Development Mode, using the Java virtual machine.";
+    }
+
+    @Override
+    public String getLabel() {
+      return "devMode";
+    }
+
+    @Override
+    public boolean setFlag(boolean enabled) {
+      shell.developmentMode = enabled;
+      return true;
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return shell.developmentMode;
+    }
+  }
+
+  private static class ArgHandlerShowWindows extends ArgHandlerFlag {
+
+    private JUnitShell shell;
+
+    public ArgHandlerShowWindows(JUnitShell shell) {
+      this.shell = shell;
+
+      addTagValue("-notHeadless", true);
+    }
+
+    @Override
+    public String getPurposeSnippet() {
+      return "Causes the log window and browser windows to be displayed; useful for debugging.";
+    }
+
+    @Override
+    public String getLabel() {
+      return "showUi";
+    }
+
+    @Override
+    public boolean setFlag(boolean enabled) {
+      shell.setHeadless(!enabled);
+      return true;
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return !shell.isHeadless();
+    }
+  }
+
+  private static class ArgHandlerRunInStandardsMode extends ArgHandlerFlag {
+
+    private JUnitShell shell;
+
+    public ArgHandlerRunInStandardsMode(JUnitShell shell) {
+      this.shell = shell;
+
+      addTagValue("-standardsMode", true);
+      addTagValue("-quirksMode", false);
+    }
+
+    @Override
+    public String getPurposeSnippet() {
+      return "Run each test using an HTML document in standards mode (rather than quirks mode).";
+    }
+
+    @Override
+    public String getLabel() {
+      return "runStandardsMode";
+    }
+
+    @Override
+    public boolean setFlag(boolean enabled) {
+      shell.setStandardsMode(enabled);
+      return true;
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return shell.standardsMode;
+    }
   }
 
   static class ArgProcessor extends ArgProcessorBase {
@@ -167,20 +267,31 @@ public class JUnitShell extends DevMode {
       // Hard code the server.
       options.setServletContainerLauncher(shell.new MyJettyLauncher());
       // DISABLE: ArgHandlerStartupURLs
-      registerHandler(new com.google.gwt.dev.ArgHandlerOutDirDeprecated(options));
       registerHandler(new ArgHandlerWarDir(options) {
+        private static final String OUT_TAG = "-out";
+
         @Override
-        public String[] getDefaultArgs() {
-          // If an outDir was already specified, don't clobber it.
-          if (options.getOutDir() != null) {
-            return null;
+        public String[] getTags() {
+          return new String[] {getTag(), OUT_TAG};
+        }
+
+        @Override
+        public int handle(String[] args, int tagIndex) {
+          if (OUT_TAG.equals(args[tagIndex])) {
+            // -out is deprecated. Print a warning message
+            System.err.println("The -out option is deprecated. This option will be removed in " +
+                "future GWT release and will throw an error if it is still used. Please use -war " +
+                "option instead.");
           }
-          return super.getDefaultArgs();
+          return super.handle(args, tagIndex);
         }
       });
+
       registerHandler(new ArgHandlerDeployDir(options));
       registerHandler(new ArgHandlerExtraDir(options));
       registerHandler(new ArgHandlerWorkDirOptional(options));
+      registerHandler(new ArgHandlerSource(options));
+
       // DISABLE: ArgHandlerModuleName
 
       /*
@@ -215,48 +326,10 @@ public class JUnitShell extends DevMode {
         }
       });
 
-      registerHandler(new ArgHandlerFlag() {
-        @Override
-        public String getPurpose() {
-          return "Synonym for -prod (deprecated)";
-        }
-
-        @Override
-        public String getTag() {
-          return "-web";
-        }
-
-        @Override
-        public boolean isUndocumented() {
-          return true;
-        }
-
-        @Override
-        public boolean setFlag() {
-          shell.developmentMode = false;
-          return true;
-        }
-      });
-
-      registerHandler(new ArgHandlerFlag() {
-        @Override
-        public String getPurpose() {
-          return "Causes your test to run in production (compiled) mode (defaults to development mode)";
-        }
-
-        @Override
-        public String getTag() {
-          return "-prod";
-        }
-
-        @Override
-        public boolean setFlag() {
-          shell.developmentMode = false;
-          return true;
-        }
-      });
+      registerHandler(new ArgHandlerRunCompiledJavascript(shell));
 
       registerHandler(new ArgHandlerInt() {
+
         @Override
         public String[] getDefaultArgs() {
           return new String[]{getTag(), "5"};
@@ -389,25 +462,10 @@ public class JUnitShell extends DevMode {
         }
       });
 
-      registerHandler(new ArgHandlerFlag() {
-        @Override
-        public String getPurpose() {
-          return "Causes the log window and browser windows to be displayed; useful for debugging";
-        }
-
-        @Override
-        public String getTag() {
-          return "-notHeadless";
-        }
-
-        @Override
-        public boolean setFlag() {
-          shell.setHeadless(false);
-          return true;
-        }
-      });
+      registerHandler(new ArgHandlerShowWindows(shell));
 
       registerHandler(new ArgHandlerString() {
+
         @Override
         public String getPurpose() {
           return "Precompile modules as tests are running (speeds up remote tests but requires more memory)";
@@ -443,43 +501,10 @@ public class JUnitShell extends DevMode {
         }
       });
 
-      registerHandler(new ArgHandlerFlag() {
-        @Override
-        public String getPurpose() {
-          return "Run each test using an HTML document in standards mode (rather than quirks mode)";
-        }
-
-        @Override
-        public String getTag() {
-          return "-standardsMode";
-        }
-
-        @Override
-        public boolean setFlag() {
-          shell.setStandardsMode(true);
-          return true;
-        }
-      });
-
-      registerHandler(new ArgHandlerFlag() {
-        @Override
-        public String getPurpose() {
-          return "Run each test using an HTML document in quirks mode (rather than standards mode)";
-        }
-
-        @Override
-        public String getTag() {
-          return "-quirksMode";
-        }
-
-        @Override
-        public boolean setFlag() {
-          shell.setStandardsMode(false);
-          return true;
-        }
-      });
+      registerHandler(new ArgHandlerRunInStandardsMode(shell));
 
       registerHandler(new ArgHandlerInt() {
+
         @Override
         public String getPurpose() {
           return "EXPERIMENTAL: Sets the maximum number of attempts for running each test method";
@@ -509,9 +534,15 @@ public class JUnitShell extends DevMode {
         public void setInt(int value) {
           shell.tries = value;
         }
+
+        @Override
+        public boolean isExperimental() {
+          return true;
+        }
       });
 
       registerHandler(new ArgHandlerString() {
+
         @Override
         public String getPurpose() {
           return "Specify the user agents to reduce the number of permutations for remote browser tests;"
@@ -602,7 +633,7 @@ public class JUnitShell extends DevMode {
   /**
    * Called by {@link com.google.gwt.junit.server.JUnitHostImpl} to get an
    * interface into the test process.
-   * 
+   *
    * @return The {@link JUnitMessageQueue} interface that belongs to the
    *         singleton {@link JUnitShell}, or <code>null</code> if no such
    *         singleton exists.
@@ -617,7 +648,7 @@ public class JUnitShell extends DevMode {
   /**
    * Get the list of remote user agents to compile. This method returns null
    * until all clients have connected.
-   * 
+   *
    * @return the list of remote user agents
    */
   public static String[] getRemoteUserAgents() {
@@ -628,9 +659,21 @@ public class JUnitShell extends DevMode {
   }
 
   /**
+   * Get the compiler options
+   *
+   * @return the compiler options that have been set.
+   */
+  public static CompilerOptions getCompilerOptions() {
+    if (unitTestShell == null) {
+      return null;
+    }
+    return unitTestShell.options;
+  }
+
+  /**
    * Checks if a testCase should not be executed. Currently, a test is either
    * executed on all clients (mentioned in this test) or on no clients.
-   * 
+   *
    * @param testInfo the test info to check
    * @return true iff the test should not be executed on any of the specified
    *         clients.
@@ -724,7 +767,7 @@ public class JUnitShell extends DevMode {
 
   /**
    * Returns the set of banned {@code Platform} for a test method.
-   * 
+   *
    * @param testClass the testClass
    * @param methodName the name of the test method
    */
@@ -1087,7 +1130,7 @@ public class JUnitShell extends DevMode {
     }
     return url;
   }
-  
+
   void maybeCompileForWebMode(ModuleDef module, String... userAgents)
       throws UnableToCompleteException {
     // Load any declared servlets.
@@ -1142,7 +1185,7 @@ public class JUnitShell extends DevMode {
 
   /**
    * Create the specified (or default) runStyle.
-   * 
+   *
    * @param runStyleName the argument passed to -runStyle
    * @return the number of clients, or -1 if initialization was unsuccessful
    */
@@ -1294,7 +1337,8 @@ public class JUnitShell extends DevMode {
     if (!sameTest) {
       currentModule = compileStrategy.maybeCompileModule(moduleName,
           syntheticModuleName, strategy, batchingStrategy, getTopLogger());
-      currentCompilationState = currentModule.getCompilationState(getTopLogger(), true);
+      currentCompilationState = currentModule.getCompilationState(getTopLogger(), true,
+          options.getSourceLevel());
     }
     assert (currentModule != null);
 

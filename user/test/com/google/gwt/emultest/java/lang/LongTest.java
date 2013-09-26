@@ -44,6 +44,13 @@ public class LongTest extends GWTTestCase {
     assertEquals(1, Long.bitCount(Long.MIN_VALUE));
   }
 
+  public void testCompare() {
+    assertTrue("Long.compare failed for 1 < 2", Long.compare(1L, 2L) < 0);
+    assertTrue("Long.compare failed for 2 > 1", Long.compare(2L, 1L) > 0);
+    assertEquals(0, Long.compare(1L, 1L));
+    assertEquals(-1, Long.compare(Long.MIN_VALUE, 1L));
+  }
+
   public void testConstants() {
     assertEquals(64, Long.SIZE);
     assertEquals(0x7fffffffffffffffL, Long.MAX_VALUE);
@@ -91,6 +98,7 @@ public class LongTest extends GWTTestCase {
   public void testParse() {
     assertEquals(0L, Long.parseLong("0"));
     assertEquals(100000000000L, Long.parseLong("100000000000"));
+    assertEquals(100000000000L, Long.parseLong("+100000000000"));
     assertEquals(-100000000000L, Long.parseLong("-100000000000"));
     assertEquals(10L, Long.parseLong("010"));
     assertEquals(Long.MAX_VALUE, Long.parseLong("" + Long.MAX_VALUE));

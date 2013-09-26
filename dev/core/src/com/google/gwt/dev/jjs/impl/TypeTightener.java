@@ -34,7 +34,6 @@ import com.google.gwt.dev.jjs.ast.JGwtCreate;
 import com.google.gwt.dev.jjs.ast.JInstanceOf;
 import com.google.gwt.dev.jjs.ast.JInterfaceType;
 import com.google.gwt.dev.jjs.ast.JLocal;
-import com.google.gwt.dev.jjs.ast.JLocalRef;
 import com.google.gwt.dev.jjs.ast.JMethod;
 import com.google.gwt.dev.jjs.ast.JMethodCall;
 import com.google.gwt.dev.jjs.ast.JModVisitor;
@@ -46,6 +45,7 @@ import com.google.gwt.dev.jjs.ast.JParameterRef;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JReferenceType;
 import com.google.gwt.dev.jjs.ast.JReturnStatement;
+import com.google.gwt.dev.jjs.ast.JRunAsync;
 import com.google.gwt.dev.jjs.ast.JTryStatement;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.ast.JTypeOracle;
@@ -291,8 +291,8 @@ public class TypeTightener {
     public void endVisit(JTryStatement x, Context ctx) {
       // Never tighten args to catch blocks
       // Fake an assignment-to-self to prevent tightening
-      for (JLocalRef arg : x.getCatchArgs()) {
-        addAssignment(arg.getTarget(), arg);
+      for (JTryStatement.CatchClause clause : x.getCatchClauses()) {
+        addAssignment(clause.getArg().getTarget(), clause.getArg());
       }
     }
 
@@ -623,6 +623,13 @@ public class TypeTightener {
     @Override
     public void endVisit(JParameter x, Context ctx) {
       tighten(x);
+    }
+
+    @Override
+    public boolean visit(JRunAsync x, Context ctx) {
+      // JRunAsync's onSuccessCall is not normally traversed but should be here.
+      x.traverseOnSuccess(this);
+      return true;
     }
 
     @Override

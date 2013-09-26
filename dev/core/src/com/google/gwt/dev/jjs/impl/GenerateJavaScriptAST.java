@@ -15,10 +15,10 @@
  */
 package com.google.gwt.dev.jjs.impl;
 
+import com.google.gwt.core.ext.PropertyOracle;
 import com.google.gwt.core.ext.linker.CastableTypeMap;
 import com.google.gwt.core.ext.linker.impl.StandardCastableTypeMap;
 import com.google.gwt.core.ext.linker.impl.StandardSymbolData;
-import com.google.gwt.core.ext.PropertyOracle;
 import com.google.gwt.dev.jjs.HasSourceInfo;
 import com.google.gwt.dev.jjs.InternalCompilerException;
 import com.google.gwt.dev.jjs.JsOutputOption;
@@ -68,6 +68,7 @@ import com.google.gwt.dev.jjs.ast.JNameOf;
 import com.google.gwt.dev.jjs.ast.JNewArray;
 import com.google.gwt.dev.jjs.ast.JNewInstance;
 import com.google.gwt.dev.jjs.ast.JNode;
+import com.google.gwt.dev.jjs.ast.JNullLiteral;
 import com.google.gwt.dev.jjs.ast.JNumericEntry;
 import com.google.gwt.dev.jjs.ast.JParameter;
 import com.google.gwt.dev.jjs.ast.JParameterRef;
@@ -89,6 +90,7 @@ import com.google.gwt.dev.jjs.ast.JUnaryOperator;
 import com.google.gwt.dev.jjs.ast.JVariable;
 import com.google.gwt.dev.jjs.ast.JVisitor;
 import com.google.gwt.dev.jjs.ast.JWhileStatement;
+import com.google.gwt.dev.jjs.ast.js.JDebuggerStatement;
 import com.google.gwt.dev.jjs.ast.js.JMultiExpression;
 import com.google.gwt.dev.jjs.ast.js.JsCastMap;
 import com.google.gwt.dev.jjs.ast.js.JsCastMap.JsQueryType;
@@ -113,6 +115,7 @@ import com.google.gwt.dev.js.ast.JsCatch;
 import com.google.gwt.dev.js.ast.JsConditional;
 import com.google.gwt.dev.js.ast.JsContext;
 import com.google.gwt.dev.js.ast.JsContinue;
+import com.google.gwt.dev.js.ast.JsDebugger;
 import com.google.gwt.dev.js.ast.JsDefault;
 import com.google.gwt.dev.js.ast.JsDoWhile;
 import com.google.gwt.dev.js.ast.JsEmpty;
@@ -432,12 +435,9 @@ public class GenerateJavaScriptAST {
     @Override
     public boolean visit(JTryStatement x, Context ctx) {
       accept(x.getTryBlock());
-
-      List<JLocalRef> catchArgs = x.getCatchArgs();
-      List<JBlock> catchBlocks = x.getCatchBlocks();
-      for (int i = 0, c = catchArgs.size(); i < c; ++i) {
-        JLocalRef arg = catchArgs.get(i);
-        JBlock catchBlock = catchBlocks.get(i);
+      for (JTryStatement.CatchClause clause : x.getCatchClauses()) {
+        JLocalRef arg = clause.getArg();
+        JBlock catchBlock = clause.getBlock();
         JsCatch jsCatch = new JsCatch(x.getSourceInfo(), peek(), arg.getTarget().getName());
         JsParameter jsParam = jsCatch.getParameter();
         names.put(arg.getTarget(), jsParam.getName());
@@ -845,6 +845,11 @@ public class GenerateJavaScriptAST {
     }
 
     @Override
+    public void endVisit(JDebuggerStatement x, Context ctx) {
+      push(new JsDebugger(x.getSourceInfo()));
+    }
+
+    @Override
     public void endVisit(JDeclarationStatement x, Context ctx) {
       if (x.getInitializer() == null) {
         pop(); // variableRef
@@ -860,10 +865,13 @@ public class GenerateJavaScriptAST {
       JsNameRef localRef = (JsNameRef) pop(); // localRef
 
       JVariable target = x.getVariableRef().getTarget();
-      if (target instanceof JField && ((JField) target).getLiteralInitializer() != null) {
-        // Will initialize at top scope; no need to double-initialize.
-        push(null);
-        return;
+      if (target instanceof JField) {
+        JField field = (JField) target;
+        if (initializeAtTopScope(field)) {
+          // Will initialize at top scope; no need to double-initialize.
+          push(null);
+          return;
+        }
       }
 
       JsBinaryOperation binOp =
@@ -893,15 +901,19 @@ public class GenerateJavaScriptAST {
     @Override
     public void endVisit(JField x, Context ctx) {
       // if we need an initial value, create an assignment
-      if (x.getLiteralInitializer() != null) {
+      if (initializeAtTopScope(x)) {
         // setup the constant value
         accept(x.getLiteralInitializer());
-      } else if (!x.hasInitializer() && x.getEnclosingType() != program.getTypeJavaLangObject()) {
-        // setup a default value
-        accept(x.getType().getDefaultValue());
-      } else {
-        // the variable is setup during clinit, no need to initialize here
+      } else if (x.getEnclosingType() == program.getTypeJavaLangObject()) {
+        // Special fields whose initialization is done somewhere else.
         push(null);
+      } else if (x.getType().getDefaultValue() == JNullLiteral.INSTANCE) {
+        // Fields whose default value is null are left uninitialized and will
+        // have a JS value of undefined.
+        push(null);
+      } else {
+        // setup the default value, see Issue 380
+        accept(x.getType().getDefaultValue());
       }
       JsExpression rhs = (JsExpression) pop();
       JsName name = names.get(x);
@@ -1466,12 +1478,12 @@ public class GenerateJavaScriptAST {
         }
       }
 
-      int size = x.getCatchArgs().size();
-      assert (size < 2 && size == x.getCatchBlocks().size());
+      int size = x.getCatchClauses().size();
+      assert (size < 2);
       if (size == 1) {
         JsBlock catchBlock = (JsBlock) pop(); // catchBlocks
         pop(); // catchArgs
-        JsCatch jsCatch = catchMap.get(x.getCatchBlocks().get(0));
+        JsCatch jsCatch = catchMap.get(x.getCatchClauses().get(0).getBlock());
         jsCatch.setBody(catchBlock);
         jsTry.getCatches().add(jsCatch);
       }
@@ -2207,6 +2219,39 @@ public class GenerateJavaScriptAST {
       jsInvocation.setQualifier(names.get(clinitMethod).makeRef(sourceInfo));
       return jsInvocation;
     }
+
+    /**
+     * If a field is a literal, we can potentially treat it as immutable and assign it once on the
+     * prototype, to be reused by all instances of the class, instead of re-assigning the same
+     * literal in each constructor.
+     * 
+     * Technically, to match JVM semantics, we should only do this for final or static fields. For
+     * non-final/non-static fields, a super class's cstr, when it calls a polymorphic method that is
+     * overridden in the subclass, should actually see default values (not the literal initializer)
+     * before the subclass's cstr runs.
+     * 
+     * However, cstr's calling polymorphic methods is admittedly an uncommon case, so we apply some
+     * heuristics to see if we can initialize the field on the prototype anyway.
+     */
+    private boolean initializeAtTopScope(JField x) {
+      if (x.getLiteralInitializer() == null) {
+        return false;
+      }
+      if (x.isFinal() || x.isStatic()) {
+        // we can definitely initialize at top-scope, as JVM does so as well
+        return true;
+      }
+      // if the superclass can observe the field, we need to leave the default value
+      JDeclaredType current = x.getEnclosingType().getSuperClass();
+      while (current != null) {
+        if (canObserveSubclassFields.contains(current)) {
+          return false;
+        }
+        current = current.getSuperClass();
+      }
+      // should be safe to initialize at top-scope, as no one can observe the difference
+      return true;
+    }
   }
 
   private static class JavaToJsOperatorMap {
@@ -2266,6 +2311,69 @@ public class GenerateJavaScriptAST {
     }
   }
 
+  /**
+   * Determines which classes can potentially see uninitialized values of their subclasses' fields.
+   * 
+   * If a class can not observe subclass uninitialized fields then the initialization of those could
+   * be hoisted to the prototype.
+   */
+  private class CanObserveSubclassUninitializedFieldsVisitor extends JVisitor {
+    private JDeclaredType currentClass;
+
+    @Override
+    public boolean visit(JConstructor x, Context ctx) {
+      // Only look at constructor bodies.
+      assert currentClass == null;
+      currentClass = x.getEnclosingType();
+      return true;
+    }
+
+    @Override
+    public void endVisit(JConstructor x, Context ctx) {
+      currentClass = null;
+    }
+
+    @Override
+    public boolean visit(JMethod x, Context ctx) {
+      if (x.getName().equals("$$init")) {
+        assert currentClass == null;
+        currentClass = x.getEnclosingType();
+        return true;
+      }
+      // Do not traverse the method body if it is not a constructor.
+      return false;
+    }
+
+    @Override
+    public void endVisit(JMethod x, Context ctx) {
+      currentClass = null;
+    }
+
+    @Override
+    public void endVisit(JMethodCall x, Context ctx) {
+      // This is a method call inside a constructor.
+      assert currentClass != null;
+      // Calls to this/super constructors are okay, as they will also get examined
+      if (x.getTarget().isConstructor() && x.getInstance() instanceof JThisRef) {
+        return;
+      }
+      // Calls to the instance initializer are okay, as execution will not escape it
+      if (x.getTarget().getName().equals("$$init")) {
+        return;
+      }
+      // Calls to static methods with no arguments are safe, because they have no
+      // way to trace back into our new instance.
+      if (x.getTarget().isStatic() && x.getTarget().getOriginalParamTypes().size() == 0) {
+        return;
+      }
+      // Technically we could get fancier about trying to track the "this" reference
+      // through other variable assignments, field assignments, and methods calls, to
+      // see if it calls a polymorphic method against ourself (which would let subclasses
+      // observe their fields), but that gets tricky, so we'll use the above heuristics
+      // for now.
+      canObserveSubclassFields.add(currentClass);
+    }
+  }
 
   private class RecordCrossClassCallsAndJSInlinableMethods extends JVisitor {
 
@@ -2417,6 +2525,12 @@ public class GenerateJavaScriptAST {
   private final JsProgram jsProgram;
 
   private final Set<JConstructor> liveCtors = new IdentityHashSet<JConstructor>();
+
+  /**
+   * Classes that could potentially see uninitialized values for fields that are initialized in the
+   * declaration.
+   */
+  private final Set<JDeclaredType> canObserveSubclassFields = new HashSet<JDeclaredType>();
 
   /**
    * Sorted to avoid nondeterministic iteration.
@@ -2657,6 +2771,9 @@ public class GenerateJavaScriptAST {
   }
 
   private Pair<JavaToJavaScriptMap, Set<JsNode>> execImpl() {
+    CanObserveSubclassUninitializedFieldsVisitor canObserve =
+        new CanObserveSubclassUninitializedFieldsVisitor();
+    canObserve.accept(program);
     SortVisitor sorter = new SortVisitor();
     sorter.accept(program);
     RecordCrossClassCallsAndJSInlinableMethods recorder =

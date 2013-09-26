@@ -114,6 +114,13 @@ public class IntegerTest extends GWTTestCase {
     assertEquals(1, Integer.bitCount(Integer.MIN_VALUE));
   }
 
+  public void testCompare() {
+    assertTrue("Integer.compare failed for 1 < 2", Integer.compare(1, 2) < 0);
+    assertTrue("Integer.compare failed for 2 > 1", Integer.compare(2, 1) > 0);
+    assertEquals(0, Integer.compare(1, 1));
+    assertEquals(-1, Integer.compare(Integer.MIN_VALUE, 1));
+  }
+
   public void testCompareTo() {
     assertEquals(-1, new Integer(12345).compareTo(new Integer(12346)));
     assertEquals(1, new Integer("12345").compareTo(new Integer(12344)));
@@ -137,6 +144,8 @@ public class IntegerTest extends GWTTestCase {
     assertEquals(Integer.MIN_VALUE, Integer.decode(
         String.valueOf(Integer.MIN_VALUE)).intValue());
     assertEquals(12345, Integer.decode("12345").intValue());
+    assertEquals(12345, Integer.decode("+12345").intValue());
+    assertEquals(-12345, Integer.decode("-12345").intValue());
     assertEquals(31, Integer.decode("0x1f").intValue());
     assertEquals(-31, Integer.decode("-0X1F").intValue());
     assertEquals(31, Integer.decode("#1f").intValue());
@@ -265,6 +274,8 @@ public class IntegerTest extends GWTTestCase {
 
   public void testParseInt() {
     assertEquals(12345, Integer.parseInt("12345"));
+    assertEquals(12345, Integer.parseInt("+12345"));
+    assertEquals(-12345, Integer.parseInt("-12345"));
     assertEquals(1865, Integer.parseInt("12345", 6));
     assertEquals(0, Integer.parseInt("0"));
     assertEquals(Integer.MAX_VALUE,

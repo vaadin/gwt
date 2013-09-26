@@ -58,6 +58,16 @@ public final class Long extends Number implements Comparable<Long> {
     return Integer.bitCount(high) + Integer.bitCount(low);
   }
 
+  public static int compare(long x, long y) {
+    if (x < y) {
+      return -1;
+    } else if (x > y) {
+      return 1;
+    } else {
+      return 0;
+    }
+  }
+
   public static Long decode(String s) throws NumberFormatException {
     __Decode decode = __decodeNumberString(s);
     return new Long(parseLong(decode.payload, decode.radix));
@@ -279,13 +289,7 @@ public final class Long extends Number implements Comparable<Long> {
   }
 
   public int compareTo(Long b) {
-    if (value < b.value) {
-      return -1;
-    } else if (value > b.value) {
-      return 1;
-    } else {
-      return 0;
-    }
+    return compare(value, b.value);
   }
 
   @Override

@@ -15,12 +15,14 @@
  */
 package com.google.gwt.core.shared;
 
-import com.google.gwt.core.client.JavaScriptException;
+import com.google.gwt.core.shared.impl.ThrowableTypeResolver;
+
 
 /**
  * A serializable copy of a {@link Throwable}, including its causes and stack trace. It overrides
  * {@code #toString} to mimic original {@link Throwable#toString()} so that {@link #printStackTrace}
  * will work as if it is coming from the original exception.
+ *
  * <p>
  * This class is especially useful for logging and testing as the emulated Throwable class does not
  * serialize recursively and does not serialize the stack trace. This class, as an alternative, can
@@ -29,6 +31,8 @@ import com.google.gwt.core.client.JavaScriptException;
  * <p>
  * Please note that, to get more useful stack traces from client side, this class needs to be used
  * in conjunction with {@link com.google.gwt.core.server.StackTraceDeobfuscator}.
+ * <p>
+ * NOTE: Does not serialize suppressed exceptions to remain compatible with Java 6 and below.
  */
 public final class SerializableThrowable extends Throwable {
 
@@ -51,6 +55,7 @@ public final class SerializableThrowable extends Throwable {
 
   private String typeName;
   private boolean exactTypeKnown;
+  private transient Throwable originalThrowable;
   private StackTraceElement[] dummyFieldToIncludeTheTypeInSerialization;
 
   /**
@@ -64,6 +69,7 @@ public final class SerializableThrowable extends Throwable {
   @Override
   public Throwable fillInStackTrace() {
     // This is a no-op for optimization as we don't need stack traces to be auto-filled.
+    // TODO(goktug): Java 7 let's you disable this by constructor flag
     return this;
   }
 
@@ -90,7 +96,7 @@ public final class SerializableThrowable extends Throwable {
   }
 
   /**
-   * Return {@code true} if provided type name is the exact type of the throwable that is designed
+   * Return {@code true} if provided type name is the exact type of the throwable that is designated
    * by this instance. This can return {@code false} if the class metadata is not available in the
    * runtime. In that case {@link #getDesignatedType()} will return the type resolved by best-effort
    * and may not be the exact type; instead it can be one of the ancestors of the real type that
@@ -110,6 +116,15 @@ public final class SerializableThrowable extends Throwable {
     return super.initCause(fromThrowable(cause));
   }
 
+  /**
+   * Returns the original throwable that this serializable throwable is derived from. Note that the
+   * original throwable is kept in a transient field; that is; it will not be transferred to server
+   * side. In that case this method will return {@code null}.
+   */
+  public Throwable getOriginalThrowable() {
+    return originalThrowable;
+  }
+
   @Override
   public String toString() {
     String type = exactTypeKnown ? typeName : (typeName + "(EXACT TYPE UNKNOWN)");
@@ -121,48 +136,8 @@ public final class SerializableThrowable extends Throwable {
     SerializableThrowable throwable = new SerializableThrowable(null, t.getMessage());
     throwable.setStackTrace(t.getStackTrace());
     throwable.initCause(t.getCause());
-    if (isClassMetadataAvailable()) {
-      throwable.setDesignatedType(t.getClass().getName(), true);
-    } else {
-      resolveDesignatedType(throwable, t);
-    }
+    throwable.originalThrowable = t;
+    ThrowableTypeResolver.resolveDesignatedType(throwable, t);
     return throwable;
-  }
-
-  // TODO(goktug): Replace when availability of class metadata can be checked in compile-time so
-  // that #resolveDesignatedType will be compiled out.
-  private static boolean isClassMetadataAvailable() {
-    return !GWT.isScript()
-        || SerializableThrowable.class.getName().endsWith(".SerializableThrowable");
-  }
-
-  /**
-   * Resolves best effort class name by checking against some common exception types.
-   */
-  private static void resolveDesignatedType(SerializableThrowable t, Throwable designatedType) {
-    String resolvedName;
-    Class<?> resolvedType;
-    try {
-      throw designatedType;
-    } catch (NullPointerException e) {
-      resolvedName = "java.lang.NullPointerException";
-      resolvedType = NullPointerException.class;
-    } catch (JavaScriptException e) {
-      resolvedName = "com.google.gwt.core.client.JavaScriptException";
-      resolvedType = JavaScriptException.class;
-    } catch (RuntimeException e) {
-      resolvedName = "java.lang.RuntimeException";
-      resolvedType = RuntimeException.class;
-    } catch (Exception e) {
-      resolvedName = "java.lang.Exception";
-      resolvedType = Exception.class;
-    } catch (Error e) {
-      resolvedName = "java.lang.Error";
-      resolvedType = Error.class;
-    } catch (Throwable e) {
-      resolvedName = "java.lang.Throwable";
-      resolvedType = Throwable.class;
-    }
-    t.setDesignatedType(resolvedName, resolvedType == designatedType.getClass());
   }
 }

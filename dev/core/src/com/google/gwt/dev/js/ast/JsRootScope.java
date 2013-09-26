@@ -49,7 +49,7 @@ public final class JsRootScope extends JsScope {
       "eval",
       "parseInt",
       "parseFloat",
-      "isNan",
+      "isNaN",
       "isFinite",
 
       // 15.1.3 URI Handling Function Properties
@@ -348,7 +348,7 @@ public final class JsRootScope extends JsScope {
 
   private final JsName undefined;
 
-  private JsRootScope() {
+  public JsRootScope() {
     super("Root");
     for (String ident : COMMON_BUILTINS) {
       names.put(ident, new JsRootName(this, ident));

@@ -261,12 +261,10 @@ public final class Array {
     if (seedType == 3) {
       // Fill array with the type used by LongLib
       for ( var i = 0; i < length; ++i) {
-        var value = new Object();
-        value.l = value.m = value.h = 0;
-        array[i] = value;
+        array[i] = {l: 0, m: 0, h:0};
       }
-    } else if (seedType > 0) {
-      var value = [null, 0, false][seedType];
+    } else if (seedType > 0 && seedType < 3) {
+      var value = seedType == 1 ? 0 : false;
       for ( var i = 0; i < length; ++i) {
         array[i] = value;
       }

@@ -27,5 +27,5 @@ package com.google.gwt.event.dom.client;
  * </p>
  */
 public interface HasAllMediaHandlers extends HasEndedHandlers,
-    HasProgressHandlers, HasCanPlayThroughHandlers {
+  HasProgressHandlers, HasCanPlayThroughHandlers, HasLoadedMetadataHandlers {
 }

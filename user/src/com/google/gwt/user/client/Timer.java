@@ -15,10 +15,8 @@
  */
 package com.google.gwt.user.client;
 
-import com.google.gwt.event.logical.shared.CloseEvent;
-import com.google.gwt.event.logical.shared.CloseHandler;
-
-import java.util.ArrayList;
+import com.google.gwt.core.client.JavaScriptObject;
+import com.google.gwt.core.client.impl.Impl;
 
 /**
  * A simplified, browser-safe timer class. This class serves the same purpose as
@@ -43,47 +41,13 @@ import java.util.ArrayList;
  */
 public abstract class Timer {
 
-  private static ArrayList<Timer> timers = new ArrayList<Timer>();
-
-  static {
-    hookWindowClosing();
-  }
-
-  private static native void clearInterval(int id) /*-{
-    @com.google.gwt.core.client.impl.Impl::clearInterval(I)(id);
+  private static native JavaScriptObject createCallback(Timer timer, int cancelCounter) /*-{
+    return $entry(function() { timer.@com.google.gwt.user.client.Timer::fire(I)(cancelCounter); });
   }-*/;
-
-  private static native void clearTimeout(int id) /*-{
-    @com.google.gwt.core.client.impl.Impl::clearTimeout(I)(id);
-  }-*/;
-
-  private static native int createInterval(Timer timer, int period, int cancelCounter) /*-{
-    return @com.google.gwt.core.client.impl.Impl::setInterval(Lcom/google/gwt/core/client/JavaScriptObject;I)(
-        $entry(function() { timer.@com.google.gwt.user.client.Timer::fire(I)(cancelCounter); }),
-      period);
-  }-*/;
-
-  private static native int createTimeout(Timer timer, int delay, int cancelCounter) /*-{
-    return @com.google.gwt.core.client.impl.Impl::setTimeout(Lcom/google/gwt/core/client/JavaScriptObject;I)(
-      $entry(function() { timer.@com.google.gwt.user.client.Timer::fire(I)(cancelCounter); }),
-      delay);
-  }-*/;
-
-  private static void hookWindowClosing() {
-    // Catch the window closing event.
-    Window.addCloseHandler(new CloseHandler<Window>() {
-
-      public void onClose(CloseEvent<Window> event) {
-        while (timers.size() > 0) {
-          timers.get(0).cancel();
-        }
-      }
-    });
-  }
 
   private boolean isRepeating;
 
-  private int timerId;
+  private Integer timerId = null;
 
   /**
    * Workaround for broken clearTimeout in IE. Keeps track of whether cancel has been called since
@@ -92,16 +56,28 @@ public abstract class Timer {
   private int cancelCounter = 0;
 
   /**
-   * Cancels this timer.
+   * Returns {@code true} if the timer is running. Timer is running if and only if it is scheduled
+   * but it is not expired or cancelled.
+   */
+  public final boolean isRunning() {
+    return timerId != null;
+  }
+
+  /**
+   * Cancels this timer. If the timer is not running, this is a no-op.
    */
   public void cancel() {
+    if (!isRunning()) {
+      return;
+    }
+
     cancelCounter++;
     if (isRepeating) {
-      clearInterval(timerId);
+      Impl.clearInterval(timerId);
     } else {
-      clearTimeout(timerId);
+      Impl.clearTimeout(timerId);
     }
-    timers.remove(this);
+    timerId = null;
   }
 
   /**
@@ -111,35 +87,38 @@ public abstract class Timer {
   public abstract void run();
 
   /**
-   * Schedules a timer to elapse in the future.
-   * 
-   * @param delayMillis how long to wait before the timer elapses, in
-   *          milliseconds
+   * Schedules a timer to elapse in the future. If the timer is already running then it will be
+   * first canceled before re-scheduling.
+   *
+   * @param delayMillis how long to wait before the timer elapses, in milliseconds
    */
   public void schedule(int delayMillis) {
     if (delayMillis < 0) {
       throw new IllegalArgumentException("must be non-negative");
     }
-    cancel();
+    if (isRunning()) {
+      cancel();
+    }
     isRepeating = false;
-    timerId = createTimeout(this, delayMillis, cancelCounter);
-    timers.add(this);
+    timerId = Impl.setTimeout(createCallback(this, cancelCounter), delayMillis);
   }
 
   /**
-   * Schedules a timer that elapses repeatedly.
-   * 
-   * @param periodMillis how long to wait before the timer elapses, in
-   *          milliseconds, between each repetition
+   * Schedules a timer that elapses repeatedly. If the timer is already running then it will be
+   * first canceled before re-scheduling.
+   *
+   * @param periodMillis how long to wait before the timer elapses, in milliseconds, between each
+   *        repetition
    */
   public void scheduleRepeating(int periodMillis) {
     if (periodMillis <= 0) {
       throw new IllegalArgumentException("must be positive");
     }
-    cancel();
+    if (isRunning()) {
+      cancel();
+    }
     isRepeating = true;
-    timerId = createInterval(this, periodMillis, cancelCounter);
-    timers.add(this);
+    timerId = Impl.setInterval(createCallback(this, cancelCounter), periodMillis);
   }
 
   /*
@@ -148,14 +127,13 @@ public abstract class Timer {
    * Only call run() if cancelCounter has not changed since the timer was scheduled.
    */
   final void fire(int scheduleCancelCounter) {
+    // Workaround for broken clearTimeout in IE.
     if (scheduleCancelCounter != cancelCounter) {
       return;
     }
 
-    // If this is a one-shot timer, remove it from the timer list. This will
-    // allow it to be garbage collected.
     if (!isRepeating) {
-      timers.remove(this);
+      timerId = null;
     }
 
     // Run the timer's code.
