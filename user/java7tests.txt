@@ -1,0 +1,9 @@
+com/google/gwt/emultest/java/util/ObjectsTest*
+com/google/gwt/emultest/java/lang/ObjectsTest*
+com/google/gwt/emultest/java/lang/BooleanTest*
+com/google/gwt/emultest/java/lang/ByteTest*
+com/google/gwt/emultest/java/lang/CharacterTest*
+com/google/gwt/emultest/java/lang/IntegerTest*
+com/google/gwt/emultest/java/lang/LongTest*
+com/google/gwt/emultest/java/lang/ShortTest*
+com/google/gwt/emultest/EmulSuite.java
