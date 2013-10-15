@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -122,7 +122,8 @@ public class Compiler {
     ModuleDef[] modules = new ModuleDef[options.getModuleNames().size()];
     int i = 0;
     for (String moduleName : options.getModuleNames()) {
-      modules[i++] = ModuleDefLoader.loadFromClassPath(logger, moduleName, compilerContext, true);
+      modules[i++] =
+          ModuleDefLoader.loadFromClassPath(logger, moduleName, compilerContext, true, true);
     }
     return run(logger, modules);
   }
@@ -163,6 +164,10 @@ public class Compiler {
           if (precompilation == null) {
             return false;
           }
+          // TODO: move to precompile() after params are refactored
+          if (!options.shouldSaveSource()) {
+            precompilation.removeSourceArtifacts(logger);
+          }
 
           Event compilePermutationsEvent = SpeedTracerLogger.start(CompilerEventType.COMPILE_PERMUTATIONS);
           Permutation[] allPerms = precompilation.getPermutations();
@@ -189,8 +194,8 @@ public class Compiler {
             logMessage += "; Writing extras to " + absExtrasPath;
           }
           Link.link(logger.branch(TreeLogger.TRACE, logMessage), module,
-              generatedArtifacts, allPerms, resultFiles, options.getWarDir(),
-              options.getDeployDir(), options.getExtraDir(), precompileOptions);
+              generatedArtifacts, allPerms, resultFiles, precompileOptions, options
+          );
 
           linkEvent.end();
           long compileDone = System.currentTimeMillis();
