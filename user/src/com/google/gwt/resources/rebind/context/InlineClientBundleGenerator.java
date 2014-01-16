@@ -32,6 +32,11 @@ public final class InlineClientBundleGenerator extends
   private final ClientBundleContext clientBundleCtx = new ClientBundleContext();
 
   @Override
+  public boolean contentDependsOnTypes() {
+    return false;
+  }
+
+  @Override
   protected AbstractResourceContext createResourceContext(TreeLogger logger,
       GeneratorContext context, JClassType resourceBundleType) {
     return new InlineResourceContext(logger.branch(TreeLogger.DEBUG,

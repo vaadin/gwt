@@ -147,6 +147,7 @@ import com.google.gwt.dev.js.ast.JsRootScope;
 import com.google.gwt.dev.js.ast.JsScope;
 import com.google.gwt.dev.js.ast.JsSeedIdOf;
 import com.google.gwt.dev.js.ast.JsStatement;
+import com.google.gwt.dev.js.ast.JsStringLiteral;
 import com.google.gwt.dev.js.ast.JsSwitch;
 import com.google.gwt.dev.js.ast.JsSwitchMember;
 import com.google.gwt.dev.js.ast.JsThisRef;
@@ -162,8 +163,8 @@ import com.google.gwt.dev.util.Pair;
 import com.google.gwt.dev.util.StringInterner;
 import com.google.gwt.dev.util.TextOutput;
 import com.google.gwt.dev.util.collect.IdentityHashSet;
-import com.google.gwt.dev.util.collect.Maps;
 import com.google.gwt.dev.util.collect.Lists;
+import com.google.gwt.dev.util.collect.Maps;
 import com.google.gwt.dev.util.collect.Sets;
 import com.google.gwt.thirdparty.guava.common.collect.HashMultimap;
 import com.google.gwt.thirdparty.guava.common.collect.Multimap;
@@ -486,11 +487,6 @@ public class GenerateJavaScriptAST {
           accept(arrayType);
         }
       }
-
-      // Generate symbolic names for all query type ids.
-      if (!output.shouldMinimize()) {
-        setupSymbolicCastMaps();
-      }
     }
 
     @Override
@@ -748,45 +744,6 @@ public class GenerateJavaScriptAST {
       assert !symbolTable.containsKey(symbolData) : "Duplicate symbol " + "recorded "
           + jsName.getIdent() + " for " + x.getName() + " and key " + symbolData.getJsniIdent();
       symbolTable.put(symbolData, jsName);
-    }
-
-    /**
-     * Create more readable output by generating symbolic constants for query
-     * ids.
-     */
-    private void setupSymbolicCastMaps() {
-      namesByQueryId = new ArrayList<JsName>();
-
-      for (JReferenceType type : program.getTypesByQueryId()) {
-        String shortName;
-        String longName;
-        if (type instanceof JArrayType) {
-          JArrayType arrayType = (JArrayType) type;
-          JType leafType = arrayType.getLeafType();
-          if (leafType instanceof JReferenceType) {
-            shortName = ((JReferenceType) leafType).getShortName();
-          } else {
-            shortName = leafType.getName();
-          }
-          shortName += "_$" + arrayType.getDims();
-          longName = getNameString(leafType) + "_$" + arrayType.getDims();
-        } else {
-          shortName = type.getShortName();
-          longName = getNameString(type);
-        }
-        JsName name = topScope.declareName("Q$" + longName, "Q$" + shortName);
-        namesByQueryId.add(name);
-      }
-      // TODO(cromwellian): see about moving this into an immortal type
-      StringBuilder sb = new StringBuilder();
-      sb.append("function makeCastMap(a) {");
-      sb.append("  var result = {};");
-      sb.append("  for (var i = 0, c = a.length; i < c; ++i) {");
-      sb.append("    result[a[i]] = 1;");
-      sb.append("  }");
-      sb.append("  return result;");
-      sb.append("}");
-      makeMapFunction = createGlobalFunction(sb.toString());
     }
   }
 
@@ -1171,18 +1128,12 @@ public class GenerateJavaScriptAST {
       }
 
       // increments
-      {
-        JsExpression incrExpr = null;
-        List<JsExprStmt> exprStmts = popList(x.getIncrements().size());
-        for (int i = 0; i < exprStmts.size(); ++i) {
-          JsExprStmt exprStmt = exprStmts.get(i);
-          incrExpr = createCommaExpression(incrExpr, exprStmt.getExpression());
-        }
-        jsFor.setIncrExpr(incrExpr);
+      if (x.getIncrements() != null) {
+        jsFor.setIncrExpr((JsExpression) pop());
       }
 
       // condition
-      if (x.getTestExpr() != null) {
+      if (x.getCondition() != null) {
         jsFor.setCondition((JsExpression) pop());
       }
 
@@ -1441,7 +1392,7 @@ public class GenerateJavaScriptAST {
 
     @Override
     public void endVisit(JMultiExpression x, Context ctx) {
-      List<JsExpression> exprs = popList(x.exprs.size());
+      List<JsExpression> exprs = popList(x.getNumberOfExpressions());
       JsExpression cur = null;
       for (int i = 0; i < exprs.size(); ++i) {
         JsExpression next = exprs.get(i);
@@ -1522,7 +1473,6 @@ public class GenerateJavaScriptAST {
       // Long lits must go at the top, they can be constant field initializers.
       generateLongLiterals(vars);
       generateImmortalTypes(vars);
-      generateQueryIdConstants(vars);
       generateInternedCastMapLiterals(vars);
      
       // Class objects, but only if there are any.
@@ -1570,37 +1520,29 @@ public class GenerateJavaScriptAST {
       super.endVisit(x, ctx);
       JsArrayLiteral arrayLit = (JsArrayLiteral) pop();
       SourceInfo sourceInfo = x.getSourceInfo();
-      if (namesByQueryId == null || x.getExprs().size() == 0) {
-        String stringMap = castMapToString(x);
-        // if interned, use variable reference
-        if (namesByCastMap.containsKey(stringMap)) {
-          push(namesByCastMap.get(stringMap).makeRef(x.getSourceInfo()));
-        } else if (internedCastMap.contains(stringMap)) {
-          // interned variable hasn't been created yet
-          String internName = "CM$";
-          boolean first = true;
-          for (JExpression expr : x.getExprs()) {
-            if (first) {
-              first = false;
-            } else {
-              internName += "_";
-            }
-            // Name is CM$queryId_queryId_queryId
-            internName += ((JsQueryType) expr).getQueryId();
+      String stringMap = castMapToString(x);
+      // if interned, use variable reference
+      if (namesByCastMap.containsKey(stringMap)) {
+        push(namesByCastMap.get(stringMap).makeRef(x.getSourceInfo()));
+      } else if (internedCastMap.contains(stringMap)) {
+        // interned variable hasn't been created yet
+        String internName = "CM$";
+        boolean first = true;
+        for (JExpression expr : x.getExprs()) {
+          if (first) {
+            first = false;
+          } else {
+            internName += "_";
           }
-          JsName internedCastMapName = topScope.declareName(internName, internName);
-          namesByCastMap.put(stringMap, internedCastMapName);
-          castMapByString.put(stringMap, castMapToObjectLiteral(arrayLit, sourceInfo));
-          push(internedCastMapName.makeRef(x.getSourceInfo()));
-        } else {
-          push(castMapToObjectLiteral(arrayLit, sourceInfo));
+          // Name is CM$queryId_queryId_queryId
+          internName += ((JsQueryType) expr).getQueryId();
         }
+        JsName internedCastMapName = topScope.declareName(internName, internName);
+        namesByCastMap.put(stringMap, internedCastMapName);
+        castMapByString.put(stringMap, castMapToObjectLiteral(arrayLit, sourceInfo));
+        push(internedCastMapName.makeRef(x.getSourceInfo()));
       } else {
-        // makeMap([Q_Object, Q_Foo, Q_Bar]);
-        JsInvocation inv = new JsInvocation(sourceInfo);
-        inv.setQualifier(makeMapFunction.getName().makeRef(sourceInfo));
-        inv.getArguments().add(arrayLit);
-        push(inv);
+        push(castMapToObjectLiteral(arrayLit, sourceInfo));
       }
     }
 
@@ -1630,16 +1572,6 @@ public class GenerateJavaScriptAST {
       JsExpression valueExpr = (JsExpression) pop();
       JsExpression labelExpr = (JsExpression) pop();
       push(new JsPropertyInitializer(init.getSourceInfo(), labelExpr, valueExpr));
-    }
-
-    @Override
-    public void endVisit(JsQueryType x, Context ctx) {
-      if (namesByQueryId == null || x.getQueryId() < 0) {
-        super.endVisit(x, ctx);
-      } else {
-        JsName name = namesByQueryId.get(x.getQueryId());
-        push(name.makeRef(x.getSourceInfo()));
-      }
     }
 
     @Override
@@ -2009,38 +1941,53 @@ public class GenerateJavaScriptAST {
         generateToStringAlias(x, globalStmts);
         // special: setup the identifying typeMarker field
         generateTypeMarker(globalStmts);
-
-        // setup Array.proto
-        JsFunction patchFunc = indexedFunctions.get("ArrayPrototypePatcher.patch");
-        JsName patchFuncName = patchFunc.getName();
-        JsInvocation callPatchFunc = new JsInvocation(x.getSourceInfo());
-        callPatchFunc.setQualifier(patchFuncName.makeRef(x.getSourceInfo()));
-        globalStmts.add(callPatchFunc.makeStmt());
       }
     }
 
+    /**
+     * Creates gwtOnLoad bootstrapping code. Unusually, the created code is executed as part of
+     * source loading and runs in the global scope (not inside of any function scope).
+     */
+    // TODO(stalcup): get rid of manually synthesized AST and replace it either with calls to static
+    // functions that vary only in their data arguments or else create source with a Generator.
     private void generateGwtOnLoad(List<JsFunction> entryFuncs, List<JsStatement> globalStmts) {
       /**
        * <pre>
        * var $entry = Impl.registerEntry();
-       * function gwtOnLoad(errFn, modName, modBase, softPermutationId){
-       *   $moduleName = modName;
-       *   $moduleBase = modBase;
-       *   CollapsedPropertyHolder.permutationId = softPermutationId;
-       *   if (errFn) {
-       *     try {
-       *       $entry(init)();
-       *     } catch(e) {
-       *       errFn(modName);
+       * // Stub gwtOnLoad at top level so that HtmlUnit can find it.
+       * // On first execution this will assign a value of null into gwtOnLoad.
+       * // It's value will actually be built inside of the following anonymous
+       * // function and subsequent executions will preserve the existing value.
+       * // Since gwtOnLoad is being varred, this will work in the global scope
+       * // as well as in speculative future scopes in which linkers might
+       * // choose to place the output.
+       * var gwtOnLoad = typeof gwtOnLoad === 'undefined' ? null : gwtOnLoad;
+       * // Create gwtOnLoad in function scope so the previousGwtOnLoad reference is preserved.
+       * (function() {
+       *   var previousGwtOnLoad = gwtOnLoad;
+       *   gwtOnLoad = function(errFn, modName, modBase, softPermutationId) {
+       *     if (previousGwtOnLoad) {
+       *       previousGwtOnLoad(errFn, modName, modBase, softPermutationId);
        *     }
-       *   } else {
-       *     $entry(init)();
+       *     $moduleName = modName;
+       *     $moduleBase = modBase;
+       *     CollapsedPropertyHolder.permutationId = softPermutationId;
+       *     if (errFn) {
+       *       try {
+       *         $entry(init)();
+       *       } catch(e) {
+       *         errFn(modName);
+       *       }
+       *     } else {
+       *       $entry(init)();
+       *     }
        *   }
-       * }
+       * }());
        * </pre>
        */
       SourceInfo sourceInfo = SourceOrigin.UNKNOWN;
 
+      // var $entry = Impl.registerEntry();
       JsName entryName = topScope.declareName("$entry");
       JsVar entryVar = new JsVar(sourceInfo, entryName);
       JsInvocation registerEntryCall = new JsInvocation(sourceInfo);
@@ -2051,44 +1998,103 @@ public class GenerateJavaScriptAST {
       entryVars.add(entryVar);
       globalStmts.add(entryVars);
 
+      // Stub gwtOnLoad at top level so that HtmlUnit can find it.
+      // var gwtOnLoad = typeof gwtOnLoad === 'undefined' ? null : gwtOnLoad;
       JsName gwtOnLoadName = topScope.declareName("gwtOnLoad");
       gwtOnLoadName.setObfuscatable(false);
-      JsFunction gwtOnLoad = new JsFunction(sourceInfo, topScope, gwtOnLoadName, true);
+      JsVar gwtOnLoadNameVar = new JsVar(sourceInfo, gwtOnLoadName);
+      gwtOnLoadNameVar.setInitExpr(new JsConditional(sourceInfo, new JsBinaryOperation(sourceInfo,
+          JsBinaryOperator.REF_EQ, new JsPrefixOperation(
+              sourceInfo, JsUnaryOperator.TYPEOF, gwtOnLoadName.makeRef(sourceInfo)),
+          new JsStringLiteral(sourceInfo, "undefined")), JsNullLiteral.INSTANCE,
+          gwtOnLoadName.makeRef(sourceInfo)));
+      JsVars gwtOnLoadNameVars = new JsVars(sourceInfo);
+      gwtOnLoadNameVars.add(gwtOnLoadNameVar);
+      globalStmts.add(gwtOnLoadNameVars);
+
+      // Create gwtOnLoad in function scope so the previousGwtOnLoad reference is preserved.
+      // (function() {
+      JsFunction createGwtOnLoadFunction = new JsFunction(sourceInfo, topScope);
+      JsBlock createGwtOnLoadBody = new JsBlock(sourceInfo);
+      createGwtOnLoadFunction.setBody(createGwtOnLoadBody);
+
+      // var previousGwtOnLoad = gwtOnLoad;
+      JsName previousGwtOnLoadName =
+          createGwtOnLoadFunction.getScope().declareName("previousGwtOnLoad");
+      JsVar previousGwtOnLoadNameVar = new JsVar(sourceInfo, previousGwtOnLoadName);
+      previousGwtOnLoadNameVar.setInitExpr(gwtOnLoadName.makeRef(sourceInfo));
+      JsVars previousGwtOnLoadNameVars = new JsVars(sourceInfo);
+      previousGwtOnLoadNameVars.add(previousGwtOnLoadNameVar);
+      createGwtOnLoadBody.getStatements().add(previousGwtOnLoadNameVars);
+
+      // gwtOnLoad = function(errFn, modName, modBase, softPermutationId) {
+      JsFunction gwtOnLoad = new JsFunction(sourceInfo, createGwtOnLoadFunction.getScope());
       gwtOnLoad.setArtificiallyRescued(true);
-      globalStmts.add(gwtOnLoad.makeStmt());
-      JsBlock body = new JsBlock(sourceInfo);
-      gwtOnLoad.setBody(body);
+      JsBlock gwtOnLoadFunctionBody = new JsBlock(sourceInfo);
+      gwtOnLoad.setBody(gwtOnLoadFunctionBody);
+      JsExpression gwtOnLoadAssignment =
+          createAssignment(gwtOnLoadName.makeRef(sourceInfo), gwtOnLoad);
+      createGwtOnLoadBody.getStatements().add(gwtOnLoadAssignment.makeStmt());
       JsScope fnScope = gwtOnLoad.getScope();
-      List<JsParameter> params = gwtOnLoad.getParameters();
+      List<JsParameter> gwtOnLoadParams = gwtOnLoad.getParameters();
       JsName errFn = fnScope.declareName("errFn");
       JsName modName = fnScope.declareName("modName");
       JsName modBase = fnScope.declareName("modBase");
       JsName softPermutationId = fnScope.declareName("softPermutationId");
-      params.add(new JsParameter(sourceInfo, errFn));
-      params.add(new JsParameter(sourceInfo, modName));
-      params.add(new JsParameter(sourceInfo, modBase));
-      params.add(new JsParameter(sourceInfo, softPermutationId));
-      JsExpression asg =
+      gwtOnLoadParams.add(new JsParameter(sourceInfo, errFn));
+      gwtOnLoadParams.add(new JsParameter(sourceInfo, modName));
+      gwtOnLoadParams.add(new JsParameter(sourceInfo, modBase));
+      gwtOnLoadParams.add(new JsParameter(sourceInfo, softPermutationId));
+
+      // if (previousGwtOnLoad) {
+      //   previousGwtOnLoad();
+      // }
+      JsIf previousGwtOnLoadIf = new JsIf(sourceInfo);
+      gwtOnLoadFunctionBody.getStatements().add(previousGwtOnLoadIf);
+      previousGwtOnLoadIf.setIfExpr(previousGwtOnLoadName.makeRef(sourceInfo));
+      JsInvocation previousGwtOnLoadCall = new JsInvocation(sourceInfo);
+      previousGwtOnLoadCall.setQualifier(previousGwtOnLoadName.makeRef(sourceInfo));
+      List<JsExpression> previousGwtOnLoadCallArguments = previousGwtOnLoadCall.getArguments();
+      previousGwtOnLoadCallArguments.add(errFn.makeRef(sourceInfo));
+      previousGwtOnLoadCallArguments.add(modName.makeRef(sourceInfo));
+      previousGwtOnLoadCallArguments.add(modBase.makeRef(sourceInfo));
+      previousGwtOnLoadCallArguments.add(softPermutationId.makeRef(sourceInfo));
+      previousGwtOnLoadIf.setThenStmt(previousGwtOnLoadCall.makeStmt());
+
+      // $moduleName = modName;
+      JsExpression moduleNameAssignment =
           createAssignment(topScope.findExistingUnobfuscatableName("$moduleName").makeRef(
               sourceInfo), modName.makeRef(sourceInfo));
-      body.getStatements().add(asg.makeStmt());
-      asg =
+      gwtOnLoadFunctionBody.getStatements().add(moduleNameAssignment.makeStmt());
+
+      // $moduleBase = modBase;
+      JsExpression moduleBaseAssignment =
           createAssignment(topScope.findExistingUnobfuscatableName("$moduleBase").makeRef(
               sourceInfo), modBase.makeRef(sourceInfo));
-      body.getStatements().add(asg.makeStmt());
+      gwtOnLoadFunctionBody.getStatements().add(moduleBaseAssignment.makeStmt());
 
       // Assignment to CollapsedPropertyHolder.permutationId only if it's used
+      // CollapsedPropertyHolder.permutationId = softPermutationId;
       JsName permutationIdFieldName =
           names.get(program.getIndexedField("CollapsedPropertyHolder.permutationId"));
       if (permutationIdFieldName != null) {
-        asg =
+        JsExpression permutationIdAssignment =
             createAssignment(permutationIdFieldName.makeRef(sourceInfo), softPermutationId
                 .makeRef(sourceInfo));
-        body.getStatements().add(asg.makeStmt());
+        gwtOnLoadFunctionBody.getStatements().add(permutationIdAssignment.makeStmt());
       }
 
+      // if (errFn) {
+      //   try {
+      //     $entry(init)();
+      //   } catch(e) {
+      //     errFn(modName);
+      //   }
+      // } else {
+      //   $entry(init)();
+      // }
       JsIf jsIf = new JsIf(sourceInfo);
-      body.getStatements().add(jsIf);
+      gwtOnLoadFunctionBody.getStatements().add(jsIf);
       jsIf.setIfExpr(errFn.makeRef(sourceInfo));
       JsTry jsTry = new JsTry(sourceInfo);
       jsIf.setThenStmt(jsTry);
@@ -2115,6 +2121,11 @@ public class GenerateJavaScriptAST {
       catchBlock.getStatements().add(errCall.makeStmt());
       errCall.setQualifier(errFn.makeRef(sourceInfo));
       errCall.getArguments().add(modName.makeRef(sourceInfo));
+
+      // }());
+      JsInvocation createGwtOnLoadCall = new JsInvocation(sourceInfo);
+      createGwtOnLoadCall.setQualifier(createGwtOnLoadFunction);
+      globalStmts.add(createGwtOnLoadCall.makeStmt());
     }
 
     private void generateImmortalTypes(JsVars globals) {
@@ -2208,20 +2219,6 @@ public class GenerateJavaScriptAST {
         vars.add(var);
       }
     }
-
-    private void generateQueryIdConstants(JsVars vars) {
-      if (namesByQueryId != null) {
-        SourceInfo info = vars.getSourceInfo();
-        int id = 0;
-        for (JsName jsName : namesByQueryId) {
-          JsVar var = new JsVar(info, jsName);
-          var.setInitExpr(new JsNumberLiteral(info, id++));
-          vars.add(var);
-        }
-      }
-    }
-
-
 
     private void generateSeedFuncAndPrototype(JClassType x, List<JsStatement> globalStmts) {
       SourceInfo sourceInfo = x.getSourceInfo();
@@ -2735,7 +2732,6 @@ public class GenerateJavaScriptAST {
       new IdentityHashMap<JAbstractMethodBody, JsFunction>();
   private final Map<HasName, JsName> names = new IdentityHashMap<HasName, JsName>();
   private int nextSeedId = 1;
-  private List<JsName> namesByQueryId;
   private Map<String, JsName> namesByCastMap = new HashMap<String, JsName>();
   private JsFunction nullFunc;
 
@@ -2978,71 +2974,13 @@ public class GenerateJavaScriptAST {
         new GenerateJavaScriptVisitor(recorder.methodsForJsInlining);
     generator.accept(program);
 
-    final Map<JsName, JMethod> nameToMethodMap = new HashMap<JsName, JMethod>();
-    final HashMap<JsName, JField> nameToFieldMap = new HashMap<JsName, JField>();
-    final HashMap<JsName, JClassType> constructorNameToTypeMap = new HashMap<JsName, JClassType>();
-    for (JDeclaredType type : program.getDeclaredTypes()) {
-      JsName typeName = names.get(type);
-      if (type instanceof JClassType && typeName != null) {
-        constructorNameToTypeMap.put(typeName, (JClassType) type);
-      }
-      for (JField field : type.getFields()) {
-        if (field.isStatic()) {
-          JsName fieldName = names.get(field);
-          if (fieldName != null) {
-            nameToFieldMap.put(fieldName, field);
-          }
-        }
-      }
-      for (JMethod method : type.getMethods()) {
-        JsName methodName = names.get(method);
-        if (methodName != null) {
-          nameToMethodMap.put(methodName, method);
-        }
-      }
-    }
-
     jsProgram.setIndexedFields(indexedFields);
     jsProgram.setIndexedFunctions(indexedFunctions);
 
     // TODO(spoon): Instead of gathering the information here, get it via
     // SourceInfo
-    JavaToJavaScriptMap jjsMap = new JavaToJavaScriptMap() {
-      @Override
-      public JsName nameForMethod(JMethod method) {
-        return names.get(method);
-      }
-
-      @Override
-      public JsName nameForType(JClassType type) {
-        return names.get(type);
-      }
-
-      @Override
-      public JField nameToField(JsName name) {
-        return nameToFieldMap.get(name);
-      }
-
-      @Override
-      public JMethod nameToMethod(JsName name) {
-        return nameToMethodMap.get(name);
-      }
-
-      @Override
-      public JClassType nameToType(JsName name) {
-        return constructorNameToTypeMap.get(name);
-      }
-
-      @Override
-      public JClassType typeForStatement(JsStatement stat) {
-        return typeForStatMap.get(stat);
-      }
-
-      @Override
-      public JMethod vtableInitToMethod(JsStatement stat) {
-        return vtableInitForMethodMap.get(stat);
-      }
-    };
+    JavaToJavaScriptMap jjsMap = new JavaToJavaScriptMapImpl(program.getDeclaredTypes(),
+        names, typeForStatMap, vtableInitForMethodMap);
 
     return Pair.create(jjsMap, generator.functionsForJsInlining);
   }

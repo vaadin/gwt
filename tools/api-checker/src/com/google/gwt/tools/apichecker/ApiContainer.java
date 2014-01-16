@@ -22,11 +22,12 @@ import com.google.gwt.core.ext.typeinfo.JClassType;
 import com.google.gwt.core.ext.typeinfo.JConstructor;
 import com.google.gwt.core.ext.typeinfo.JPackage;
 import com.google.gwt.core.ext.typeinfo.TypeOracle;
+import com.google.gwt.dev.CompilerContext;
 import com.google.gwt.dev.javac.CompilationProblemReporter;
 import com.google.gwt.dev.javac.CompilationUnit;
 import com.google.gwt.dev.javac.CompilationUnitBuilder;
+import com.google.gwt.dev.javac.CompilationUnitTypeOracleUpdater;
 import com.google.gwt.dev.javac.JdtCompiler;
-import com.google.gwt.dev.javac.TypeOracleMediatorFromSource;
 import com.google.gwt.dev.resource.Resource;
 import com.google.gwt.dev.util.arg.SourceLevel;
 
@@ -48,10 +49,10 @@ public final class ApiContainer {
   private final Map<JClassType, Boolean> apiClassCache = new HashMap<JClassType, Boolean>();
   private final Map<String, ApiPackage> apiPackages = new HashMap<String, ApiPackage>();
 
+  private final CompilerContext compilerContext = new CompilerContext();
   private final Set<String> excludedPackages;
   private final TreeLogger logger;
   private final String name;
-  private final SourceLevel sourceLevel;
   private final TypeOracle typeOracle;
 
 
@@ -85,9 +86,11 @@ public final class ApiContainer {
     this.name = name;
     this.logger = logger;
     logger.log(TreeLogger.INFO, "name = " + name + ", builders.size = " + resources.size(), null);
-    this.sourceLevel = sourceLevel == null ? SourceLevel.DEFAULT_SOURCE_LEVEL : sourceLevel;
-    this.typeOracle = createTypeOracle(resources, this.sourceLevel);
+    compilerContext.getOptions().setSourceLevel(
+        sourceLevel == null ? SourceLevel.DEFAULT_SOURCE_LEVEL : sourceLevel);
+    this.typeOracle = createTypeOracle(resources);
     this.excludedPackages = excludedPackages;
+
 
     initializeApiPackages();
   }
@@ -197,14 +200,13 @@ public final class ApiContainer {
     return false;
   }
 
-  private TypeOracle createTypeOracle(Set<Resource> resources, SourceLevel sourceLevel)
-      throws UnableToCompleteException {
+  private TypeOracle createTypeOracle(Set<Resource> resources) throws UnableToCompleteException {
     List<CompilationUnitBuilder> builders = new ArrayList<CompilationUnitBuilder>();
     for (Resource resource : resources) {
       CompilationUnitBuilder builder = CompilationUnitBuilder.create(resource);
       builders.add(builder);
     }
-    List<CompilationUnit> units = JdtCompiler.compile(logger, builders, sourceLevel);
+    List<CompilationUnit> units = JdtCompiler.compile(logger, compilerContext, builders);
     boolean anyError = false;
     TreeLogger branch = logger.branch(TreeLogger.TRACE, "Checking for compile errors");
     for (CompilationUnit unit : units) {
@@ -216,11 +218,13 @@ public final class ApiContainer {
       throw new UnableToCompleteException();
     }
 
-    TypeOracleMediatorFromSource mediator = new TypeOracleMediatorFromSource();
-    mediator.addNewUnits(logger, units);
+    CompilationUnitTypeOracleUpdater typeOracleBuilder =
+        new CompilationUnitTypeOracleUpdater(
+            new com.google.gwt.dev.javac.typemodel.TypeOracle());
+    typeOracleBuilder.addNewUnits(logger, units);
     logger.log(TreeLogger.INFO, "API " + name + ", Finished with building typeOracle, added "
         + units.size() + " files", null);
-    return mediator.getTypeOracle();
+    return typeOracleBuilder.getTypeOracle();
   }
 
   private boolean hasPublicOrProtectedConstructor(JClassType classType) {

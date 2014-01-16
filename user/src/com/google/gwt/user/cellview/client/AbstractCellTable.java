@@ -449,8 +449,7 @@ public abstract class AbstractCellTable<T> extends AbstractHasData<T> {
    */
   private static class Impl {
 
-    private final com.google.gwt.user.client.Element tmpElem = Document.get().createDivElement()
-        .cast();
+    private final Element tmpElem = Document.get().createDivElement();
 
     /**
      * Convert the rowHtml into Elements wrapped by the specified table section.
@@ -2277,8 +2276,7 @@ public abstract class AbstractCellTable<T> extends AbstractHasData<T> {
    * @param subrow the index of the subrow beneath the row.
    * @return the row element, or null if not found
    */
-  // Visible for testing.
-  TableRowElement getSubRowElement(int absRow, int subrow) {
+  protected TableRowElement getSubRowElement(int absRow, int subrow) {
     int relRow = absRow - getPageStart();
     checkRowBounds(relRow);
 
@@ -2530,6 +2528,8 @@ public abstract class AbstractCellTable<T> extends AbstractHasData<T> {
     if (template == null) {
       template = GWT.create(Template.class);
     }
+    // Set the cell table style
+    setStyleName(style.widget());
 
     // Sink events.
     Set<String> eventTypes = new HashSet<String>();

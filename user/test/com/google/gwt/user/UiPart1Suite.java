@@ -16,6 +16,7 @@
 package com.google.gwt.user;
 
 import com.google.gwt.junit.tools.GWTTestSuite;
+import com.google.gwt.user.client.CustomEventsTest;
 import com.google.gwt.user.client.ui.AbsolutePanelTest;
 import com.google.gwt.user.client.ui.AnchorTest;
 import com.google.gwt.user.client.ui.ButtonTest;
@@ -53,6 +54,7 @@ import com.google.gwt.user.client.ui.FocusPanelTest;
 import com.google.gwt.user.client.ui.FormPanelTest;
 import com.google.gwt.user.client.ui.GridTest;
 import com.google.gwt.user.client.ui.impl.ClippedImagePrototypeTest;
+import com.google.gwt.user.client.ui.impl.FocusImplTest;
 
 import junit.framework.Test;
 
@@ -74,6 +76,7 @@ public class UiPart1Suite {
     suite.addTestSuite(CompositeTest.class);
     suite.addTestSuite(CreateEventTest.class);
     suite.addTestSuite(CustomButtonTest.class);
+    suite.addTestSuite(CustomEventsTest.class);
     suite.addTestSuite(CustomScrollPanelTest.class);
     suite.addTestSuite(DateBoxTest.class);
     suite.addTestSuite(DatePickerTest.class);
@@ -99,6 +102,7 @@ public class UiPart1Suite {
     suite.addTestSuite(FiniteWidgetIteratorTest.class);
     suite.addTestSuite(FlexTableTest.class);
     suite.addTestSuite(FlowPanelTest.class);
+    suite.addTestSuite(FocusImplTest.class);
     suite.addTestSuite(FocusPanelTest.class);
     suite.addTestSuite(FormPanelTest.class);
     suite.addTestSuite(GridTest.class);

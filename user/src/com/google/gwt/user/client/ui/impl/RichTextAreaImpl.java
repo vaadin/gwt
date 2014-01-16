@@ -15,10 +15,10 @@
  */
 package com.google.gwt.user.client.ui.impl;
 
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.event.logical.shared.HasInitializeHandlers;
 import com.google.gwt.event.logical.shared.InitializeEvent;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 import com.google.gwt.user.client.Event;
 import com.google.gwt.user.client.ui.RichTextArea;
 
@@ -44,11 +44,11 @@ public class RichTextAreaImpl {
   }
 
   public String getHTML() {
-    return DOM.getElementProperty(elem, "value");
+    return elem.getPropertyString("value");
   }
 
   public String getText() {
-    return DOM.getElementProperty(elem, "value");
+    return elem.getPropertyString("value");
   }
 
   public void initElement() {
@@ -72,7 +72,7 @@ public class RichTextAreaImpl {
   }-*/;
 
   public void setHTML(String html) {
-    DOM.setElementProperty(elem, "value", html);
+    elem.setPropertyString("value", html);
   }
 
   public void setOwner(HasInitializeHandlers owner) {
@@ -80,7 +80,7 @@ public class RichTextAreaImpl {
   }
 
   public void setText(String text) {
-    DOM.setElementProperty(elem, "value", text);
+    elem.setPropertyString("value", text);
   }
 
   /**

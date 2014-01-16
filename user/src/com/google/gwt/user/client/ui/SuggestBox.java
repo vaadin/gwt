@@ -35,7 +35,6 @@ import com.google.gwt.event.logical.shared.SelectionHandler;
 import com.google.gwt.event.logical.shared.ValueChangeEvent;
 import com.google.gwt.event.logical.shared.ValueChangeHandler;
 import com.google.gwt.event.shared.HandlerRegistration;
-import com.google.gwt.user.client.DOM;
 import com.google.gwt.user.client.ui.PopupPanel.AnimationType;
 import com.google.gwt.user.client.ui.SuggestOracle.Callback;
 import com.google.gwt.user.client.ui.SuggestOracle.Request;
@@ -81,7 +80,7 @@ import java.util.List;
  * text that does not match any of the SuggestBox's suggestions, then the
  * SuggestBox will not have a currently selected suggestion. It is more useful
  * to know when a suggestion has been chosen from the SuggestBox's list of
- * suggestions. A SuggestBox fires {@link SuggestionEvent SuggestionEvents}
+ * suggestions. A SuggestBox fires {@link SelectionEvent SelectionEvents}
  * whenever a suggestion is chosen, and handlers for these events can be added
  * using the {@link #addSelectionHandler(SelectionHandler)} method.
  * </p>
@@ -616,7 +615,7 @@ public class SuggestBox extends Composite implements HasText, HasFocus,
       // menu. If the window is resized and the suggestion cannot fit on a
       // single row, it should be clipped (instead of wrapping around and
       // taking up a second row).
-      DOM.setStyleAttribute(getElement(), "whiteSpace", "nowrap");
+      getElement().getStyle().setProperty("whiteSpace", "nowrap");
       setStyleName(STYLENAME_DEFAULT);
       setSuggestion(suggestion);
     }

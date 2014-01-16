@@ -15,34 +15,97 @@
  */
 package com.google.gwt.user.client.impl;
 
+import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.dom.client.BrowserEvents;
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 import com.google.gwt.user.client.Event;
 
 /**
  * Base implementation of {@link com.google.gwt.user.client.impl.DOMImpl} shared
  * by those browsers that come a bit closer to supporting a common standard (ie,
- * not IE).
+ * not legacy IEs).
  */
-abstract class DOMImplStandard extends DOMImpl {
+public abstract class DOMImplStandard extends DOMImpl {
+
+  /**
+   * Adds custom bitless event dispatchers to GWT. If no specific event dispatcher supplied for an
+   * event, the default dispatcher is used.
+   * <p> Example usage:
+   * <pre>
+   * static {
+   *   DOMImplStandard.addBitlessEventDispatchers(getMyCustomDispatchers());
+   * }
+   *
+   * private static native JavaScriptObject getMyCustomDispatchers() /*-{
+   *   return {
+   *     click: @com.xxx.YYY::myCustomDispatcher(*),
+   *     ...
+   *   };
+   * }-* /;
+   * </pre>
+   *
+   * <p> Note that although this method is public for extensions, it is subject to change in
+   * different releases.
+   *
+   * @param eventMap an object that provides dispatching methods keyed with the name of the event
+   */
+  public static void addBitlessEventDispatchers(JavaScriptObject eventMap) {
+    ensureInit();
+    bitlessEventDispatchers.merge(eventMap);
+  }
+
+  /**
+   * Adds custom capture event dispatchers to GWT.
+   * <p> Example usage:
+   * <pre>
+   * static {
+   *   if (isIE10Plus())) {
+   *     DOMImplStandard.addCaptureEventDispatchers(getMsPointerCaptureDispatchers());
+   *   }
+   * }
+   *
+   * private static native JavaScriptObject getMsPointerCaptureDispatchers() /*-{
+   *   return {
+   *     MSPointerDown: @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+   *     MSPointerUp:   @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+   *     ...
+   *   };
+   * }-* /;
+   * </pre>
+   *
+   * <p> Note that although this method is public for extensions, it is subject to change in
+   * different releases.
+   *
+   * @param eventMap an object that provides dispatching methods keyed with the name of the event
+   */
+  public static void addCaptureEventDispatchers(JavaScriptObject eventMap) {
+    ensureInit();
+    captureEventDispatchers.merge(eventMap);
+  }
+
+  private static void ensureInit() {
+    if (eventSystemIsInitialized) {
+      throw new IllegalStateException("Event system already initialized");
+    }
+
+    // Ensure that any default extensions for the browser is registered via
+    // static initializers in deferred binding of DOMImpl:
+    GWT.create(DOMImpl.class);
+  }
 
   private static Element captureElem;
 
-  private static JavaScriptObject dispatchCapturedEvent;
+  private static EventMap bitlessEventDispatchers = getBitlessEventDispatchers();
 
-  private static JavaScriptObject dispatchCapturedMouseEvent;
+  private static EventMap captureEventDispatchers = getCaptureEventDispatchers();
 
-  private static JavaScriptObject dispatchDragEvent;
-
+  @Deprecated // We no longer want any external JSNI dependencies
   private static JavaScriptObject dispatchEvent;
 
+  @Deprecated // We no longer want any external JSNI dependencies
   private static JavaScriptObject dispatchUnhandledEvent;
-
-  public void disposeEvents(Element elem) {
-    sinkEventsImpl(elem, 0);
-  }
 
   @Override
   public Element eventGetFromElement(Event evt) {
@@ -155,110 +218,40 @@ abstract class DOMImplStandard extends DOMImpl {
   }
 
   @Override
-  protected native void disposeEventSystem() /*-{
-    $wnd.removeEventListener('click', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('dblclick', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('mousedown', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('mouseup', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('mousemove', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('mouseover', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('mouseout', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('mousewheel', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('keydown', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent, true);
-    $wnd.removeEventListener('keyup', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent, true);
-    $wnd.removeEventListener('keypress', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent, true);
+  protected native void initEventSystem() /*-{
+    // Ensure $entry for bitfull event dispatchers
+    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent =
+        $entry(@com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent(*));
 
-    // Touch and gesture events are not actually mouse events, but we treat
-    // them as such, so that DOM#setCapture() and DOM#releaseCapture() work.
-    $wnd.removeEventListener('touchstart', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('touchmove', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('touchend', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('touchcancel', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('gesturestart', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('gesturechange', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.removeEventListener('gestureend', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
+    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchUnhandledEvent =
+        $entry(@com.google.gwt.user.client.impl.DOMImplStandard::dispatchUnhandledEvent(*));
+
+    var foreach = @com.google.gwt.user.client.impl.EventMap::foreach(*);
+
+    // Ensure $entry for bitless event dispatchers
+    var bitlessEvents = @com.google.gwt.user.client.impl.DOMImplStandard::bitlessEventDispatchers;
+    foreach(bitlessEvents, function(e, fn) { bitlessEvents[e] = $entry(fn); });
+
+    // Ensure $entry for capture event dispatchers
+    var captureEvents = @com.google.gwt.user.client.impl.DOMImplStandard::captureEventDispatchers;
+    foreach(captureEvents, function(e, fn) { captureEvents[e] = $entry(fn); });
+
+    // Add capture event listeners
+    foreach(captureEvents, function(e, fn) { $wnd.addEventListener(e, fn, true); });
   }-*/;
 
   @Override
-  protected native void initEventSystem() /*-{
-    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent = $entry(
-      @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent(*)
-    );
+  protected native void disposeEventSystem() /*-{
+    var foreach = @com.google.gwt.user.client.impl.EventMap::foreach(*);
 
-    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchDragEvent = $entry(
-      @com.google.gwt.user.client.impl.DOMImplStandard::dispatchDragEvent(*)
-    );
-
-    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchUnhandledEvent = $entry(
-      @com.google.gwt.user.client.impl.DOMImplStandard::dispatchUnhandledEvent(*)
-    );
-
-    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent = $entry(
-      @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent(*)
-    );
-
-    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent = $entry(
-      @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*)
-    );
-
-    $wnd.addEventListener('click', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('dblclick', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('mousedown', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('mouseup', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('mousemove', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('mouseover', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('mouseout', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('mousewheel', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('keydown', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent, true);
-    $wnd.addEventListener('keyup', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent, true);
-    $wnd.addEventListener('keypress', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent, true);
-
-    // Touch and gesture events are not actually mouse events, but we treat
-    // them as such, so that DOM#setCapture() and DOM#releaseCapture() work.
-    $wnd.addEventListener('touchstart', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('touchmove', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('touchend', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('touchcancel', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('gesturestart', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('gesturechange', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
-    $wnd.addEventListener('gestureend', @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent, true);
+    // Remove capture event listeners
+    foreach(captureEvents, function(e, fn) { $wnd.removeEventListener(e, fn, true); });
   }-*/;
 
   protected native void sinkBitlessEventImpl(Element elem, String eventTypeName) /*-{
-    switch(eventTypeName) {
-      case "drag":
-        elem.ondrag           = @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent;
-        break;
-      case "dragend":
-        elem.ondragend        = @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent;
-        break;
-      case "dragenter":
-        elem.ondragenter      = @com.google.gwt.user.client.impl.DOMImplStandard::dispatchDragEvent;
-        break;
-      case "dragleave":
-        elem.ondragleave      = @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent;
-        break;
-      case "dragover":
-        elem.ondragover       = @com.google.gwt.user.client.impl.DOMImplStandard::dispatchDragEvent;
-        break;
-      case "dragstart":
-        elem.ondragstart      = @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent;
-        break;
-      case "drop":
-        elem.ondrop           = @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent;
-        break;
-      case "canplaythrough":
-      case "ended":
-      case "loadedmetadata":
-      case "progress":
-        // First call removeEventListener, so as not to add the same event listener more than once
-        elem.removeEventListener(eventTypeName, @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent, false);
-        elem.addEventListener(eventTypeName, @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent, false);
-        break;
-      default:
-        // catch missing cases
-        throw "Trying to sink unknown event type " + eventTypeName;
-    }
+    var dispatchMap = @com.google.gwt.user.client.impl.DOMImplStandard::bitlessEventDispatchers;
+    var dispatcher = dispatchMap[eventTypeName] || dispatchMap['_default_'];
+    elem.addEventListener(eventTypeName, dispatcher, false);
   }-*/;
 
   protected native void sinkEventsImpl(Element elem, int bits) /*-{
@@ -363,4 +356,40 @@ abstract class DOMImplStandard extends DOMImpl {
       evt.stopPropagation();
     }
   }
+
+  private static native EventMap getBitlessEventDispatchers() /*-{
+    return {
+      _default_: @com.google.gwt.user.client.impl.DOMImplStandard::dispatchEvent(*),
+      dragenter: @com.google.gwt.user.client.impl.DOMImplStandard::dispatchDragEvent(*),
+      dragover:  @com.google.gwt.user.client.impl.DOMImplStandard::dispatchDragEvent(*),
+    };
+  }-*/;
+
+  private static native EventMap getCaptureEventDispatchers() /*-{
+    return {
+      // Mouse events
+      click:      @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      dblclick:   @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      mousedown:  @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      mouseup:    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      mousemove:  @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      mouseover:  @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      mouseout:   @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      mousewheel: @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+
+      // Keyboard events
+      keydown:    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent(*),
+      keyup:      @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent(*),
+      keypress:   @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedEvent(*),
+
+      // Touch events
+      touchstart:   @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      touchend:     @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      touchmove:    @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      touchcancel:  @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      gesturestart: @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      gestureend:   @com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+      gesturechange:@com.google.gwt.user.client.impl.DOMImplStandard::dispatchCapturedMouseEvent(*),
+    };
+  }-*/;
 }

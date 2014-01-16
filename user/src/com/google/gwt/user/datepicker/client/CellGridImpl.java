@@ -20,9 +20,9 @@ import com.google.gwt.dom.client.Document;
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
+import com.google.gwt.event.dom.client.KeyCodes;
 import com.google.gwt.event.dom.client.KeyDownEvent;
 import com.google.gwt.event.dom.client.KeyDownHandler;
-import com.google.gwt.event.dom.client.KeyCodes;
 import com.google.gwt.user.client.DOM;
 import com.google.gwt.user.client.Event;
 import com.google.gwt.user.client.impl.ElementMapperImpl;
@@ -175,16 +175,13 @@ abstract class CellGridImpl<V> extends Grid {
   }
 
   public Cell getCell(Element element) {
-    // This cast is always valid because both Element types are JSOs and have
-    // no new fields are added in the subclass.
-    return elementToCell.get((com.google.gwt.user.client.Element) element);
+    return elementToCell.get(element);
   }
 
   public Cell getCell(Event e) {
     // Find out which cell was actually clicked.
     Element td = getEventTargetCell(e);
-    return td != null
-        ? elementToCell.get((com.google.gwt.user.client.Element) td) : null;
+    return td != null ? elementToCell.get(td) : null;
   }
 
   public Cell getCell(int i) {
@@ -228,7 +225,7 @@ abstract class CellGridImpl<V> extends Grid {
       case Event.ONMOUSEOUT: {
         Element e = DOM.eventGetFromElement(event);
         if (e != null) {
-          Cell cell = elementToCell.get((com.google.gwt.user.client.Element) e);
+          Cell cell = elementToCell.get(e);
           if (cell == highlightedCell) {
             setHighlighted(null);
           }
@@ -238,7 +235,7 @@ abstract class CellGridImpl<V> extends Grid {
       case Event.ONMOUSEOVER: {
         Element e = DOM.eventGetToElement(event);
         if (e != null) {
-          Cell cell = elementToCell.get((com.google.gwt.user.client.Element) e);
+          Cell cell = elementToCell.get(e);
           if (isActive(cell)) {
             setHighlighted(cell);
           }

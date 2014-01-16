@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -36,7 +36,7 @@ import com.google.gwt.dev.util.arg.ArgHandlerDeployDir;
 import com.google.gwt.dev.util.arg.ArgHandlerDisableUpdateCheck;
 import com.google.gwt.dev.util.arg.ArgHandlerExtraDir;
 import com.google.gwt.dev.util.arg.ArgHandlerModuleName;
-import com.google.gwt.dev.util.arg.ArgHandlerSource;
+import com.google.gwt.dev.util.arg.ArgHandlerSourceLevel;
 import com.google.gwt.dev.util.arg.ArgHandlerWarDir;
 import com.google.gwt.dev.util.arg.ArgHandlerWorkDirOptional;
 import com.google.gwt.dev.util.log.speedtracer.DevModeEventType;
@@ -183,7 +183,7 @@ public class DevMode extends DevModeBase implements RestartServerCallback {
       registerHandler(new ArgHandlerExtraDir(options));
       registerHandler(new ArgHandlerWorkDirOptional(options));
       registerHandler(new ArgHandlerDisableUpdateCheck(options));
-      registerHandler(new ArgHandlerSource(options));
+      registerHandler(new ArgHandlerSourceLevel(options));
       registerHandler(new ArgHandlerModuleName(options) {
         @Override
         public String getPurpose() {
@@ -307,7 +307,7 @@ public class DevMode extends DevModeBase implements RestartServerCallback {
 
   /**
    * Startup development mode.
-   * 
+   *
    * @param args command line arguments
    */
   public static void main(String[] args) {
@@ -366,7 +366,7 @@ public class DevMode extends DevModeBase implements RestartServerCallback {
   @Override
   protected HostedModeBaseOptions createOptions() {
     HostedModeOptionsImpl hostedModeOptions = new HostedModeOptionsImpl();
-    compilerContext.setOptions(hostedModeOptions);
+    compilerContext = compilerContextBuilder.options(hostedModeOptions).build();
     return hostedModeOptions;
   }
 

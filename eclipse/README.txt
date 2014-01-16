@@ -8,9 +8,8 @@ project for debugging the core GWT code.
 
 == Configure Eclipse Environment==
 
-  All relative paths are relative to the GWT source repository's
-  'trunk/eclipse' folder. For best results, launch Eclipse from the
-  trunk/eclipse folder from the command line.
+All relative paths are relative to the GWT source repository's
+'trunk/eclipse' folder.
 
 ---------- Required GWT variables ---------
 
@@ -135,16 +134,7 @@ test suite.
 The Eclipse Checkstyle plugin can be found at:
   http://eclipse-cs.sourceforge.net/
 
-2. Enable Custom GWT Checkstyle checks:
-
-Copy "settings/code-style/gwt-customchecks.jar" into:
-  <eclipse>/plugins/com.atlassw.tools.eclipse.checkstyle_x.x.x/extension-libraries
-
-Restart Eclipse.
-("gwt-customchecks.jar" is also built from source into build/lib during a full
- build)
-
-3. Import GWT Checks:
+2. Import GWT Checks:
 
 Window->Preferences->Checkstyle->New...
 Set the Type to "External Configuration File"
@@ -153,7 +143,7 @@ Set the location to "settings/code-style/gwt-checkstyle.xml".
 Suggested: Check "Protect Checkstyle configuration file".
 Click "Ok".
 
-4. Import GWT Checks for Tests
+3. Import GWT Checks for Tests
 
 Repeat step 2, except:
 Set the Name to "GWT Checks for Tests" (important)

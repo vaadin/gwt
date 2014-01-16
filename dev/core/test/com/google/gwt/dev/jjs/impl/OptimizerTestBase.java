@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -37,7 +37,10 @@ import com.google.gwt.dev.jjs.ast.JStatement;
 import com.google.gwt.dev.jjs.ast.js.JMultiExpression;
 import com.google.gwt.thirdparty.guava.common.base.Joiner;
 import com.google.gwt.thirdparty.guava.common.base.Preconditions;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -45,7 +48,7 @@ import java.util.regex.Pattern;
  */
 public abstract class OptimizerTestBase extends JJSTestBase {
   protected boolean runDeadCodeElimination = false;
-  
+
   protected final class Result {
     private final String returnType;
     private final String originalCode;
@@ -53,7 +56,7 @@ public abstract class OptimizerTestBase extends JJSTestBase {
     private final JProgram optimizedProgram;
     private final String methodName;
 
-    public Result(JProgram optimizedProgram, String returnType, 
+    public Result(JProgram optimizedProgram, String returnType,
         String methodName, String originalCode, boolean madeChanges) {
       this.optimizedProgram = optimizedProgram;
       this.returnType = returnType;
@@ -62,13 +65,24 @@ public abstract class OptimizerTestBase extends JJSTestBase {
       this.madeChanges = madeChanges;
     }
 
+    public void classHasMethodSnippets(String className, List<String> expectedMethodSnippets) {
+      JDeclaredType targetClass = findClass(className);
+
+      Set<String> actualMethodSnippets = Sets.newHashSet();
+      for (JMethod method : targetClass.getMethods()) {
+        actualMethodSnippets.add(method.toString().trim());
+      }
+
+      assertTrue(actualMethodSnippets.containsAll(expectedMethodSnippets));
+    }
+
     public void into(String... expected) throws UnableToCompleteException {
       // We can't compile expected code into non-main method.
       Preconditions.checkState(methodName.equals(MAIN_METHOD_NAME));
       JProgram program = compileSnippet(returnType, Joiner.on("\n").join(expected));
       String expectedSource =
         OptimizerTestBase.findMethod(program, methodName).getBody().toSource();
-      String actualSource = 
+      String actualSource =
         OptimizerTestBase.findMethod(optimizedProgram, methodName).
         getBody().toSource();
       assertEquals(originalCode, expectedSource, actualSource);
@@ -76,7 +90,7 @@ public abstract class OptimizerTestBase extends JJSTestBase {
 
     public void intoString(String... expected) {
       String expectedSource = Joiner.on("\n").join(expected);
-      String actualSource = 
+      String actualSource =
         OptimizerTestBase.findMethod(optimizedProgram, methodName).
         getBody().toSource();
 
@@ -86,7 +100,7 @@ public abstract class OptimizerTestBase extends JJSTestBase {
       actualSource = actualSource.substring(1, actualSource.length() - 2).trim();
       actualSource = Pattern.compile("^  ", Pattern.MULTILINE).
           matcher(actualSource).replaceAll("");
-      
+
       assertEquals(originalCode, expectedSource, actualSource);
     }
 
@@ -99,7 +113,7 @@ public abstract class OptimizerTestBase extends JJSTestBase {
     }
 
     public JField findField(String fieldName) {
-      return OptimizerTestBase.findField(optimizedProgram, 
+      return OptimizerTestBase.findField(optimizedProgram,
           "EntryPoint." + fieldName);
     }
 
@@ -140,7 +154,7 @@ public abstract class OptimizerTestBase extends JJSTestBase {
           // Any instance expression goes first (this can happen even with statics).
           if (instance != null) {
 
-            multi.exprs.add(instance);
+            multi.addExpressions(instance);
             JLocal var = JProgram.createLocal(instance.getSourceInfo(), "$t", instance.getType(),
                 false, body);
 
@@ -155,9 +169,9 @@ public abstract class OptimizerTestBase extends JJSTestBase {
         }
         // If we need a clinit call, add it first
         if (clinit != null) {
-          multi.exprs.add(clinit);
+          multi.addExpressions(clinit);
         }
-        multi.exprs.add(x);
+        multi.addExpressions(x);
         return multi;
       }
 
@@ -174,7 +188,7 @@ public abstract class OptimizerTestBase extends JJSTestBase {
     }.accept(method);
   }
 
-  protected final Result optimize(final String returnType, 
+  protected final Result optimize(final String returnType,
       final String... codeSnippet) throws UnableToCompleteException {
     return optimizeMethod(MAIN_METHOD_NAME, returnType, codeSnippet);
   }
@@ -219,12 +233,12 @@ public abstract class OptimizerTestBase extends JJSTestBase {
       if (stmt instanceof JExpressionStatement) {
         JExpressionStatement exprStmt = (JExpressionStatement) stmt;
         JExpression expr = exprStmt.getExpr();
-        multi.exprs.add(expr);
+        multi.addExpressions(expr);
       } else if (stmt instanceof JReturnStatement) {
         JReturnStatement returnStatement = (JReturnStatement) stmt;
         JExpression expr = returnStatement.getExpr();
         if (expr != null) {
-            multi.exprs.add(expr);
+            multi.addExpressions(expr);
         }
       } else {
         assert false : "Not a valid multiexpression";

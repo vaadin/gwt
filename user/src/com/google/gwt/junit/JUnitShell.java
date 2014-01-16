@@ -57,7 +57,7 @@ import com.google.gwt.dev.util.arg.ArgHandlerLogLevel;
 import com.google.gwt.dev.util.arg.ArgHandlerMaxPermsPerPrecompile;
 import com.google.gwt.dev.util.arg.ArgHandlerOptimize;
 import com.google.gwt.dev.util.arg.ArgHandlerScriptStyle;
-import com.google.gwt.dev.util.arg.ArgHandlerSource;
+import com.google.gwt.dev.util.arg.ArgHandlerSourceLevel;
 import com.google.gwt.dev.util.arg.ArgHandlerWarDir;
 import com.google.gwt.dev.util.arg.ArgHandlerWorkDirOptional;
 import com.google.gwt.junit.JUnitMessageQueue.ClientStatus;
@@ -73,8 +73,8 @@ import junit.framework.AssertionFailedError;
 import junit.framework.TestCase;
 import junit.framework.TestResult;
 
-import org.mortbay.jetty.Server;
-import org.mortbay.jetty.webapp.WebAppContext;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.webapp.WebAppContext;
 
 import java.io.File;
 import java.lang.reflect.Constructor;
@@ -92,6 +92,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.servlet.Servlet;
 
 /**
  * This class is responsible for hosting JUnit test case execution. There are
@@ -291,7 +293,7 @@ public class JUnitShell extends DevMode {
       registerHandler(new ArgHandlerDeployDir(options));
       registerHandler(new ArgHandlerExtraDir(options));
       registerHandler(new ArgHandlerWorkDirOptional(options));
-      registerHandler(new ArgHandlerSource(options));
+      registerHandler(new ArgHandlerSourceLevel(options));
 
       // DISABLE: ArgHandlerModuleName
 
@@ -606,7 +608,7 @@ public class JUnitShell extends DevMode {
         {
           // Prevent file locking on Windows; pick up file changes.
           getInitParams().put(
-              "org.mortbay.jetty.servlet.Default.useFileMappedBuffer", "false");
+              "org.eclipse.jetty.servlet.Default.useFileMappedBuffer", "false");
 
           // Prefer the parent class loader so that JUnit works.
           setParentLoaderPriority(true);
@@ -1138,13 +1140,16 @@ public class JUnitShell extends DevMode {
 
   void maybeCompileForWebMode(ModuleDef module, String... userAgents)
       throws UnableToCompleteException {
+    compilerContext = compilerContextBuilder.module(module).build();
     // Load any declared servlets.
     for (String path : module.getServletPaths()) {
       String servletClass = module.findServletForPath(path);
       path = '/' + module.getName() + path;
       if (!servletClass.equals(loadedServletsByPath.get(path))) {
         try {
-          Class<?> clazz = wac.loadClass(servletClass);
+          // We should load the class ourselves because otherwise if Jetty tries and fails to load
+          // by itself, it will be left in a broken state (looks like this is fixed in Jetty 9).
+          Class<? extends Servlet> clazz = wac.loadClass(servletClass).asSubclass(Servlet.class);
           wac.addServlet(clazz, path);
           loadedServletsByPath.put(path, servletClass);
         } catch (ClassNotFoundException e) {
@@ -1159,8 +1164,8 @@ public class JUnitShell extends DevMode {
       // BACKWARDS COMPATIBILITY: many linkers currently fail in dev mode.
       try {
         Linker l = module.getActivePrimaryLinker().newInstance();
-        StandardLinkerContext context =
-          new StandardLinkerContext(getTopLogger(), module, null);
+        StandardLinkerContext context = new StandardLinkerContext(
+            getTopLogger(), module, compilerContext.getPublicResourceOracle(), null);
         if (!l.supportsDevModeInJunit(context)) {
           if (module.getLinker("std") != null) {
             // TODO: unfortunately, this could be race condition between dev/prod
@@ -1342,8 +1347,8 @@ public class JUnitShell extends DevMode {
     if (!sameTest) {
       currentModule = compileStrategy.maybeCompileModule(moduleName,
           syntheticModuleName, strategy, batchingStrategy, getTopLogger());
-      currentCompilationState = currentModule.getCompilationState(getTopLogger(), true,
-          options.getSourceLevel());
+      compilerContext = compilerContextBuilder.module(currentModule).build();
+      currentCompilationState = currentModule.getCompilationState(getTopLogger(), compilerContext);
     }
     assert (currentModule != null);
 

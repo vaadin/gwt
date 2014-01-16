@@ -51,8 +51,8 @@ public abstract class MediaTest extends GWTTestCase {
     return @com.google.gwt.dom.client.DOMImplMozilla::isGecko2OrBefore()();
   }-*/;
 
-  static native boolean isIE6() /*-{
-    return @com.google.gwt.dom.client.DOMImplIE6::isIE6()();
+  static native boolean isIE8() /*-{
+    return $wnd.navigator.userAgent.indexOf('msie') != -1 && $doc.documentMode == 8
   }-*/;
 
   static native boolean isOldFirefox() /*-{
@@ -312,7 +312,7 @@ public abstract class MediaTest extends GWTTestCase {
 
   public void testSupported() {
     // test the isxxxSupported() call if running known sup or not sup browsers.
-    if (isIE6()) {
+    if (isIE8()) {
       assertFalse(Audio.isSupported());
       assertFalse(Video.isSupported());
     }
@@ -338,7 +338,7 @@ public abstract class MediaTest extends GWTTestCase {
 
   private void assertAfterLoad(final RepeatingCommand command) {
     // the media resource needs time to load
-    delayTestFinish(5 * 1000);
+    delayTestFinish(10 * 1000);
 
     getMedia().addLoadedMetadataHandler(new LoadedMetadataHandler() {
 

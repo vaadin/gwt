@@ -18,6 +18,7 @@ package com.google.gwt.dev.cfg;
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.CompilerContext;
+import com.google.gwt.dev.resource.impl.UrlResource;
 import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
@@ -74,15 +75,15 @@ public class ModuleDefLoader {
    * <code>.gwt.xml</code> file on disk.
    *
    * @param logger logs the process
+   * @param compilerContext shared read only compiler state
    * @param moduleName the synthetic module to create
    * @param inherits a set of modules to inherit from
-   * @param compilerContext shared read only compiler state
    * @param refresh whether to refresh the module
    * @return the loaded module
    * @throws UnableToCompleteException
    */
   public static ModuleDef createSyntheticModule(TreeLogger logger,
-      String moduleName, final String[] inherits, CompilerContext compilerContext, boolean refresh)
+      CompilerContext compilerContext, String moduleName, final String[] inherits, boolean refresh)
       throws UnableToCompleteException {
     ModuleDef moduleDef = tryGetLoadedModule(moduleName, refresh);
     if (moduleDef != null) {
@@ -91,7 +92,7 @@ public class ModuleDefLoader {
 
     ResourceLoader resources = ResourceLoaders.forClassLoader(Thread.currentThread());
 
-    ModuleDefLoader loader = new ModuleDefLoader(resources, compilerContext) {
+    ModuleDefLoader loader = new ModuleDefLoader(compilerContext, resources) {
       @Override
       protected void load(TreeLogger logger, String nameOfModuleToLoad, ModuleDef dest)
           throws UnableToCompleteException {
@@ -117,29 +118,28 @@ public class ModuleDefLoader {
    * directories for resources.
    */
   public static ModuleDef loadFromClassPath(
-      TreeLogger logger, String moduleName, CompilerContext compilerContext)
+      TreeLogger logger, CompilerContext compilerContext, String moduleName)
       throws UnableToCompleteException {
-    return loadFromClassPath(logger, moduleName, compilerContext, false, true);
+    return loadFromClassPath(logger, compilerContext, moduleName, false, true);
   }
 
   /**
    * Loads a new module from the class path and may or may not immediately scan associated
    * directories for resources or consider it monolithic, depending on parameters.
    */
-  public static ModuleDef loadFromClassPath(TreeLogger logger, String moduleName,
-      CompilerContext compilerContext, boolean refresh, boolean monolithic)
-      throws UnableToCompleteException {
+  public static ModuleDef loadFromClassPath(TreeLogger logger, CompilerContext compilerContext,
+      String moduleName, boolean refresh, boolean monolithic) throws UnableToCompleteException {
     ResourceLoader resources = ResourceLoaders.forClassLoader(Thread.currentThread());
-    return loadFromResources(logger, moduleName, compilerContext, resources, refresh, monolithic);
+    return loadFromResources(logger, compilerContext, moduleName, resources, refresh, monolithic);
   }
 
   /**
    * Loads a new module from the given ResourceLoader and may or may not immediately scan associated
    * directories for resources or consider it monolithic, depending on parameters.
    */
-  public static ModuleDef loadFromResources(TreeLogger logger, String moduleName,
-      CompilerContext compilerContext, ResourceLoader resources, boolean refresh,
-      boolean monolithic) throws UnableToCompleteException {
+  public static ModuleDef loadFromResources(TreeLogger logger, CompilerContext compilerContext,
+      String moduleName, ResourceLoader resources, boolean refresh, boolean monolithic)
+      throws UnableToCompleteException {
 
     Event moduleDefLoadFromClassPathEvent = SpeedTracerLogger.start(
         CompilerEventType.MODULE_DEF, "phase", "loadFromClassPath", "moduleName", moduleName);
@@ -154,8 +154,14 @@ public class ModuleDefLoader {
       if (moduleDef != null) {
         return moduleDef;
       }
-      ModuleDefLoader loader = new ModuleDefLoader(resources, compilerContext);
-      return ModuleDefLoader.doLoadModule(loader, logger, moduleName, resources, monolithic);
+      ModuleDefLoader loader = new ModuleDefLoader(compilerContext, resources);
+      ModuleDef module =
+          ModuleDefLoader.doLoadModule(loader, logger, moduleName, resources, monolithic);
+
+      LibraryWriter libraryWriter = compilerContext.getLibraryWriter();
+      libraryWriter.setLibraryName(module.getName());
+      libraryWriter.addDependencyLibraryNames(module.getExternalLibraryModuleNames());
+      return module;
     } finally {
       moduleDefLoadFromClassPathEvent.end();
     }
@@ -237,10 +243,9 @@ public class ModuleDefLoader {
 
   private final ResourceLoader resourceLoader;
 
-  private ModuleDefLoader(
-      ResourceLoader loader, CompilerContext compilerContext) {
-    this.resourceLoader = loader;
+  private ModuleDefLoader(CompilerContext compilerContext, ResourceLoader loader) {
     this.compilerContext = compilerContext;
+    this.resourceLoader = loader;
   }
 
   public boolean enforceStrictResources() {
@@ -274,13 +279,14 @@ public class ModuleDefLoader {
 
     TreeLogger logger = parentLogger.branch(TreeLogger.DEBUG, "Loading inherited module '"
         + moduleName + "'", null);
+    LibraryWriter libraryWriter = compilerContext.getLibraryWriter();
 
     if (!ModuleDef.isValidModuleName(moduleName)) {
       logger.log(TreeLogger.ERROR, "Invalid module name: '" + moduleName + "'",
           null);
       throw new UnableToCompleteException();
     }
-    moduleDef.addInteritedModule(moduleName);
+    moduleDef.addInheritedModules(moduleName);
 
     // Find the specified module using the classpath.
     //
@@ -288,6 +294,7 @@ public class ModuleDefLoader {
     String resName = slashedModuleName + ModuleDefLoader.GWT_MODULE_XML_SUFFIX;
     URL moduleURL = resourceLoader.getResource(resName);
 
+    long lastModified = 0;
     if (moduleURL != null) {
       String externalForm = moduleURL.toExternalForm();
       if (logger.isLoggable(TreeLogger.DEBUG)) {
@@ -299,6 +306,7 @@ public class ModuleDefLoader {
             && (!(externalForm.startsWith("http://")))
             && (!(externalForm.startsWith("ftp://")))) {
           File gwtXmlFile = new File(moduleURL.toURI());
+          lastModified = gwtXmlFile.lastModified();
           moduleDef.addGwtXmlFile(gwtXmlFile);
         }
       } catch (URISyntaxException e) {
@@ -333,6 +341,13 @@ public class ModuleDefLoader {
       ModuleDefSchema schema =
           new ModuleDefSchema(logger, this, moduleName, moduleURL, moduleDir, moduleDef);
       ReflectiveParser.parse(logger, schema, r);
+
+      // If this module.gwt.xml file is one of the target modules that together make up this
+      // ModuleDef.
+      if (moduleDef.getTargetLibraryModuleNames().contains(moduleName)) {
+        // Then save a copy of the xml file in the created library file.
+        libraryWriter.addBuildResource(new UrlResource(moduleURL, resName, lastModified));
+      }
     } catch (Throwable e) {
       logger.log(TreeLogger.ERROR, "Unexpected error while processing XML", e);
       throw new UnableToCompleteException();

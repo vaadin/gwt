@@ -26,17 +26,19 @@ import com.google.gwt.dev.jjs.JJSOptions;
 import com.google.gwt.dev.jjs.PermutationResult;
 import com.google.gwt.dev.shell.CheckForUpdates;
 import com.google.gwt.dev.shell.CheckForUpdates.UpdateResult;
-import com.google.gwt.dev.util.FileBackedObject;
 import com.google.gwt.dev.util.Memory;
+import com.google.gwt.dev.util.PersistenceBackedObject;
 import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.arg.ArgHandlerDeployDir;
 import com.google.gwt.dev.util.arg.ArgHandlerExtraDir;
 import com.google.gwt.dev.util.arg.ArgHandlerLocalWorkers;
+import com.google.gwt.dev.util.arg.ArgHandlerSaveSourceOutput;
 import com.google.gwt.dev.util.arg.ArgHandlerWarDir;
 import com.google.gwt.dev.util.arg.ArgHandlerWorkDirOptional;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import com.google.gwt.util.tools.Utility;
 
 import java.io.File;
@@ -61,6 +63,7 @@ public class Compiler {
       registerHandler(new ArgHandlerWarDir(options));
       registerHandler(new ArgHandlerDeployDir(options));
       registerHandler(new ArgHandlerExtraDir(options));
+      registerHandler(new ArgHandlerSaveSourceOutput(options));
     }
 
     @Override
@@ -110,12 +113,14 @@ public class Compiler {
     System.exit(1);
   }
 
-  private final CompilerContext compilerContext;
+  private final CompilerContext.Builder compilerContextBuilder;
+  private CompilerContext compilerContext;
   private final CompilerOptionsImpl options;
 
   public Compiler(CompilerOptions compilerOptions) {
     this.options = new CompilerOptionsImpl(compilerOptions);
-    this.compilerContext = new CompilerContext.Builder().options(options).build();
+    this.compilerContextBuilder = new CompilerContext.Builder();
+    this.compilerContext = compilerContextBuilder.options(options).build();
   }
 
   public boolean run(TreeLogger logger) throws UnableToCompleteException {
@@ -123,7 +128,7 @@ public class Compiler {
     int i = 0;
     for (String moduleName : options.getModuleNames()) {
       modules[i++] =
-          ModuleDefLoader.loadFromClassPath(logger, moduleName, compilerContext, true, true);
+          ModuleDefLoader.loadFromClassPath(logger, compilerContext, moduleName, true, true);
     }
     return run(logger, modules);
   }
@@ -136,7 +141,8 @@ public class Compiler {
         options.setWorkDir(Utility.makeTemporaryDirectory(null, "gwtc"));
         tempWorkDir = true;
       }
-      if (options.isSoycEnabled() && options.getExtraDir() == null) {
+      if ((options.isSoycEnabled() || options.isJsonSoycEnabled()) &&
+           options.getExtraDir() == null) {
         options.setExtraDir(new File("extras"));
       }
 
@@ -147,9 +153,10 @@ public class Compiler {
       CompilationStateBuilder.init(logger, persistentUnitCacheDir);
 
       for (ModuleDef module : modules) {
+        compilerContext = compilerContextBuilder.module(module).build();
         String moduleName = module.getCanonicalName();
         if (options.isValidateOnly()) {
-          if (!Precompile.validate(logger, options, module, options.getGenDir())) {
+          if (!Precompile.validate(logger, compilerContext)) {
             return false;
           }
         } else {
@@ -159,8 +166,7 @@ public class Compiler {
 
           // Optimize early since permutation compiles will run in process.
           options.setOptimizePrecompile(true);
-          Precompilation precompilation = Precompile.precompile(branch,
-              options, module, options.getGenDir());
+          Precompilation precompilation = Precompile.precompile(branch, compilerContext);
           if (precompilation == null) {
             return false;
           }
@@ -171,9 +177,9 @@ public class Compiler {
 
           Event compilePermutationsEvent = SpeedTracerLogger.start(CompilerEventType.COMPILE_PERMUTATIONS);
           Permutation[] allPerms = precompilation.getPermutations();
-          List<FileBackedObject<PermutationResult>> resultFiles = CompilePerms.makeResultFiles(
-              options.getCompilerWorkDir(moduleName), allPerms);
-          CompilePerms.compile(branch, precompilation, allPerms,
+          List<PersistenceBackedObject<PermutationResult>> resultFiles =
+              CompilePerms.makeResultFiles(options.getCompilerWorkDir(moduleName), allPerms);
+          CompilePerms.compile(branch, compilerContext, precompilation, allPerms,
               options.getLocalWorkers(), resultFiles);
           compilePermutationsEvent.end();
 
@@ -194,8 +200,8 @@ public class Compiler {
             logMessage += "; Writing extras to " + absExtrasPath;
           }
           Link.link(logger.branch(TreeLogger.TRACE, logMessage), module,
-              generatedArtifacts, allPerms, resultFiles, precompileOptions, options
-          );
+              module.getPublicResourceOracle(), generatedArtifacts, allPerms, resultFiles,
+              Sets.<PermutationResult>newHashSet(), precompileOptions, options);
 
           linkEvent.end();
           long compileDone = System.currentTimeMillis();

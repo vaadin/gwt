@@ -23,12 +23,14 @@ import com.google.gwt.core.client.JavaScriptObjectTest;
 import com.google.gwt.core.client.JsArrayMixedTest;
 import com.google.gwt.core.client.JsArrayTest;
 import com.google.gwt.core.client.JsIdentityTest;
+import com.google.gwt.core.client.RuntimePropertyRegistryTest;
 import com.google.gwt.core.client.SchedulerTest;
 import com.google.gwt.core.client.ScriptInjectorTest;
 import com.google.gwt.core.client.impl.AsyncFragmentLoaderTest;
 import com.google.gwt.core.client.impl.SchedulerImplTest;
 import com.google.gwt.core.client.impl.StackTraceCreatorTest;
 import com.google.gwt.core.client.prefetch.RunAsyncCodeTest;
+import com.google.gwt.core.client.testing.StubSchedulerTest;
 import com.google.gwt.core.shared.SerializableThrowableTest;
 import com.google.gwt.dev.StrictModeTest;
 import com.google.gwt.junit.tools.GWTTestSuite;
@@ -52,13 +54,15 @@ public class CoreSuite {
     suite.addTestSuite(JsIdentityTest.class);
     suite.addTestSuite(JsArrayTest.class);
     suite.addTestSuite(JsArrayMixedTest.class);
+    suite.addTestSuite(RunAsyncCodeTest.class);
+    suite.addTestSuite(RuntimePropertyRegistryTest.class);
     suite.addTestSuite(SchedulerImplTest.class);
     suite.addTestSuite(SchedulerTest.class);
     suite.addTestSuite(ScriptInjectorTest.class);
     suite.addTestSuite(SerializableThrowableTest.class);
     suite.addTestSuite(StackTraceCreatorTest.class);
     suite.addTestSuite(StrictModeTest.class);
-    suite.addTestSuite(RunAsyncCodeTest.class);
+    suite.addTestSuite(StubSchedulerTest.class);
     // $JUnit-END$
 
     return suite;

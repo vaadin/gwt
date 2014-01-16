@@ -13,6 +13,8 @@
  */
 package com.google.gwt.dev.cfg;
 
+import com.google.gwt.core.ext.linker.ArtifactSet;
+import com.google.gwt.core.ext.linker.impl.StandardGeneratedResource;
 import com.google.gwt.dev.cfg.Libraries.IncompatibleLibraryVersionException;
 import com.google.gwt.dev.javac.CompilationUnit;
 import com.google.gwt.dev.jjs.CompilerIoException;
@@ -27,6 +29,7 @@ import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import com.google.gwt.thirdparty.guava.common.collect.Multimap;
 import com.google.gwt.thirdparty.guava.common.collect.Multimaps;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
+import com.google.gwt.thirdparty.guava.common.io.ByteStreams;
 import com.google.gwt.thirdparty.guava.common.io.CharStreams;
 
 import java.io.File;
@@ -93,8 +96,14 @@ class ZipLibrary implements Library {
       return readStringSet(Libraries.BUILD_RESOURCE_PATHS_ENTRY_NAME);
     }
 
-    private Set<String> readClassFilePaths() {
-      return readStringSet(Libraries.CLASS_FILE_PATHS_ENTRY_NAME);
+    private byte[] readBytes(String entryName) {
+      ZipEntry zipEntry = zipFile.getEntry(entryName);
+      try {
+        return ByteStreams.toByteArray(getInputStream(zipEntry));
+      } catch (IOException e) {
+        throw new CompilerIoException(
+            "Failed to read " + entryName + " in " + zipFile.getName() + " as bytes.", e);
+      }
     }
 
     private CompilationUnit readCompilationUnitByTypeName(String typeName) {
@@ -121,12 +130,20 @@ class ZipLibrary implements Library {
       return compilationUnit;
     }
 
-    private Set<String> readCompilationUnitTypeNames() {
-      return readStringSet(Libraries.COMPILATION_UNIT_TYPE_NAMES_ENTRY_NAME);
-    }
-
     private Set<String> readDependencyLibraryNames() {
       return readStringSet(Libraries.DEPENDENCY_LIBRARY_NAMES_ENTRY_NAME);
+    }
+
+    private ArtifactSet readGeneratedArtifacts() {
+      Set<String> generatedArtifactNames =
+          readStringSet(Libraries.GENERATED_ARTIFACT_NAMES_ENTRY_NAME);
+      ArtifactSet artifacts = new ArtifactSet();
+      for (String generatedArtifactName : generatedArtifactNames) {
+        StandardGeneratedResource artifact = new StandardGeneratedResource(generatedArtifactName,
+            readBytes(Libraries.DIRECTORY_GENERATED_ARTIFACTS + generatedArtifactName));
+        artifacts.add(artifact);
+      }
+      return artifacts;
     }
 
     private String readLibraryName() {
@@ -156,6 +173,14 @@ class ZipLibrary implements Library {
 
     private Set<String> readReboundTypeNames() {
       return readStringSet(Libraries.REBOUND_TYPE_NAMES_ENTRY_NAME);
+    }
+
+    private Set<String> readRegularClassFilePaths() {
+      return readStringSet(Libraries.REGULAR_CLASS_FILE_PATHS_ENTRY_NAME);
+    }
+
+    private Set<String> readRegularCompilationUnitTypeNames() {
+      return readStringSet(Libraries.REGULAR_COMPILATION_UNIT_TYPE_NAMES_ENTRY_NAME);
     }
 
     private String readString(String entryName) {
@@ -223,8 +248,8 @@ class ZipLibrary implements Library {
   private Map<String, Resource> buildResourcesByPath = Maps.newHashMap();
   private Set<String> classFilePaths;
   private Map<String, CompilationUnit> compilationUnitsByTypeName = Maps.newHashMap();
-  private Set<String> compilationUnitTypeNames;
   private Set<String> dependencyLibraryNames;
+  private ArtifactSet generatedArtifacts;
   private String libraryName;
   private Multimap<String, String> newBindingPropertyValuesByName;
   private Multimap<String, String> newConfigurationPropertyValuesByName;
@@ -233,6 +258,7 @@ class ZipLibrary implements Library {
   private Map<String, Resource> publicResourcesByPath = Maps.newHashMap();
   private Set<String> ranGeneratorNames;
   private Set<String> reboundTypeNames;
+  private Set<String> regularCompilationUnitTypeNames;
   private Set<String> superSourceClassFilePaths;
   private Set<String> superSourceCompilationUnitTypeNames;
   private final ZipLibraryReader zipLibraryReader;
@@ -262,40 +288,25 @@ class ZipLibrary implements Library {
   }
 
   @Override
-  public Set<String> getClassFilePaths() {
-    if (classFilePaths == null) {
-      classFilePaths = Collections.unmodifiableSet(zipLibraryReader.readClassFilePaths());
-    }
-    return classFilePaths;
-  }
-
-  @Override
   public InputStream getClassFileStream(String classFilePath) {
     return zipLibraryReader.getClassFileStream(classFilePath);
   }
 
   @Override
   public CompilationUnit getCompilationUnitByTypeName(String typeName) {
-    // If the given type hasn't been read and cached yet.
+    // If the type cache doesn't contain the type yet.
     if (!compilationUnitsByTypeName.containsKey(typeName)) {
-      // If the given type isn't in this library.
-      if (!getCompilationUnitTypeNames().contains(typeName)) {
+      // and the library on disk doesn't contain the type at all.
+      if (!containsCompilationUnit(typeName)) {
+        // cache the fact that the type isn't available on disk.
         compilationUnitsByTypeName.put(typeName, null);
         return null;
       }
+      // otherwise read and cache the type.
       compilationUnitsByTypeName.put(
           typeName, zipLibraryReader.readCompilationUnitByTypeName(typeName));
     }
     return compilationUnitsByTypeName.get(typeName);
-  }
-
-  @Override
-  public Set<String> getCompilationUnitTypeNames() {
-    if (compilationUnitTypeNames == null) {
-      compilationUnitTypeNames =
-          Collections.unmodifiableSet(zipLibraryReader.readCompilationUnitTypeNames());
-    }
-    return compilationUnitTypeNames;
   }
 
   @Override
@@ -305,6 +316,14 @@ class ZipLibrary implements Library {
           Collections.unmodifiableSet(zipLibraryReader.readDependencyLibraryNames());
     }
     return dependencyLibraryNames;
+  }
+
+  @Override
+  public ArtifactSet getGeneratedArtifacts() {
+    if (generatedArtifacts == null) {
+      generatedArtifacts = zipLibraryReader.readGeneratedArtifacts();
+    }
+    return generatedArtifacts;
   }
 
   @Override
@@ -374,6 +393,23 @@ class ZipLibrary implements Library {
   }
 
   @Override
+  public Set<String> getRegularClassFilePaths() {
+    if (classFilePaths == null) {
+      classFilePaths = Collections.unmodifiableSet(zipLibraryReader.readRegularClassFilePaths());
+    }
+    return classFilePaths;
+  }
+
+  @Override
+  public Set<String> getRegularCompilationUnitTypeNames() {
+    if (regularCompilationUnitTypeNames == null) {
+      regularCompilationUnitTypeNames =
+          Collections.unmodifiableSet(zipLibraryReader.readRegularCompilationUnitTypeNames());
+    }
+    return regularCompilationUnitTypeNames;
+  }
+
+  @Override
   public Set<String> getSuperSourceClassFilePaths() {
     if (superSourceClassFilePaths == null) {
       superSourceClassFilePaths =
@@ -389,5 +425,14 @@ class ZipLibrary implements Library {
           Collections.unmodifiableSet(zipLibraryReader.readSuperSourceCompilationUnitTypeNames());
     }
     return superSourceCompilationUnitTypeNames;
+  }
+
+  /**
+   * Uses regular and super source compilation unit type name indexes to determine whether a
+   * compilation unit of any kind is present that matches the given type name.
+   */
+  private boolean containsCompilationUnit(String typeName) {
+    return getRegularCompilationUnitTypeNames().contains(typeName)
+        || getSuperSourceCompilationUnitTypeNames().contains(typeName);
   }
 }

@@ -20,8 +20,6 @@ import com.google.gwt.dev.js.ast.JsName;
 import com.google.gwt.dev.js.ast.JsProgram;
 import com.google.gwt.dev.js.ast.JsScope;
 
-import java.util.Iterator;
-
 /**
  * A namer that uses long, fully qualified names for maximum unambiguous
  * debuggability.
@@ -49,8 +47,7 @@ public class JsVerboseNamer extends JsNamer {
     }
 
     // Visit all my idents.
-    for (Iterator<JsName> it = scope.getAllNames(); it.hasNext();) {
-      JsName name = it.next();
+    for (JsName name : scope.getAllNames()) {
       if (!referenced.contains(name)) {
         // Don't allocate idents for non-referenced names.
         continue;
@@ -63,8 +60,10 @@ public class JsVerboseNamer extends JsNamer {
       }
 
       String fullIdent = name.getIdent();
+      // Fixes package-info.java classes.
+      fullIdent = fullIdent.replace("-", "_");
       if (!isLegal(fullIdent)) {
-        String checkIdent = fullIdent;
+        String checkIdent;
         for (int i = 0; true; ++i) {
           checkIdent = fullIdent + "_" + i;
           if (isLegal(checkIdent)) {
@@ -80,6 +79,6 @@ public class JsVerboseNamer extends JsNamer {
   }
 
   protected boolean isLegal(String newIdent) {
-    return isAvailableIdent(newIdent);
+    return reserved.isAvailable(newIdent);
   }
 }

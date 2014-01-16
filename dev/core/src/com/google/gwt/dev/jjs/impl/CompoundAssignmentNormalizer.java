@@ -34,7 +34,6 @@ import com.google.gwt.dev.jjs.ast.JParameterRef;
 import com.google.gwt.dev.jjs.ast.JPostfixOperation;
 import com.google.gwt.dev.jjs.ast.JPrefixOperation;
 import com.google.gwt.dev.jjs.ast.JPrimitiveType;
-import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JThisRef;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.ast.JUnaryOperator;
@@ -55,22 +54,12 @@ import com.google.gwt.dev.jjs.ast.js.JMultiExpression;
  * parts of the same tree. Instead, the node must be cloned before each
  * insertion into a tree other than the first.
  * </p>
- * 
- * <p>
- * If the <code>reuseTemps</code> constructor parameter is set to
- * <code>true</code>, then temps of the correct type will be reused once they
- * become available. To determine when a temp can be reused, the current
- * implementation uses a notion of "temp usage scopes". Every time a temporary
- * variable is allocated, it is recorded in the current temp usage scope. Once
- * the current temp usage scope is exited, all of its temps become available for
- * use for other purposes.
- * </p>
  */
 public abstract class CompoundAssignmentNormalizer {
   /**
    * Breaks apart certain complex assignments.
    */
-  private class BreakupAssignOpsVisitor extends JModVisitor {
+  private class BreakupAssignOpsVisitor extends JModVisitorWithTemporaryVariableCreation {
 
     /**
      * Replaces side effects in lvalue.
@@ -138,10 +127,15 @@ public abstract class CompoundAssignmentNormalizer {
         JLocalRef tempRef = new JLocalRef(x.getSourceInfo(), tempLocal);
         JBinaryOperation asg =
             new JBinaryOperation(x.getSourceInfo(), x.getType(), JBinaryOperator.ASG, tempRef, x);
-        multi.exprs.add(asg);
+        multi.addExpressions(asg);
         // Update me with the temp
         return cloner.cloneExpression(tempRef);
       }
+    }
+
+    @Override
+    protected String newTemporaryLocalName(SourceInfo info, JType type, JMethodBody methodBody) {
+      return CompoundAssignmentNormalizer.this.newTemporaryLocalName(info, type, methodBody);
     }
 
     @Override
@@ -175,20 +169,14 @@ public abstract class CompoundAssignmentNormalizer {
               .cloneExpression(newLhs), operation);
 
       JMultiExpression multiExpr = replacer.getMultiExpr();
-      if (multiExpr.exprs.isEmpty()) {
+      if (multiExpr.isEmpty()) {
         // just use the split assignment expression
         ctx.replaceMe(asg);
       } else {
         // add the assignment as the last item in the multi
-        multiExpr.exprs.add(asg);
+        multiExpr.addExpressions(asg);
         ctx.replaceMe(multiExpr);
       }
-    }
-
-    @Override
-    public void endVisit(JMethodBody body, Context ctx) {
-      assert currentMethodBody == body;
-      currentMethodBody = null;
     }
 
     @Override
@@ -219,16 +207,16 @@ public abstract class CompoundAssignmentNormalizer {
       JBinaryOperation asg =
           new JBinaryOperation(x.getSourceInfo(), x.getType(), JBinaryOperator.ASG, tempRef,
               expressionReturn);
-      multi.exprs.add(asg);
+      multi.addExpressions(asg);
 
       // x += 1
       asg = createAsgOpFromUnary(newArg, op);
       // Break the resulting asg op before adding to multi.
-      multi.exprs.add(accept(asg));
+      multi.addExpressions(accept(asg));
 
       // t
       tempRef = new JLocalRef(x.getSourceInfo(), tempLocal);
-      multi.exprs.add(tempRef);
+      multi.addExpressions(tempRef);
 
       ctx.replaceMe(multi);
     }
@@ -277,25 +265,6 @@ public abstract class CompoundAssignmentNormalizer {
               .cloneExpression(arg), one);
       return asg;
     }
-
-    @Override
-    public boolean visit(JMethodBody body, Context ctx) {
-      assert currentMethodBody == null;
-      currentMethodBody = body;
-      return true;
-    }
-
-    private JMethodBody currentMethodBody = null;
-    // Name to assign to temporaries. All temporaries are created with the same name, which is
-    // not a problem as they are referred to by reference.
-    // {@link GenerateJavaScriptAst.FixNameClashesVisitor} will resolve into unique names when
-    // needed.
-    private static final String TEMP_LOCAL_NAME = "$t";
-
-    private JLocal createTempLocal(SourceInfo info, JType type) {
-      assert currentMethodBody != null;
-      return JProgram.createLocal(info, TEMP_LOCAL_NAME, type, false, currentMethodBody);
-    }
   }
 
   private final CloneExpressionVisitor cloner = new CloneExpressionVisitor();
@@ -303,6 +272,24 @@ public abstract class CompoundAssignmentNormalizer {
   public void accept(JNode node) {
     BreakupAssignOpsVisitor breaker = new BreakupAssignOpsVisitor();
     breaker.accept(node);
+  }
+
+
+  // Name to assign to temporaries. All temporaries are created with the same name, which is
+  // not a problem as they are referred to by reference.
+  // {@link GenerateJavaScriptAst.FixNameClashesVisitor} will resolve into unique names when
+  // needed.
+  private static final String TEMP_LOCAL_NAME = "$tmp";
+
+  /**
+   * Gets a new temporary local variable name in {@code methodBody}. Locals might have duplicate
+   * names as they are always referred to by reference.
+   * {@link GenerateJavaScriptAST} will attempt coalesce variables of same name.
+   *
+   * <p> Subclasses might decide on different approaches to naming local temporaries.
+   */
+  protected String newTemporaryLocalName(SourceInfo info, JType type, JMethodBody methodBody) {
+    return TEMP_LOCAL_NAME;
   }
 
   /**

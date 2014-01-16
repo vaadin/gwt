@@ -15,6 +15,7 @@
  */
 package com.google.gwt.dev.jjs.test;
 
+import com.google.gwt.dom.client.Document;
 import com.google.gwt.junit.client.GWTTestCase;
 
 /**
@@ -57,6 +58,34 @@ public class CompilerMiscRegressionTest extends GWTTestCase {
     return dest;
   }
 
+  private void throwE(String message) {
+    throw new RuntimeException(message);
+  }
+
+  /**
+   * Test for issue 7253.
+   */
+  public void testNestedTryFollowedByTry() {
+    try {
+      throwE("1");
+      fail("Should have thrown RuntimeException");
+    } catch (RuntimeException e) {
+      assertEquals("1", e.getMessage());
+      try {
+        throwE("2");
+        fail("Should have thrown RuntimeException");
+      } catch (RuntimeException e2) {
+        assertEquals("2", e2.getMessage());
+      }
+    }
+    try {
+      throwE("3");
+      fail("Should have thrown RuntimeException");
+    } catch (RuntimeException e) {
+      assertEquals("3", e.getMessage());
+    }
+  }
+
   /**
    * Test for issue 6638.
    */
@@ -65,6 +94,21 @@ public class CompilerMiscRegressionTest extends GWTTestCase {
     float[] dest = copy(src, new float[3]);
 
     assertEqualContents(src, dest);
+  }
+
+  @SuppressWarnings("null")
+  public void testJsoShouldNullPointerExceptionInDevMode() {
+    com.google.gwt.dom.client.Element foo = null;
+    try {
+      foo.setPropertyString("x", "y");
+      fail("Should have thrown Exception");
+    } catch (Exception npe) {
+      // is not yet a NullPointerException in prod mode
+    }
+    // once foo is not null, then it works
+    foo = Document.get().createDivElement();
+    foo.setPropertyString("x", "y");
+    assertEquals("y", foo.getPropertyString("x"));
   }
 
   private static void assertEqualContents(float[] expected, float[] actual) {

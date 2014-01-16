@@ -15,8 +15,8 @@
  */
 package com.google.gwt.user.client.ui;
 
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 import com.google.gwt.user.client.ui.HasHorizontalAlignment.HorizontalAlignmentConstant;
 import com.google.gwt.user.client.ui.HasVerticalAlignment.VerticalAlignmentConstant;
 
@@ -94,7 +94,7 @@ public abstract class CellPanel extends ComplexPanel {
    * @param width the width of the panel's cell borders, in pixels
    */
   public void setBorderWidth(int width) {
-    DOM.setElementProperty(table, "border", "" + width);
+    table.setPropertyString("border", "" + width);
   }
 
   /**
@@ -198,25 +198,47 @@ public abstract class CellPanel extends ComplexPanel {
    */
   public void setSpacing(int spacing) {
     this.spacing = spacing;
-    DOM.setElementPropertyInt(table, "cellSpacing", spacing);
+    table.setPropertyInt("cellSpacing", spacing);
   }
 
-  protected Element getBody() {
-    return body;
+  protected com.google.gwt.user.client.Element getBody() {
+    return DOM.asOld(body);
   }
 
-  protected Element getTable() {
-    return table;
+  protected com.google.gwt.user.client.Element getTable() {
+    return DOM.asOld(table);
   }
 
+  @SuppressWarnings("deprecation")
   protected void setCellHorizontalAlignment(Element td,
       HorizontalAlignmentConstant align) {
-    DOM.setElementProperty(td, "align", align.getTextAlignString());
+    setCellHorizontalAlignment(DOM.asOld(td), align);
   }
 
+  /**
+   * @deprecated Call and override {@link #setCellHorizontalAlignment(Element,
+   *             HorizontalAlignmentConstant)} instead.
+   */
+  @Deprecated
+  protected void setCellHorizontalAlignment(com.google.gwt.user.client.Element td,
+      HorizontalAlignmentConstant align) {
+    td.setPropertyString("align", align.getTextAlignString());
+  }
+
+  @SuppressWarnings("deprecation")
   protected void setCellVerticalAlignment(Element td,
       VerticalAlignmentConstant align) {
-    DOM.setStyleAttribute(td, "verticalAlign", align.getVerticalAlignString());
+    setCellVerticalAlignment(DOM.asOld(td), align);
+  }
+
+  /**
+   * @deprecated Call and override {@link #setCellVerticalAlignment(Element,
+   *             VerticalAlignmentConstant)} instead.
+   */
+  @Deprecated
+  protected void setCellVerticalAlignment(com.google.gwt.user.client.Element td,
+      VerticalAlignmentConstant align) {
+    td.getStyle().setProperty("verticalAlign", align.getVerticalAlignString());
   }
 
   Element getWidgetTd(Widget w) {

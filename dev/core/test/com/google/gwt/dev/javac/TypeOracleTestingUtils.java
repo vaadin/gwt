@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -18,6 +18,7 @@ package com.google.gwt.dev.javac;
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.core.ext.typeinfo.TypeOracle;
+import com.google.gwt.dev.CompilerContext;
 import com.google.gwt.dev.javac.testing.impl.JavaResourceBase;
 import com.google.gwt.dev.resource.Resource;
 
@@ -28,14 +29,15 @@ import java.util.Set;
 
 /**
  * Utilities for tests that build a type oracle and watch for errors.
- * 
+ *
  */
 public class TypeOracleTestingUtils {
 
   public static CompilationState buildCompilationState(TreeLogger logger, Set<Resource> resources,
       Set<GeneratedUnit> generatedUnits) {
     try {
-      CompilationState state = CompilationStateBuilder.buildFrom(logger, resources);
+      CompilationState state =
+          CompilationStateBuilder.buildFrom(logger, new CompilerContext(), resources);
       state.addGeneratedCompilationUnits(logger, generatedUnits);
       return state;
     } catch (UnableToCompleteException e) {
@@ -49,26 +51,24 @@ public class TypeOracleTestingUtils {
         .asList(resources))), Collections.<GeneratedUnit> emptySet());
   }
 
-  public static TypeOracleMediator buildMediator(TreeLogger logger, Set<Resource> resources,
-      Set<GeneratedUnit> generatedUnits) {
-    return buildCompilationState(logger, resources, generatedUnits).getMediator();
+  public static CompilationUnitTypeOracleUpdater buildUpdater(
+      TreeLogger logger, Set<Resource> resources, Set<GeneratedUnit> generatedUnits) {
+    return buildCompilationState(logger, resources, generatedUnits).getTypeOracleUpdater();
   }
 
-  public static TypeOracleMediator buildMediatorWith(TreeLogger logger,
-      Set<Resource> resources) {
-    return buildMediator(logger, resources,
-        Collections.<GeneratedUnit> emptySet());
+  public static CompilationUnitTypeOracleUpdater buildUpdaterWith(
+      TreeLogger logger, Set<Resource> resources) {
+    return buildUpdater(logger, resources, Collections.<GeneratedUnit> emptySet());
   }
 
-  public static TypeOracleMediator buildStandardMediatorWith(TreeLogger logger,
-      Resource... resources) {
-    return buildStandardMediatorWith(logger, new HashSet<Resource>(
-        Arrays.asList(resources)));
+  public static CompilationUnitTypeOracleUpdater buildStandardUpdaterWith(
+      TreeLogger logger, Resource... resources) {
+    return buildStandardUpdaterWith(logger, new HashSet<Resource>(Arrays.asList(resources)));
   }
 
-  public static TypeOracleMediator buildStandardMediatorWith(TreeLogger logger,
-      Set<Resource> resources) {
-    return buildMediatorWith(logger, standardBuildersPlus(resources));
+  public static CompilationUnitTypeOracleUpdater buildStandardUpdaterWith(
+      TreeLogger logger, Set<Resource> resources) {
+    return buildUpdaterWith(logger, standardBuildersPlus(resources));
   }
 
   public static TypeOracle buildStandardTypeOracleWith(TreeLogger logger,
@@ -97,7 +97,10 @@ public class TypeOracleTestingUtils {
   public static TypeOracle buildTypeOracle(TreeLogger logger,
       Set<Resource> resources, Set<GeneratedUnit> generatedUnits) {
     try {
-      CompilationState state = CompilationStateBuilder.buildFrom(logger, resources);
+      CompilerContext compilerContext = new CompilerContext();
+      compilerContext.getOptions().setStrict(true);
+      CompilationState state =
+          CompilationStateBuilder.buildFrom(logger, compilerContext, resources);
       state.addGeneratedCompilationUnits(logger, generatedUnits);
       return state.getTypeOracle();
     } catch (UnableToCompleteException e) {

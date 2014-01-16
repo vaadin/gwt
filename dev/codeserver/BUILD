@@ -44,6 +44,7 @@ java_library(
     deps = [
         # approved dependencies (for open source code)
         "//third_party/java_src/gwt:gwt-dev",
+        "//third_party/java_src/gwt:gwt-dev-private",
         # no other dependencies allowed
         "//third_party/java/json",  # undeclared dependency of SourceMapConsumer. TODO: fix
     ],

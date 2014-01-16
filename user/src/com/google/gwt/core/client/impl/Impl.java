@@ -18,6 +18,7 @@ package com.google.gwt.core.client.impl;
 import com.google.gwt.core.client.Duration;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.GWT.UncaughtExceptionHandler;
+import com.google.gwt.core.client.JavaScriptException;
 import com.google.gwt.core.client.JavaScriptObject;
 
 /**
@@ -88,15 +89,7 @@ public final class Impl {
    */
   public static native JavaScriptObject entry(JavaScriptObject jsFunction) /*-{
     return function() {
-      try {
-        return @com.google.gwt.core.client.impl.Impl::entry0(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)(jsFunction, this, arguments);
-      } catch (e) {
-        // This catch block is here to ensure that the finally block in entry0
-        // will be executed correctly on IE6/7.  We can't put a catch Throwable
-        // in entry0 because this would always cause the unhandled exception to
-        // be wrapped in a JavaScriptException type.
-        throw e;
-      }
+      return @com.google.gwt.core.client.impl.Impl::entry0(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)(jsFunction, this, arguments);
     };
   }-*/;
 
@@ -201,15 +194,42 @@ public final class Impl {
     uncaughtExceptionHandlerForTest = handler;
   }
 
-  public static void maybeReportUncaughtException(
-      UncaughtExceptionHandler handler, Throwable t) {
-    if (uncaughtExceptionHandlerForTest != null) {
-      uncaughtExceptionHandlerForTest.onUncaughtException(t);
+  public static void reportUncaughtException(Throwable e) {
+    if (Impl.uncaughtExceptionHandlerForTest != null) {
+      Impl.uncaughtExceptionHandlerForTest.onUncaughtException(e);
     }
-    if (handler != null && handler != uncaughtExceptionHandlerForTest) {
-      handler.onUncaughtException(t);
+
+    UncaughtExceptionHandler handler = GWT.getUncaughtExceptionHandler();
+    if (handler != null) {
+      if (handler == Impl.uncaughtExceptionHandlerForTest) {
+        return; // Already reported so we're done.
+      }
+      // TODO(goktug): Handler might throw an exception but catching and reporting it to browser
+      // here breaks assumptions of some existing hybrid apps that uses UCE for exception
+      // conversion. We don't have an alternative functionality (yet) and it is too risky to include
+      // the change in the release at last minute.
+      handler.onUncaughtException(e);
+      return; // Done.
+    }
+
+    // Make sure that the exception is not swallowed
+    if (GWT.isClient()) {
+      reportToBrowser(e);
+    } else {
+      System.err.print("Uncaught exception ");
+      e.printStackTrace(System.err);
     }
   }
+
+  private static void reportToBrowser(Throwable e) {
+    reportToBrowser(e instanceof JavaScriptException ? ((JavaScriptException) e).getThrown() : e);
+  }
+
+  private static native void reportToBrowser(Object e) /*-{
+    $wnd.setTimeout(function () {
+      throw e;
+    }, 0);
+  }-*/;
 
   /**
    * Indicates if <code>$entry</code> has been called.
@@ -323,7 +343,7 @@ public final class Impl {
         try {
           return apply(jsFunction, thisObj, args);
         } catch (Throwable t) {
-          GWT.maybeReportUncaughtException(t);
+          reportUncaughtException(t);
           return undefined();
         }
       } else {

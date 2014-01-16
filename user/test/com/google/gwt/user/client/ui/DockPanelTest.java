@@ -15,9 +15,9 @@
  */
 package com.google.gwt.user.client.ui;
 
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.junit.client.GWTTestCase;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 
 /**
  * Tests the DockPanel widget.
@@ -196,7 +196,8 @@ public class DockPanelTest extends GWTTestCase {
       Widget expectedChild) {
     Element panelElement = parent.getElement();
     Element childElement = expectedChild.getElement();
-    assertTrue("The parent's Element of the child must be the panel's Element", DOM.isOrHasChild(panelElement, childElement));
+    assertTrue("The parent's Element of the child must be the panel's Element", 
+        panelElement.isOrHasChild(childElement));
   }
 
   private DockPanel createDockPanel() {

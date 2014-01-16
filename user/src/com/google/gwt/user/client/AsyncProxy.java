@@ -87,7 +87,11 @@ import java.lang.annotation.Target;
  * 
  * @param <T> the type of interface that must be implemented by the derivative
  *          class.
+ *
+ * @deprecated AsyncProxy will no longer be part of the SDK with next release. Please
+ *             look for third party libraries if you still need to use it.
  */
+@Deprecated
 @AsyncProxy.DefaultValue()
 public interface AsyncProxy<T> {
   /*
@@ -180,8 +184,7 @@ public interface AsyncProxy<T> {
      * Invokes the global uncaught exception handler.
      */
     public void onFailure(Throwable t) {
-      // TODO(goktug): this is a no-op if handler is not set and exception will be swallowed.
-      GWT.maybeReportUncaughtException(t);
+      GWT.reportUncaughtException(t);
     }
 
     /**

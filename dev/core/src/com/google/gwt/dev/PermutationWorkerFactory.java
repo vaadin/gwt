@@ -19,7 +19,7 @@ import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.jjs.PermutationResult;
 import com.google.gwt.dev.jjs.UnifiedAst;
-import com.google.gwt.dev.util.FileBackedObject;
+import com.google.gwt.dev.util.PersistenceBackedObject;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
@@ -70,7 +70,8 @@ public abstract class PermutationWorkerFactory {
             }
             TreeLogger logger = work.getLogger();
             try {
-              worker.compile(logger, work.getPerm(), work.getResultFile());
+              worker.compile(
+                  logger, work.getCompilerContext(), work.getPerm(), work.getResultFile());
               logger.log(TreeLogger.DEBUG, "Successfully compiled permutation");
               resultsQueue.put(Result.SUCCESS);
             } catch (TransientWorkerException e) {
@@ -97,7 +98,7 @@ public abstract class PermutationWorkerFactory {
       }
     }
 
-    private static final Work POISON_PILL = new Work(null, null, null);
+    private static final Work POISON_PILL = new Work(null, null, null, null);
 
     public static void run(TreeLogger logger, List<Work> work,
         List<PermutationWorker> workers) throws UnableToCompleteException {
@@ -182,13 +183,19 @@ public abstract class PermutationWorkerFactory {
   private static class Work {
     private final TreeLogger logger;
     private final Permutation perm;
-    private final FileBackedObject<PermutationResult> resultFile;
+    private final PersistenceBackedObject<PermutationResult> resultFile;
+    private final CompilerContext compilerContext;
 
-    public Work(TreeLogger logger, Permutation perm,
-        FileBackedObject<PermutationResult> resultFile) {
+    public Work(TreeLogger logger, CompilerContext compilerContext, Permutation perm,
+        PersistenceBackedObject<PermutationResult> resultFile) {
       this.logger = logger;
+      this.compilerContext = compilerContext;
       this.perm = perm;
       this.resultFile = resultFile;
+    }
+
+    public CompilerContext getCompilerContext() {
+      return compilerContext;
     }
 
     public TreeLogger getLogger() {
@@ -199,7 +206,7 @@ public abstract class PermutationWorkerFactory {
       return perm;
     }
 
-    public FileBackedObject<PermutationResult> getResultFile() {
+    public PersistenceBackedObject<PermutationResult> getResultFile() {
       return resultFile;
     }
   }
@@ -221,30 +228,22 @@ public abstract class PermutationWorkerFactory {
    * that can be consumed by Link using the system-default
    * PermutationWorkersFactories.
    */
-  public static void compilePermutations(TreeLogger logger,
+  public static void compilePermutations(TreeLogger logger, CompilerContext compilerContext,
       Precompilation precompilation, int localWorkers,
-      List<FileBackedObject<PermutationResult>> resultFiles)
+      List<PersistenceBackedObject<PermutationResult>> resultFiles)
       throws UnableToCompleteException {
-    compilePermutations(logger, precompilation,
-        precompilation.getPermutations(), localWorkers, resultFiles);
+    compilePermutations(logger, compilerContext, precompilation, precompilation.getPermutations(),
+        localWorkers, resultFiles);
   }
 
   /**
    * Compiles a subset of the Permutations in a Precompilation and returns an
    * array of Files that can be consumed by Link using the system-default
    * PermutationWorkersFactories.
-   *
-   * @param localWorkers Set the maximum number of workers that should be
-   *          executed on the local system by the PermutationWorkerFactory. The
-   *          value {@link #WORKERS_AUTO} will allow the
-   *          PermutationWorkerFactory to apply a heuristic to determine the
-   *          correct number of local workers.
-   * @param resultFiles the output files to write into; must be the same length
-   *          as permutations
    */
-  public static void compilePermutations(TreeLogger logger,
-      Precompilation precompilation, Permutation[] permutations,
-      int localWorkers, List<FileBackedObject<PermutationResult>> resultFiles)
+  public static void compilePermutations(TreeLogger logger, CompilerContext compilerContext,
+      Precompilation precompilation, Permutation[] permutations, int localWorkers,
+      List<PersistenceBackedObject<PermutationResult>> resultFiles)
       throws UnableToCompleteException {
     assert permutations.length == resultFiles.size();
     assert Arrays.asList(precompilation.getPermutations()).containsAll(
@@ -258,14 +257,13 @@ public abstract class PermutationWorkerFactory {
         logger.log(TreeLogger.DEBUG,
             "Creating worker permutation " + perm.getId() + " of " + permutations.length);
       }
-      work.add(new Work(logger, perm, resultFiles.get(i)));
+      work.add(new Work(logger, compilerContext, perm, resultFiles.get(i)));
     }
 
     // Create the workers.
     List<PermutationWorker> workers = new ArrayList<PermutationWorker>();
     try {
-      createWorkers(logger, precompilation.getUnifiedAst(), work.size(),
-          localWorkers, workers);
+      createWorkers(logger, precompilation.getUnifiedAst(), work.size(), localWorkers, workers);
 
       // Get it done!
       Manager.run(logger, work, workers);

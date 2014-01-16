@@ -15,8 +15,13 @@
  */
 package com.google.gwt.dev.js;
 
+import com.google.gwt.thirdparty.guava.common.base.Charsets;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
+import com.google.gwt.thirdparty.guava.common.io.Resources;
 
+import java.io.IOException;
+import java.net.URL;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -65,9 +70,36 @@ public class JsProtectedNames {
         "match", "src", "cos", "title", "write", "JSON", "PI", "beta", "log", "forms", "split",
         "input", "NaN", "focus", "map", "defer", "data", "push", "atan2", "atan", "shape", "small",
         "blur", "text", "LN2", "get", "max", "arity", "dir", "x", "Error", "y", "z", "sort", "size",
-        "round", "Math");
+        "round", "Math",
+        // From Chrome 30
+        "CSS", "Rect", "Blob", "self", "Node", "JSON", "Intl", "Attr", "Date",
+        "File", "name", "Text", "Array", "Audio", "event", "Range", "Touch", "Image", "Error",
+        "Event", "top", "url",
+        // From Firefox 25
+        "Map", "Set", "eval", "Proxy",
+        // From Safari 7.0
+        "Path", "self");
 
     illegalNames.addAll(javaScriptKeywords);
+    illegalNames.addAll(loadGlobals("chrome30"));
+    illegalNames.addAll(loadGlobals("firefox25"));
+    illegalNames.addAll(loadGlobals("ie9"));
+  }
+
+  /**
+   * Loads globals from a resource file in the "globals" subdirectory.
+   */
+  private static List<String> loadGlobals(String basename) {
+    String path = "globals/" + basename + ".txt";
+    URL resource = JsProtectedNames.class.getResource(path);
+    if (resource == null) {
+      throw new RuntimeException("JsProtectedNames can't find resource: " + path);
+    }
+    try {
+      return Resources.readLines(resource, Charsets.UTF_8);
+    } catch (IOException e) {
+      throw new RuntimeException("JsProtectedNames can't read resource: " + path, e);
+    }
   }
 
   public static boolean isKeyword(String s) {

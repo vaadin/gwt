@@ -13,6 +13,7 @@
  */
 package com.google.gwt.dev.cfg;
 
+import com.google.gwt.core.ext.linker.ArtifactSet;
 import com.google.gwt.dev.javac.CompilationUnit;
 import com.google.gwt.dev.jjs.PermutationResult;
 import com.google.gwt.dev.resource.Resource;
@@ -45,32 +46,26 @@ public interface Library {
   Set<String> getBuildResourcePaths();
 
   /**
-   * Returns the set of class file paths. Facilitates LibraryGroup's fast single class file
-   * retrieval across large groups of provided libraries.
-   */
-  Set<String> getClassFilePaths();
-
-  /**
    * Returns a class file input stream or null for the provided path.
    */
   InputStream getClassFileStream(String classFilePath);
 
   /**
-   * Returns the compilation unit with the given type name.
+   * Returns the compilation unit with the given type name. The returned compilation unit might be
+   * regular or might be super sourced depending on which was stored during library construction.
    */
   CompilationUnit getCompilationUnitByTypeName(String typeName);
-
-  /**
-   * Returns the set of compilation unit type names. Facilitates LibraryGroup's fast single
-   * compilation unit retrieval across large groups of provided libraries.
-   */
-  Set<String> getCompilationUnitTypeNames();
 
   /**
    * Returns the set of names of dependency libraries. Facilitates LibraryGroup's library tree
    * analysis for link ordering and partial generator execution.
    */
   Set<String> getDependencyLibraryNames();
+
+  /**
+   * Returns the set of artifacts that were created by generators when compiling this library.
+   */
+  ArtifactSet getGeneratedArtifacts();
 
   /**
    * Returns the name of the library. Should be unique within the library dependency tree.
@@ -121,6 +116,19 @@ public interface Library {
    * list from source would be very costly.
    */
   Set<String> getReboundTypeNames();
+
+  /**
+   * Returns the set of regular (non-super-source) class file paths. Facilitates LibraryGroup's fast
+   * single class file retrieval across large groups of provided libraries.
+   */
+  Set<String> getRegularClassFilePaths();
+
+  /**
+   * Returns the set of regular (non-super-source) compilation unit type names. Facilitates
+   * LibraryGroup's fast single compilation unit retrieval across large groups of provided
+   * libraries.
+   */
+  Set<String> getRegularCompilationUnitTypeNames();
 
   /**
    * Returns the set of super source class file paths. Facilitates LibraryGroup's fast single class

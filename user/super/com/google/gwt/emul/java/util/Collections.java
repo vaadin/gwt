@@ -24,6 +24,41 @@ import java.io.Serializable;
  */
 public class Collections {
 
+  private static final class LifoQueue<E> extends AbstractQueue<E> implements
+      Serializable {
+
+    private final Deque<E> deque;
+
+    LifoQueue(Deque<E> deque) {
+      this.deque = deque;
+    }
+
+    @Override
+    public Iterator<E> iterator() {
+      return deque.iterator();
+    }
+
+    @Override
+    public boolean offer(E e) {
+      return deque.offerFirst(e);
+    }
+
+    @Override
+    public E peek() {
+      return deque.peekFirst();
+    }
+
+    @Override
+    public E poll() {
+      return deque.pollFirst();
+    }
+
+    @Override
+    public int size() {
+      return deque.size();
+    }
+  }
+
   private static final class EmptyList extends AbstractList implements
       RandomAccess, Serializable {
     @Override
@@ -118,7 +153,7 @@ public class Collections {
     }
 
     public boolean contains(Object item) {
-      return Utility.equalsWithNullCheck(element, item);
+      return Objects.equals(element, item);
     }
 
     public E get(int index) {
@@ -645,6 +680,10 @@ public class Collections {
     return result;
   }
 
+  public static <T> Queue<T> asLifoQueue(Deque<T> deque) {
+    return new LifoQueue<T>(deque);
+  }
+
   /**
    * Perform a binary search on a sorted List, using natural ordering.
    *
@@ -820,7 +859,7 @@ public class Collections {
   public static int frequency(Collection<?> c, Object o) {
     int count = 0;
     for (Object e : c) {
-      if (o == null ? e == null : o.equals(e)) {
+      if (Objects.equals(o, e)) {
         ++count;
       }
     }
@@ -884,7 +923,7 @@ public class Collections {
     boolean modified = false;
     for (ListIterator<T> it = list.listIterator(); it.hasNext();) {
       T t = it.next();
-      if (t == null ? oldVal == null : t.equals(oldVal)) {
+      if (Objects.equals(t, oldVal)) {
         it.set(newVal);
         modified = true;
       }

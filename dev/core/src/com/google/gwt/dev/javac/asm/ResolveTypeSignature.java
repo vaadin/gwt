@@ -1,12 +1,12 @@
 /*
  * Copyright 2009 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -41,7 +41,7 @@ import java.util.Map;
 public class ResolveTypeSignature extends EmptySignatureVisitor {
 
   private final Resolver resolver;
-  private final Map<String, JRealClassType> binaryMapper;
+  private final Map<String, JRealClassType> internalMapper;
   private final TreeLogger logger;
   private final JType[] returnTypeRef;
   private final TypeParameterLookup lookup;
@@ -54,28 +54,30 @@ public class ResolveTypeSignature extends EmptySignatureVisitor {
 
   /**
    * Resolve a parameterized type.
-   * 
+   *
    * @param resolver
-   * @param binaryMapper
+   * @param internalMapper
    * @param logger
    * @param returnTypeRef "pointer" to return location, ie. 1-element array
    * @param lookup
    * @param enclosingClass
    */
   public ResolveTypeSignature(Resolver resolver,
-      Map<String, JRealClassType> binaryMapper, TreeLogger logger,
+ Map<String, JRealClassType> internalMapper,
+      TreeLogger logger,
       JType[] returnTypeRef, TypeParameterLookup lookup,
       JClassType enclosingClass) {
-    this(resolver, binaryMapper, logger, returnTypeRef, lookup, enclosingClass,
+    this(resolver, internalMapper, logger, returnTypeRef, lookup, enclosingClass,
         '=');
   }
 
   public ResolveTypeSignature(Resolver resovler,
-      Map<String, JRealClassType> binaryMapper, TreeLogger logger,
+ Map<String, JRealClassType> internalMapper,
+      TreeLogger logger,
       JType[] returnTypeRef, TypeParameterLookup lookup,
       JClassType enclosingClass, char wildcardMatch) {
     this.resolver = resovler;
-    this.binaryMapper = binaryMapper;
+    this.internalMapper = internalMapper;
     this.logger = logger;
     this.returnTypeRef = returnTypeRef;
     this.lookup = lookup;
@@ -130,7 +132,7 @@ public class ResolveTypeSignature extends EmptySignatureVisitor {
   public void visitClassType(String internalName) {
     assert Name.isInternalName(internalName);
     outerClass = enclosingClass;
-    JRealClassType classType = binaryMapper.get(internalName);
+    JRealClassType classType = internalMapper.get(internalName);
     // TODO(jat): failures here are likely binary-only annotations or local
     // classes that have been elided from TypeOracle -- what should we do in
     // those cases? Currently we log an error and replace them with Object,
@@ -190,7 +192,7 @@ public class ResolveTypeSignature extends EmptySignatureVisitor {
     // not sure what the enclosing class of a type argument means, but
     // I haven't found a case where it is actually used while processing
     // the type argument.
-    return new ResolveTypeSignature(resolver, binaryMapper, logger, arg,
+    return new ResolveTypeSignature(resolver, internalMapper, logger, arg,
         lookup, null, wildcard);
   }
 
@@ -204,21 +206,21 @@ public class ResolveTypeSignature extends EmptySignatureVisitor {
   /**
    * Merge the bounds from the declared type parameters into the type arguments
    * for this type if necessary.
-   * 
+   *
    * <pre>
    * Example:
    * class Foo<T extends Bar> ...
-   * 
+   *
    * Foo<?> foo
-   * 
+   *
    * foo needs to have bounds ? extends Bar.
    * </pre>
-   * 
+   *
    * <p>
    * Currently we only deal with unbound wildcards as above, which matches
-   * existing TypeOracleMediator behavior. However, this may need to be
+   * existing TypeOracleUpdater behavior. However, this may need to be
    * extended.
-   * 
+   *
    * @param typeParams
    * @param typeArgs
    */
@@ -228,7 +230,7 @@ public class ResolveTypeSignature extends EmptySignatureVisitor {
     for (int i = 0; i < n; ++i) {
       JWildcardType wildcard = typeArgs[i].isWildcard();
       // right now we only replace Foo<?> with the constraints defined on the
-      // definition (which appears to match the existing TypeOracleMediator)
+      // definition (which appears to match the existing TypeOracleUpdater)
       // but other cases may need to be handled.
       if (wildcard != null
           && wildcard.getBoundType() == BoundType.UNBOUND

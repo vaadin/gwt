@@ -15,9 +15,8 @@
  */
 package com.google.gwt.user.client.ui.impl;
 
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.Node;
-import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 
 /**
  * IE6-specific implementation of rich-text editing.
@@ -35,7 +34,7 @@ public class RichTextAreaImplIE6 extends RichTextAreaImplStandard {
   @Override
   public Element createElement() {
     Element elem = super.createElement();
-    DOM.setElementProperty(elem, "src", "javascript:''");
+    elem.setPropertyString("src", "javascript:''");
     return elem;
   }
 
@@ -106,7 +105,7 @@ public class RichTextAreaImplIE6 extends RichTextAreaImplStandard {
       // this code is shared with all IE implementations (see RichText.gwt.xml)
       // the event can be passed in as argument (IE9) or from the content window (IE8/7/6)
       evt = evt || elem.contentWindow.event;
-      @com.google.gwt.user.client.DOM::dispatchEvent(Lcom/google/gwt/user/client/Event;Lcom/google/gwt/user/client/Element;)(evt, elem);
+      @com.google.gwt.user.client.DOM::dispatchEvent(Lcom/google/gwt/user/client/Event;Lcom/google/gwt/dom/client/Element;)(evt, elem);
     });
 
     body.onkeydown =

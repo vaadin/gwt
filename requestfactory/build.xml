@@ -30,7 +30,7 @@
             classname="com.google.web.bindery.requestfactory.server.RequestFactoryJarExtractor">
         <classpath>
           <fileset dir="${gwt.build.lib}" includes="gwt-user.jar,gwt-dev.jar" />
-          <fileset dir="${gwt.tools.redist}" includes="json/r2_20080312/json-1.5.jar" />
+          <fileset dir="${gwt.tools.lib}" includes="json/android-sdk-19.1/json-android.jar" />
           <pathelement location="${gwt.tools.lib}/junit/junit-4.8.2.jar" />
           <pathelement path="${gwt.build.out}/user/bin" />
           <pathelement path="${gwt.build.out}/dev/bin-test" />
@@ -132,7 +132,7 @@
       classname="com.google.web.bindery.requestfactory.vm.RequestFactoryJreSuite">
       <jvmarg value="-Xss8m" />
       <classpath>
-        <fileset dir="${gwt.tools.lib}" includes="tomcat/servlet-api-2.5.jar" />
+        <fileset dir="${gwt.tools.lib}" includes="jetty/jetty-8.1.12.v20130726/servlet-api-3.0-NoMetaInf.jar" />
         <fileset dir="${gwt.tools.lib}" includes="apache/log4j/log4j-1.2.16.jar" />
         <fileset dir="${gwt.tools.lib}" includes="slf4j/slf4j-api/slf4j-api-1.6.1.jar" />
         <fileset dir="${gwt.tools.lib}" includes="slf4j/slf4j-log4j12/slf4j-log4j12-1.6.1.jar" />

@@ -13,7 +13,9 @@
  */
 package com.google.gwt.dev.cfg;
 
+import com.google.gwt.dev.cfg.LibraryGroup.DuplicateLibraryNameException;
 import com.google.gwt.dev.cfg.LibraryGroup.UnresolvedLibraryException;
+import com.google.gwt.dev.javac.MockCompilationUnit;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
@@ -39,6 +41,43 @@ public class LibraryGroupTest extends TestCase {
         looseLibraryGroup.createSubgroup(Lists.newArrayList("LibraryA", "LibraryA", "LibraryC"));
 
     assertEquals(2, strictLibraryGroup.getLibraries().size());
+  }
+
+  public void testDuplicateLibraryNames() {
+    // Create regular/super source libraries.
+    MockLibrary fooLibrary = new MockLibrary("FooLibrary");
+    MockLibrary alsoFooLibrary = new MockLibrary("FooLibrary");
+
+    // Try but fail to stick them in a library group.
+    try {
+      LibraryGroup.fromLibraries(
+          Lists.<Library> newArrayList(fooLibrary, alsoFooLibrary, fooLibrary), true);
+      fail("library group construction sould have failed because of a library name collision.");
+    } catch (DuplicateLibraryNameException e) {
+      // Expected behavior.
+    }
+  }
+
+  public void testGetCompilationUnitTypeNamesSeesAll() {
+    // Create regular/super source compilation units.
+    MockCompilationUnit regularCompilationUnit =
+        new MockCompilationUnit("com.google.gwt.Regular", "blah");
+    MockCompilationUnit superSourceCompilationUnit =
+        new MockCompilationUnit("com.google.gwt.Super", "blah");
+
+    // Create regular/super source libraries.
+    MockLibrary regularLibrary = new MockLibrary("LibraryA");
+    regularLibrary.addCompilationUnit(regularCompilationUnit);
+    MockLibrary superSourceLibrary = new MockLibrary("LibraryB");
+    superSourceLibrary.addSuperSourceCompilationUnit(superSourceCompilationUnit);
+
+    // Stick them in a library group.
+    LibraryGroup libraryGroup = LibraryGroup.fromLibraries(
+        Lists.<Library> newArrayList(regularLibrary, superSourceLibrary), true);
+
+    // Show that getCompilationUnitTypeNames sees both kinds of compilation units.
+    assertEquals(libraryGroup.getCompilationUnitTypeNames(),
+        Sets.newHashSet("com.google.gwt.Regular", "com.google.gwt.Super"));
   }
 
   public void testGetReboundTypeNames() {
@@ -150,6 +189,28 @@ public class LibraryGroupTest extends TestCase {
     assertEquals(Sets.newHashSet("webkit_phone", "webkit_tablet", "webkit", "mozilla", "ie"),
         newUserAgentsForLocalizedDatePickerGenerator);
     assertEquals(Sets.newHashSet("ru"), newLocalesForLocalizedDatePickerGenerator);
+  }
+
+  public void testSuperSourceOverridesRegularCompilationUnitAccess() {
+    // Create regular/super source compilation units.
+    MockCompilationUnit regularCompilationUnit =
+        new MockCompilationUnit("com.google.gwt.Regular", "blah");
+    MockCompilationUnit superSourceCompilationUnit =
+        new MockCompilationUnit("com.google.gwt.Regular", "blah");
+
+    // Create regular/super source libraries.
+    MockLibrary regularLibrary = new MockLibrary("LibraryA");
+    regularLibrary.addCompilationUnit(regularCompilationUnit);
+    MockLibrary superSourceLibrary = new MockLibrary("LibraryB");
+    superSourceLibrary.addSuperSourceCompilationUnit(superSourceCompilationUnit);
+
+    // Stick them in a library group.
+    LibraryGroup libraryGroup = LibraryGroup.fromLibraries(
+        Lists.<Library> newArrayList(regularLibrary, superSourceLibrary), true);
+
+    // Show that the library group prefers to return the super source version.
+    assertEquals(libraryGroup.getCompilationUnitByTypeName("com.google.gwt.Regular"),
+        superSourceCompilationUnit);
   }
 
   public void testUnresolvedLibraryReference() {

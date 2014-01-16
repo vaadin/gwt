@@ -20,6 +20,7 @@ import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.CompilerContext;
 import com.google.gwt.dev.resource.Resource;
 import com.google.gwt.dev.util.UnitTestTreeLogger;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
 import junit.framework.TestCase;
 
@@ -28,15 +29,22 @@ import junit.framework.TestCase;
  */
 public class ModuleDefLoaderTest extends TestCase {
 
-  private CompilerContext compilerContext = new CompilerContext();
+  private MockLibraryWriter mockLibraryWriter = new MockLibraryWriter();
+  private CompilerContext compilerContext =
+      new CompilerContext.Builder().libraryWriter(mockLibraryWriter).build();
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
+    ModuleDefLoader.getModulesCache().clear();
+  }
 
   public void assertHonorsStrictResources(boolean strictResources)
       throws UnableToCompleteException {
     TreeLogger logger = TreeLogger.NULL;
     compilerContext.getOptions().setEnforceStrictResources(strictResources);
-    ModuleDefLoader.getModulesCache().clear();
     ModuleDef emptyModule = ModuleDefLoader.loadFromClassPath(
-        logger, "com.google.gwt.dev.cfg.testdata.merging.Empty", compilerContext, false, true);
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.merging.Empty");
     Resource sourceFile =
         emptyModule.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/InOne.java");
     Resource publicFile = emptyModule.findPublicFile("Public.java");
@@ -62,22 +70,22 @@ public class ModuleDefLoaderTest extends TestCase {
    */
   public void testModuleMerging() throws Exception {
     TreeLogger logger = TreeLogger.NULL;
-    ModuleDef one = ModuleDefLoader.loadFromClassPath(logger,
-        "com.google.gwt.dev.cfg.testdata.merging.One", compilerContext, false, true);
+    ModuleDef one = ModuleDefLoader.loadFromClassPath(
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.merging.One");
     assertNotNull(one.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/InOne.java"));
     assertNotNull(one.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/Shared.java"));
     assertNull(one.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/InTwo.java"));
     assertNull(one.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/Toxic.java"));
 
-    ModuleDef two = ModuleDefLoader.loadFromClassPath(logger,
-        "com.google.gwt.dev.cfg.testdata.merging.Two", compilerContext, false, true);
+    ModuleDef two = ModuleDefLoader.loadFromClassPath(
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.merging.Two");
     assertNotNull(two.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/InOne.java"));
     assertNotNull(two.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/Shared.java"));
     assertNotNull(two.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/InTwo.java"));
     assertNull(two.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/Toxic.java"));
 
-    ModuleDef three = ModuleDefLoader.loadFromClassPath(logger,
-        "com.google.gwt.dev.cfg.testdata.merging.Three", compilerContext, false, true);
+    ModuleDef three = ModuleDefLoader.loadFromClassPath(
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.merging.Three");
     assertNotNull(three.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/InOne.java"));
     assertNotNull(three.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/Shared.java"));
     assertNull(three.findSourceFile("com/google/gwt/dev/cfg/testdata/merging/client/InTwo.java"));
@@ -93,8 +101,8 @@ public class ModuleDefLoaderTest extends TestCase {
     builder.expectError("Invalid module name: 'com.google.gwt.dev.cfg.testdata.naming.Invalid..Foo'", null);
     UnitTestTreeLogger logger = builder.createLogger();
     try {
-      ModuleDefLoader.loadFromClassPath(logger,
-          "com.google.gwt.dev.cfg.testdata.naming.Invalid..Foo", compilerContext, false, true);
+      ModuleDefLoader.loadFromClassPath(
+          logger, compilerContext, "com.google.gwt.dev.cfg.testdata.naming.Invalid..Foo");
       fail("Expected exception from invalid module name.");
     } catch (UnableToCompleteException expected) {
     }
@@ -103,23 +111,22 @@ public class ModuleDefLoaderTest extends TestCase {
 
   public void testModuleNamingValid() throws Exception {
     TreeLogger logger = TreeLogger.NULL;
-    //TreeLogger logger = new PrintWriterTreeLogger();
 
     ModuleDef module;
-    module = ModuleDefLoader.loadFromClassPath(logger,
-        "com.google.gwt.dev.cfg.testdata.naming.Foo-test", compilerContext, false, true);
+    module = ModuleDefLoader.loadFromClassPath(
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.naming.Foo-test");
     assertNotNull(module.findSourceFile("com/google/gwt/dev/cfg/testdata/naming/client/Mock.java"));
 
-    module = ModuleDefLoader.loadFromClassPath(logger,
-        "com.google.gwt.dev.cfg.testdata.naming.7Foo", compilerContext, false, true);
+    module = ModuleDefLoader.loadFromClassPath(
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.naming.7Foo");
     assertNotNull(module.findSourceFile("com/google/gwt/dev/cfg/testdata/naming/client/Mock.java"));
 
-    module = ModuleDefLoader.loadFromClassPath(logger,
-        "com.google.gwt.dev.cfg.testdata.naming.Nested7Foo", compilerContext, false, true);
+    module = ModuleDefLoader.loadFromClassPath(
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.naming.Nested7Foo");
     assertNotNull(module.findSourceFile("com/google/gwt/dev/cfg/testdata/naming/client/Mock.java"));
 
-    module = ModuleDefLoader.loadFromClassPath(logger,
-        "com.google.gwt.dev.cfg.testdata.naming.Nested7Foo", compilerContext, false, true);
+    module = ModuleDefLoader.loadFromClassPath(
+        logger, compilerContext, "com.google.gwt.dev.cfg.testdata.naming.Nested7Foo");
     assertNotNull(module.findSourceFile("com/google/gwt/dev/cfg/testdata/naming/client/Mock.java"));
   }
 
@@ -133,7 +140,7 @@ public class ModuleDefLoaderTest extends TestCase {
     UnitTestTreeLogger logger = builder.createLogger();
     try {
       ModuleDefLoader.loadFromClassPath(logger,
-          "com.google.gwt.dev.cfg.testdata.naming.NestedInvalid", compilerContext, false, true);
+          compilerContext, "com.google.gwt.dev.cfg.testdata.naming.NestedInvalid", false, true);
       fail("Expected exception from invalid module name.");
     } catch (UnableToCompleteException expected) {
     }
@@ -148,7 +155,7 @@ public class ModuleDefLoaderTest extends TestCase {
     TreeLogger logger = TreeLogger.NULL;
     try {
       ModuleDefLoader.loadFromClassPath(logger,
-          "com.google.gwt.dev.cfg.testdata.separate.filesetone.FileSetOne", compilerContext, false,
+          compilerContext, "com.google.gwt.dev.cfg.testdata.separate.filesetone.FileSetOne", false,
           false);
       fail("Expected a fileset loaded as the root of a module tree to fail, but it didn't.");
     } catch (UnableToCompleteException e) {
@@ -156,11 +163,46 @@ public class ModuleDefLoaderTest extends TestCase {
     }
   }
 
-  public void testSeparateResourcesLibraryOne() throws UnableToCompleteException {
-    TreeLogger logger = TreeLogger.NULL;
-    ModuleDef libraryOneModule = ModuleDefLoader.loadFromClassPath(
-        logger, "com.google.gwt.dev.cfg.testdata.separate.libraryone.LibraryOne", compilerContext,
-        false, false);
+  public void testSeparateLibraryName() throws UnableToCompleteException {
+    ModuleDefLoader.loadFromClassPath(TreeLogger.NULL, compilerContext,
+        "com.google.gwt.dev.cfg.testdata.separate.libraryone.LibraryOne", false, false);
+
+    assertEquals("com.google.gwt.dev.cfg.testdata.separate.libraryone.LibraryOne",
+        mockLibraryWriter.getLibraryName());
+  }
+
+  public void testSeparateLibraryModuleReferences() throws UnableToCompleteException {
+    ModuleDefLoader.loadFromClassPath(TreeLogger.NULL, compilerContext,
+        "com.google.gwt.dev.cfg.testdata.separate.libraryone.LibraryOne", false, false);
+
+    // The library writer was given the module and it's direct fileset module xml files as build
+    // resources.
+    assertEquals(Sets.newHashSet(
+        "com/google/gwt/dev/cfg/testdata/separate/filesetone/FileSetOne.gwt.xml",
+        "com/google/gwt/dev/cfg/testdata/separate/libraryone/LibraryOne.gwt.xml"),
+        mockLibraryWriter.getBuildResourcePaths());
+    // The library writer was given LibraryTwo as a dependency library.
+    assertEquals(Sets.newHashSet("com.google.gwt.dev.cfg.testdata.separate.librarytwo.LibraryTwo"),
+        mockLibraryWriter.getDependencyLibraryNames());
+  }
+
+  public void testSeparateModuleReferences() throws UnableToCompleteException {
+    ModuleDef libraryOneModule = ModuleDefLoader.loadFromClassPath(TreeLogger.NULL, compilerContext,
+        "com.google.gwt.dev.cfg.testdata.separate.libraryone.LibraryOne", false, false);
+
+    // The module sees itself and it's direct fileset module as "target" modules.
+    assertEquals(Sets.newHashSet("com.google.gwt.dev.cfg.testdata.separate.libraryone.LibraryOne",
+        "com.google.gwt.dev.cfg.testdata.separate.filesetone.FileSetOne"),
+        libraryOneModule.getTargetLibraryModuleNames());
+    // The module sees the referenced library module as a "library" module.
+    assertEquals(Sets.newHashSet("com.google.gwt.dev.cfg.testdata.separate.librarytwo.LibraryTwo"),
+        libraryOneModule.getExternalLibraryModuleNames());
+  }
+
+  public void testSeparateModuleResourcesLibraryOne() throws UnableToCompleteException {
+    ModuleDef libraryOneModule = ModuleDefLoader.loadFromClassPath(TreeLogger.NULL, compilerContext,
+        "com.google.gwt.dev.cfg.testdata.separate.libraryone.LibraryOne", false, false);
+
     // Includes own source.
     assertNotNull(libraryOneModule.findSourceFile(
         "com/google/gwt/dev/cfg/testdata/separate/libraryone/client/LibraryOne.java"));

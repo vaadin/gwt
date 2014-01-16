@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -77,19 +77,7 @@ public class JProgram extends JNode {
    * Classes are inserted into the JsAST in the order they appear in the Set.
    */
   public static final Set<String> IMMORTAL_CODEGEN_TYPES_SET = new LinkedHashSet<String>(Arrays.asList(
-      "com.google.gwt.lang.SeedUtil", "com.google.gwt.lang.ArrayPrototypePatcher"));
-
-  public static final Set<String> INDEX_TYPES_SET = new LinkedHashSet<String>(Arrays.asList(
-      "java.io.Serializable", "java.lang.Object", "java.lang.String", "java.lang.Class",
-      "java.lang.CharSequence", "java.lang.Cloneable", "java.lang.Comparable", "java.lang.Enum",
-      "java.lang.Iterable", "java.util.Iterator", "java.lang.AssertionError", "java.lang.Boolean",
-      "java.lang.Byte", "java.lang.Character", "java.lang.Short", "java.lang.Integer",
-      "java.lang.Long", "java.lang.Float", "java.lang.Double", "java.lang.Throwable",
-      "com.google.gwt.core.client.GWT", JProgram.JAVASCRIPTOBJECT,
-      "com.google.gwt.lang.ClassLiteralHolder", "com.google.gwt.core.client.RunAsyncCallback",
-      "com.google.gwt.core.client.impl.AsyncFragmentLoader",
-      "com.google.gwt.core.client.impl.Impl", "com.google.gwt.lang.EntryMethodHolder",
-      "com.google.gwt.core.client.prefetch.RunAsyncCode", "com.google.gwt.lang.ArrayPrototypePatcher"));
+      "com.google.gwt.lang.SeedUtil"));
 
   public static final String JAVASCRIPTOBJECT = "com.google.gwt.core.client.JavaScriptObject";
 
@@ -117,7 +105,6 @@ public class JProgram extends JNode {
       IMMORTAL_CODEGEN_TYPES_SET.add("com.google.gwt.lang.CoverageUtil");
     }
     CODEGEN_TYPES_SET.addAll(IMMORTAL_CODEGEN_TYPES_SET);
-    INDEX_TYPES_SET.addAll(CODEGEN_TYPES_SET);
 
     /*
      * The format to trace methods is a colon-separated list of
@@ -263,7 +250,9 @@ public class JProgram extends JNode {
   public final List<JClassType> codeGenTypes = new ArrayList<JClassType>();
   public final List<JClassType> immortalCodeGenTypes = new ArrayList<JClassType>();
 
-  public final JTypeOracle typeOracle = new JTypeOracle(this);
+  // TODO(rluble): (Separate compilation) the second parameter (hasWholeWorldKnoledge) must be
+  // false when doing separate compilation.
+  public final JTypeOracle typeOracle = new JTypeOracle(this, true);
 
   /**
    * Special serialization treatment.
@@ -282,7 +271,16 @@ public class JProgram extends JNode {
 
   private final Map<String, JMethod> indexedMethods = new HashMap<String, JMethod>();
 
+  /**
+   * An index of types, from type name to type instance.
+   */
   private final Map<String, JDeclaredType> indexedTypes = new HashMap<String, JDeclaredType>();
+
+  /**
+   * The set of names of types (beyond the basic INDEX_TYPES_SET) whose instance should be indexed
+   * when seen.
+   */
+  private final Set<String> typeNamesToIndex = buildInitialTypeNamesToIndex();
 
   private final Map<JMethod, JMethod> instanceToStaticMap = new IdentityHashMap<JMethod, JMethod>();
 
@@ -318,7 +316,7 @@ public class JProgram extends JNode {
   private JClassType typeSpecialJavaScriptObject;
 
   private JClassType typeString;
-  
+
   private FragmentPartitioningResult fragmentPartitioninResult;
 
   public JProgram() {
@@ -328,6 +326,14 @@ public class JProgram extends JNode {
   public void addEntryMethod(JMethod entryPoint) {
     assert !entryMethods.contains(entryPoint);
     entryMethods.add(entryPoint);
+  }
+
+  /**
+   * Adds the given type name to the set of type names (beyond the basic INDEX_TYPES_SET) whose
+   * instance should be indexed when seen.
+   */
+  public void addIndexedTypeName(String typeName) {
+    typeNamesToIndex.add(typeName);
   }
 
   public void addType(JDeclaredType type) {
@@ -342,8 +348,8 @@ public class JProgram extends JNode {
     if (IMMORTAL_CODEGEN_TYPES_SET.contains(name)) {
       immortalCodeGenTypes.add((JClassType) type);
     }
-    
-    if (INDEX_TYPES_SET.contains(name)) {
+
+    if (typeNamesToIndex.contains(name)) {
       indexedTypes.put(type.getShortName(), type);
       for (JMethod method : type.getMethods()) {
         if (!method.isPrivate()) {
@@ -616,7 +622,7 @@ public class JProgram extends JNode {
     // Initial fragment is the +1.
     return runAsyncs.size() + 1;
   }
-  
+
   public FragmentPartitioningResult getFragmentPartitioningResult() {
     return fragmentPartitioninResult;
   }
@@ -803,6 +809,10 @@ public class JProgram extends JNode {
     return typeString;
   }
 
+  public Set<String> getTypeNamesToIndex() {
+    return typeNamesToIndex;
+  }
+
   public JNullType getTypeNull() {
     return JNullType.INSTANCE;
   }
@@ -974,6 +984,28 @@ public class JProgram extends JNode {
     visitor.endVisit(this, ctx);
   }
 
+  /**
+   * Builds the starter set of type names that should be indexed when seen during addType(). This
+   * set is a thread safe instance variable and external logic is free to modify it as further
+   * requirements are discovered.
+   */
+  private static Set<String> buildInitialTypeNamesToIndex() {
+    Set<String> typeNamesToIndex = new HashSet<String>();
+    typeNamesToIndex.addAll(ImmutableList.of("java.io.Serializable", "java.lang.Object",
+        "java.lang.String", "java.lang.Class", "java.lang.CharSequence", "java.lang.Cloneable",
+        "java.lang.Comparable", "java.lang.Enum", "java.lang.Iterable", "java.util.Iterator",
+        "java.lang.AssertionError", "java.lang.Boolean", "java.lang.Byte", "java.lang.Character",
+        "java.lang.Short", "java.lang.Integer", "java.lang.Long", "java.lang.Float",
+        "java.lang.Double", "java.lang.Throwable", "com.google.gwt.core.client.GWT",
+        JProgram.JAVASCRIPTOBJECT, "com.google.gwt.lang.ClassLiteralHolder",
+        "com.google.gwt.core.client.RunAsyncCallback",
+        "com.google.gwt.core.client.impl.AsyncFragmentLoader",
+        "com.google.gwt.core.client.impl.Impl",
+        "com.google.gwt.core.client.prefetch.RunAsyncCode"));
+    typeNamesToIndex.addAll(CODEGEN_TYPES_SET);
+    return typeNamesToIndex;
+  }
+
   private int classifyType(JReferenceType type) {
     assert !(type instanceof JNonNullType);
     if (type instanceof JNullType) {
@@ -998,7 +1030,7 @@ public class JProgram extends JNode {
 
   /**
    * See notes in {@link #writeObject(ObjectOutputStream)}.
-   * 
+   *
    * @see #writeObject(ObjectOutputStream)
    */
   private void readObject(ObjectInputStream stream) throws IOException, ClassNotFoundException {
@@ -1009,7 +1041,7 @@ public class JProgram extends JNode {
   /**
    * Serializing the Java AST is a multi-step process to avoid blowing out the
    * stack.
-   * 
+   *
    * <ol>
    * <li>Write all declared types in a lightweight manner to establish object
    * identity for types</li>
@@ -1021,7 +1053,7 @@ public class JProgram extends JNode {
    * <li>Write the bodies of the entry methods (unlike all other methods, these
    * are not contained by any type.</li>
    * </ol>
-   * 
+   *
    * The goal of this process to to avoid "running away" with the stack. Without
    * special logic here, lots of things would reference types, method body code
    * would reference both types and other methods, and really, really long

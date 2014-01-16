@@ -236,9 +236,13 @@ public class CrossSiteIframeLinker extends SelectionScriptLinker {
    * (May return either the JavaScript itself or the name of a Java resource ending with ".js".)
    */
   protected String getJsDevModeRedirectHook(LinkerContext context) {
+    if (shouldUseSelfForWindowAndDocument(context)) {
+      // Probably a Web Worker. Super Dev Mode isn't supported.
+      return "";
+    }
+
     // Enable Super Dev Mode for this app if the devModeRedirectEnabled config property is true.
-    // TODO(skybrian) Change the default to enabled once we're sure it's safe.
-    if (getBooleanConfigurationProperty(context, "devModeRedirectEnabled", false)) {
+    if (getBooleanConfigurationProperty(context, "devModeRedirectEnabled", true)) {
       return "com/google/gwt/core/linker/DevModeRedirectHook.js";
     } else {
       return "";
@@ -254,7 +258,8 @@ public class CrossSiteIframeLinker extends SelectionScriptLinker {
   protected String getJsDevModeUrlValidation(LinkerContext context) {
     // As a default, if the user provides devModeUrlWhitelistRegexp, then we verify that it
     // matches devModeUrl.
-    String regexp = getStringConfigurationProperty(context, "devModeUrlWhitelistRegexp", "");
+    String regexp = getStringConfigurationProperty(context, "devModeUrlWhitelistRegexp",
+        "http://(localhost|127\\.0\\.0\\.1)(:\\d+)?/.*");
     if (!regexp.isEmpty()) {
       return ""
           + "if (!/^" + regexp.replace("/", "\\/") + "$/.test(devModeUrl)) {\n"

@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -17,6 +17,7 @@ package com.google.gwt.dev.javac;
 
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
+import com.google.gwt.dev.CompilerContext;
 import com.google.gwt.dev.jdt.TypeRefVisitor;
 import com.google.gwt.dev.jjs.InternalCompilerException;
 import com.google.gwt.dev.jjs.ast.JDeclaredType;
@@ -100,7 +101,7 @@ public class JdtCompiler {
     /**
      * Checks for additional packages which may contain additional compilation
      * units.
-     * 
+     *
      * @param slashedPackageName the '/' separated name of the package to find
      * @return <code>true</code> if such a package exists
      */
@@ -109,7 +110,7 @@ public class JdtCompiler {
     /**
      * Finds a new compilation unit on-the-fly for the requested type, if there
      * is an alternate mechanism for doing so.
-     * 
+     *
      * @param binaryName the binary name of the requested type
      * @return a unit answering the name, or <code>null</code> if no such unit
      *         can be created
@@ -392,9 +393,9 @@ public class JdtCompiler {
     }
 
     public NameEnvironmentAnswer findType(char[][] compoundTypeName) {
-      char[] binaryNameChars = CharOperation.concatWith(compoundTypeName, '/');
-      String binaryName = String.valueOf(binaryNameChars);
-      CompiledClass compiledClass = binaryTypes.get(binaryName);
+      char[] internalNameChars = CharOperation.concatWith(compoundTypeName, '/');
+      String internalName = String.valueOf(internalNameChars);
+      CompiledClass compiledClass = internalTypes.get(internalName);
       try {
         if (compiledClass != null) {
           return compiledClass.getNameEnvironmentAnswer();
@@ -402,11 +403,11 @@ public class JdtCompiler {
       } catch (ClassFormatException ex) {
         // fall back to binary class
       }
-      if (isPackage(binaryName)) {
+      if (isPackage(internalName)) {
         return null;
       }
       if (additionalTypeProviderDelegate != null) {
-        GeneratedUnit unit = additionalTypeProviderDelegate.doFindAdditionalType(binaryName);
+        GeneratedUnit unit = additionalTypeProviderDelegate.doFindAdditionalType(internalName);
         if (unit != null) {
           CompilationUnitBuilder b = CompilationUnitBuilder.create(unit);
           Adapter a = new Adapter(b);
@@ -414,7 +415,7 @@ public class JdtCompiler {
         }
       }
       try {
-        URL resource = getClassLoader().getResource(binaryName + ".class");
+        URL resource = getClassLoader().getResource(internalName + ".class");
         if (resource != null) {
           InputStream openStream = resource.openStream();
           try {
@@ -484,27 +485,19 @@ public class JdtCompiler {
    * reflect the results of compilation. If the compiler aborts, logs an error
    * and throws UnableToCompleteException.
    */
-  public static List<CompilationUnit> compile(TreeLogger logger,
-      Collection<CompilationUnitBuilder> builders)
-      throws UnableToCompleteException {
-    return compile(logger, builders, SourceLevel.DEFAULT_SOURCE_LEVEL);
-  }
-
-  public static List<CompilationUnit> compile(TreeLogger logger,
-      Collection<CompilationUnitBuilder> builders, SourceLevel sourceLevel)
-      throws UnableToCompleteException {
+  public static List<CompilationUnit> compile(TreeLogger logger, CompilerContext compilerContext,
+      Collection<CompilationUnitBuilder> builders) throws UnableToCompleteException {
     Event jdtCompilerEvent = SpeedTracerLogger.start(CompilerEventType.JDT_COMPILER);
 
     try {
       DefaultUnitProcessor processor = new DefaultUnitProcessor();
-      JdtCompiler compiler = new JdtCompiler(processor, sourceLevel);
+      JdtCompiler compiler = new JdtCompiler(compilerContext, processor);
       compiler.doCompile(logger, builders);
       return processor.getResults();
     } finally {
       jdtCompilerEvent.end();
     }
   }
-
 
   public static CompilerOptions getStandardCompilerOptions() {
     CompilerOptions options = new CompilerOptions() {
@@ -547,19 +540,20 @@ public class JdtCompiler {
     return options;
   }
 
-  public static ReferenceBinding resolveType(LookupEnvironment lookupEnvironment, String typeName) {
+  private static ReferenceBinding resolveType(LookupEnvironment lookupEnvironment,
+      String sourceOrBinaryName) {
     ReferenceBinding type = null;
 
-    int p = typeName.indexOf('$');
+    int p = sourceOrBinaryName.indexOf('$');
     if (p > 0) {
       // resolve an outer type before trying to get the cached inner
-      String cupName = typeName.substring(0, p);
+      String cupName = sourceOrBinaryName.substring(0, p);
       char[][] chars = CharOperation.splitOn('.', cupName.toCharArray());
       ReferenceBinding outerType = lookupEnvironment.getType(chars);
       if (outerType != null) {
         // outer class was found
         resolveRecursive(outerType);
-        chars = CharOperation.splitOn('.', typeName.toCharArray());
+        chars = CharOperation.splitOn('.', sourceOrBinaryName.toCharArray());
         type = lookupEnvironment.getCachedType(chars);
         if (type == null) {
           // no inner type; this is a pure failure
@@ -568,7 +562,7 @@ public class JdtCompiler {
       }
     } else {
       // just resolve the type straight out
-      char[][] chars = CharOperation.splitOn('.', typeName.toCharArray());
+      char[][] chars = CharOperation.splitOn('.', sourceOrBinaryName.toCharArray());
       type = lookupEnvironment.getType(chars);
     }
 
@@ -587,10 +581,11 @@ public class JdtCompiler {
 
     // Assume that the last '.' should be '$' and try again.
     //
-    p = typeName.lastIndexOf('.');
+    p = sourceOrBinaryName.lastIndexOf('.');
     if (p >= 0) {
-      typeName = typeName.substring(0, p) + "$" + typeName.substring(p + 1);
-      return resolveType(lookupEnvironment, typeName);
+      sourceOrBinaryName =
+          sourceOrBinaryName.substring(0, p) + "$" + sourceOrBinaryName.substring(p + 1);
+      return resolveType(lookupEnvironment, sourceOrBinaryName);
     }
 
     return null;
@@ -624,9 +619,9 @@ public class JdtCompiler {
   private AdditionalTypeProviderDelegate additionalTypeProviderDelegate;
 
   /**
-   * Maps dotted binary names to compiled classes.
+   * Maps internal names to compiled classes.
    */
-  private final Map<String, CompiledClass> binaryTypes = new HashMap<String, CompiledClass>();
+  private final Map<String, CompiledClass> internalTypes = new HashMap<String, CompiledClass>();
 
   /**
    * Only active during a compile.
@@ -643,6 +638,8 @@ public class JdtCompiler {
    * Java source level compatibility.
    */
   private final SourceLevel sourceLevel;
+
+  private CompilerContext compilerContext;
 
   /**
    * Controls whether the compiler strips GwtIncompatible annotations.
@@ -663,9 +660,10 @@ public class JdtCompiler {
           SourceLevel.JAVA6, ClassFileConstants.JDK1_6,
           SourceLevel.JAVA7, ClassFileConstants.JDK1_7);
 
-  public JdtCompiler(UnitProcessor processor, SourceLevel sourceLevel) {
+  public JdtCompiler(CompilerContext compilerContext, UnitProcessor processor) {
+    this.compilerContext = compilerContext;
     this.processor = processor;
-    this.sourceLevel = sourceLevel;
+    this.sourceLevel = compilerContext.getOptions().getSourceLevel();
   }
 
   public void addCompiledUnit(CompilationUnit unit) {
@@ -899,8 +897,8 @@ public class JdtCompiler {
     }
   }
 
-  public ReferenceBinding resolveType(String typeName) {
-    return resolveType(compilerImpl.lookupEnvironment, typeName);
+  public ReferenceBinding resolveType(String sourceOrBinaryName) {
+    return resolveType(compilerImpl.lookupEnvironment, sourceOrBinaryName);
   }
 
   public void setAdditionalTypeProviderDelegate(AdditionalTypeProviderDelegate newDelegate) {
@@ -923,7 +921,7 @@ public class JdtCompiler {
 
   private void addBinaryTypes(Collection<CompiledClass> compiledClasses) {
     for (CompiledClass cc : compiledClasses) {
-      binaryTypes.put(cc.getInternalName(), cc);
+      internalTypes.put(cc.getInternalName(), cc);
     }
   }
 

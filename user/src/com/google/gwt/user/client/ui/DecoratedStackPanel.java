@@ -15,8 +15,8 @@
  */
 package com.google.gwt.user.client.ui;
 
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 
 /**
  * <p>
@@ -83,9 +83,9 @@ public class DecoratedStackPanel extends StackPanel {
     Element table = DOM.createTable();
     Element tbody = DOM.createTBody();
     DOM.appendChild(table, tbody);
-    DOM.setStyleAttribute(table, "width", "100%");
-    DOM.setElementPropertyInt(table, "cellSpacing", 0);
-    DOM.setElementPropertyInt(table, "cellPadding", 0);
+    table.getStyle().setProperty("width", "100%");
+    table.setPropertyInt("cellSpacing", 0);
+    table.setPropertyInt("cellPadding", 0);
 
     // Add the decorated rows
     for (int i = 0; i < DEFAULT_ROW_STYLENAMES.length; i++) {

@@ -16,13 +16,13 @@
 package com.google.gwt.user.client.ui;
 
 import com.google.gwt.dom.client.Document;
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.NativeEvent;
 import com.google.gwt.event.logical.shared.ValueChangeEvent;
 import com.google.gwt.event.logical.shared.ValueChangeHandler;
 import com.google.gwt.junit.client.GWTTestCase;
 import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 import com.google.gwt.user.client.History;
 import com.google.web.bindery.event.shared.HandlerRegistration;
 
@@ -66,7 +66,7 @@ public class HyperlinkTest extends GWTTestCase {
     Hyperlink link = new Hyperlink("foobar", TEST_HISTORY_TOKEN);
     Element element = link.getElement();
     Element anchorElement = (Element)element.getFirstChildElement();
-    String propertyString = DOM.getElementProperty(anchorElement, "href");
+    String propertyString = anchorElement.getPropertyString("href");
     int index = propertyString.indexOf('#');
     assertFalse(index == -1);
     String fragment = propertyString.substring(index + 1);

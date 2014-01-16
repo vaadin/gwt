@@ -507,9 +507,7 @@ public class Event extends NativeEvent {
    * @return the element's event listener
    */
   public static EventListener getEventListener(Element elem) {
-    // This cast is always valid because both Element types are JSOs and have
-    // no new fields are added in the subclass.
-    return DOM.getEventListener((com.google.gwt.user.client.Element) elem);
+    return DOM.getEventListener(elem);
   }
 
   /**
@@ -520,9 +518,7 @@ public class Event extends NativeEvent {
    *         values are described in {@link Event})
    */
   public static int getEventsSunk(Element elem) {
-    // This cast is always valid because both Element types are JSOs and have
-    // no new fields are added in the subclass.
-    return DOM.getEventsSunk((com.google.gwt.user.client.Element) elem);
+    return DOM.getEventsSunk(elem);
   }
 
   /**
@@ -543,7 +539,7 @@ public class Event extends NativeEvent {
    * @see #setCapture(Element)
    */
   public static void releaseCapture(Element elem) {
-    DOM.releaseCapture(elem.<com.google.gwt.user.client.Element> cast());
+    DOM.releaseCapture(elem);
   }
 
   /**
@@ -566,7 +562,7 @@ public class Event extends NativeEvent {
    * @param elem the element on which to set mouse capture
    */
   public static void setCapture(Element elem) {
-    DOM.setCapture(elem.<com.google.gwt.user.client.Element> cast());
+    DOM.setCapture(elem);
   }
 
   /**
@@ -577,9 +573,7 @@ public class Event extends NativeEvent {
    * @param listener the listener to receive {@link Event events}
    */
   public static void setEventListener(Element elem, EventListener listener) {
-    // This cast is always valid because both Element types are JSOs and have
-    // no new fields are added in the subclass.
-    DOM.setEventListener((com.google.gwt.user.client.Element) elem, listener);
+    DOM.setEventListener(elem, listener);
   }
 
   /**
@@ -592,9 +586,7 @@ public class Event extends NativeEvent {
    *          possible values are described in {@link Event})
    */
   public static void sinkEvents(Element elem, int eventBits) {
-    // This cast is always valid because both Element types are JSOs and have
-    // no new fields are added in the subclass.
-    DOM.sinkEvents((com.google.gwt.user.client.Element) elem, eventBits);
+    DOM.sinkEvents(elem, eventBits);
   }
 
   /**

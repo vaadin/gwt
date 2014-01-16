@@ -15,8 +15,8 @@
  */
 package com.google.gwt.user.client.ui;
 
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 
 /**
  * A panel that lays all of its widgets out in a single vertical column.
@@ -35,8 +35,8 @@ public class VerticalPanel extends CellPanel implements HasAlignment,
    * Creates an empty vertical panel.
    */
   public VerticalPanel() {
-    DOM.setElementProperty(getTable(), "cellSpacing", "0");
-    DOM.setElementProperty(getTable(), "cellPadding", "0");
+    getTable().setPropertyString("cellSpacing", "0");
+    getTable().setPropertyString("cellPadding", "0");
   }
 
   @Override
@@ -88,7 +88,7 @@ public class VerticalPanel extends CellPanel implements HasAlignment,
     Element td = DOM.getParent(w.getElement());
     boolean removed = super.remove(w);
     if (removed) {
-      DOM.removeChild(getBody(), DOM.getParent(td));
+      getBody().removeChild(DOM.getParent(td));
     }
     return removed;
   }

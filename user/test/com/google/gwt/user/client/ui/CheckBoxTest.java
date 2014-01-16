@@ -16,6 +16,7 @@
 package com.google.gwt.user.client.ui;
 
 import com.google.gwt.dom.client.Document;
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.InputElement;
 import com.google.gwt.dom.client.NativeEvent;
 import com.google.gwt.event.dom.client.ClickEvent;
@@ -26,7 +27,6 @@ import com.google.gwt.event.shared.HandlerManager;
 import com.google.gwt.junit.client.GWTTestCase;
 import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 
 /**
  * Tests the CheckBox Widget.
@@ -75,10 +75,10 @@ public class CheckBoxTest extends GWTTestCase {
     cb.setText("test Text");
     assertEquals(cb.getText(), "test Text");
 
-    cb.setChecked(true);
-    assertTrue(cb.isChecked());
-    cb.setChecked(false);
-    assertFalse(cb.isChecked());
+    cb.setValue(true);
+    assertTrue(cb.getValue());
+    cb.setValue(false);
+    assertFalse(cb.getValue());
 
     cb.setValue(true);
     assertTrue(cb.getValue());
@@ -241,9 +241,9 @@ public class CheckBoxTest extends GWTTestCase {
   public void testValueChangeEvent() {
     Handler h = new Handler();
     cb.addValueChangeHandler(h);
-    cb.setChecked(false);
+    cb.setValue(false);
     assertNull(h.received);
-    cb.setChecked(true);
+    cb.setValue(true);
     assertNull(h.received);
 
     cb.setValue(false);

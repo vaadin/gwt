@@ -15,9 +15,9 @@
  */
 package com.google.gwt.user.client.ui;
 
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.i18n.client.LocaleInfo;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 
 /**
  * <p>
@@ -166,8 +166,8 @@ public class DecoratorPanel extends SimplePanel {
     Element table = getElement();
     tbody = DOM.createTBody();
     DOM.appendChild(table, tbody);
-    DOM.setElementPropertyInt(table, "cellSpacing", 0);
-    DOM.setElementPropertyInt(table, "cellPadding", 0);
+    table.setPropertyInt("cellSpacing", 0);
+    table.setPropertyInt("cellPadding", 0);
 
     // Add each row
     for (int i = 0; i < rowStyles.length; i++) {
@@ -189,14 +189,14 @@ public class DecoratorPanel extends SimplePanel {
    * @param cell the cell index
    * @return the Element at the given row and cell
    */
-  protected Element getCellElement(int row, int cell) {
+  protected com.google.gwt.user.client.Element getCellElement(int row, int cell) {
     Element tr = DOM.getChild(tbody, row);
     Element td = DOM.getChild(tr, cell);
-    return DOM.getFirstChild(td);
+    return DOM.asOld(DOM.getFirstChild(td));
   }
 
   @Override
-  protected Element getContainerElement() {
-    return containerElem;
+  protected com.google.gwt.user.client.Element getContainerElement() {
+    return DOM.asOld(containerElem);
   }
 }

@@ -16,6 +16,7 @@
 package com.google.gwt.user.client.ui;
 
 import com.google.gwt.core.client.GWT;
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.HasClickHandlers;
@@ -25,7 +26,6 @@ import com.google.gwt.i18n.shared.DirectionEstimator;
 import com.google.gwt.i18n.shared.HasDirectionEstimator;
 import com.google.gwt.safehtml.shared.SafeHtml;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.Element;
 import com.google.gwt.user.client.Event;
 import com.google.gwt.user.client.History;
 import com.google.gwt.user.client.ui.impl.HyperlinkImpl;
@@ -283,7 +283,7 @@ public class Hyperlink extends Widget implements HasHTML, SourcesClickEvents,
     super.onBrowserEvent(event);
     if (DOM.eventGetType(event) == Event.ONCLICK && impl.handleAsClick(event)) {
       History.newItem(getTargetHistoryToken());
-      DOM.eventPreventDefault(event);
+      event.preventDefault();
     }
   }
 
@@ -343,7 +343,7 @@ public class Hyperlink extends Widget implements HasHTML, SourcesClickEvents,
       : "targetHistoryToken must not be null, consider using Anchor instead";
     this.targetHistoryToken = targetHistoryToken;
     String hash = History.encodeHistoryToken(targetHistoryToken);
-    DOM.setElementProperty(anchorElem, "href", "#" + hash);
+    anchorElem.setPropertyString("href", "#" + hash);
   }
 
   public void setText(String text) {

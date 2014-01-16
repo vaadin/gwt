@@ -25,9 +25,6 @@ import com.google.gwt.dev.jjs.ast.JField;
 import com.google.gwt.dev.jjs.ast.JMethod;
 import com.google.gwt.dev.jjs.impl.JJSTestBase;
 import com.google.gwt.dev.jjs.impl.JavaToJavaScriptMap;
-import com.google.gwt.dev.jjs.impl.codesplitter.FragmentExtractor;
-import com.google.gwt.dev.jjs.impl.codesplitter.FragmentExtractor.LivenessPredicate;
-import com.google.gwt.dev.jjs.impl.codesplitter.FragmentExtractor.NothingAlivePredicate;
 import com.google.gwt.dev.js.ast.JsExprStmt;
 import com.google.gwt.dev.js.ast.JsFunction;
 import com.google.gwt.dev.js.ast.JsInvocation;
@@ -105,6 +102,11 @@ public class FragmentExtractorTest extends JJSTestBase {
   }
 
   private static class MockJavaToJavaScriptMap implements JavaToJavaScriptMap {
+
+    @Override
+    public JsName nameForField(JField field) {
+      return null;
+    }
 
     @Override
     public JsName nameForMethod(JMethod method) {

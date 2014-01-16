@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -19,7 +19,7 @@ import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.dev.jjs.PermutationResult;
 import com.google.gwt.dev.jjs.UnifiedAst;
-import com.google.gwt.dev.util.FileBackedObject;
+import com.google.gwt.dev.util.PersistenceBackedObject;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,12 +42,12 @@ public class ThreadedPermutationWorkerFactory extends PermutationWorkerFactory {
       this.id = id;
     }
 
-    public void compile(TreeLogger logger, Permutation permutation,
-        FileBackedObject<PermutationResult> resultFile)
+    @Override
+    public void compile(TreeLogger logger, CompilerContext compilerContext, Permutation permutation,
+        PersistenceBackedObject<PermutationResult> resultFile)
         throws TransientWorkerException, UnableToCompleteException {
       try {
-        PermutationResult result = CompilePerms.compile(logger, permutation,
-            ast);
+        PermutationResult result = CompilePerms.compile(logger, compilerContext, permutation, ast);
         resultFile.set(logger, result);
       } catch (OutOfMemoryError e) {
         logger.log(TreeLogger.ERROR,

@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -408,6 +408,7 @@ public class ToStringGenerationVisitor extends TextOutputVisitor {
   @Override
   public boolean visit(JDoStatement x, Context ctx) {
     print(CHARS_DO);
+    needSemi = true;
     if (x.getBody() != null) {
       nestedStatementPush(x.getBody());
       accept(x.getBody());
@@ -490,13 +491,15 @@ public class ToStringGenerationVisitor extends TextOutputVisitor {
 
     semi();
     space();
-    if (x.getTestExpr() != null) {
-      accept(x.getTestExpr());
+    if (x.getCondition() != null) {
+      accept(x.getCondition());
     }
 
     semi();
     space();
-    visitCollectionWithCommas(x.getIncrements().iterator());
+    if (x.getIncrements() != null) {
+      accept(x.getIncrements());
+    }
     rparen();
 
     if (x.getBody() != null) {
@@ -679,7 +682,7 @@ public class ToStringGenerationVisitor extends TextOutputVisitor {
   @Override
   public boolean visit(JMultiExpression x, Context ctx) {
     lparen();
-    visitCollectionWithCommas(x.exprs.iterator());
+    visitCollectionWithCommas(x.getExpressions().iterator());
     rparen();
     return false;
   }

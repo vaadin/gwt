@@ -16,13 +16,14 @@
 package com.google.gwt.user.client.ui;
 
 import com.google.gwt.dom.client.Document;
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.Style.Overflow;
 import com.google.gwt.dom.client.Style.Position;
 import com.google.gwt.event.dom.client.ScrollEvent;
 import com.google.gwt.event.dom.client.ScrollHandler;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.touch.client.TouchScroller;
-import com.google.gwt.user.client.Element;
+import com.google.gwt.user.client.DOM;
 import com.google.gwt.user.client.Event;
 
 /**
@@ -45,7 +46,7 @@ public class ScrollPanel extends SimplePanel implements SourcesScrollEvents,
    */
   public ScrollPanel() {
     this.scrollableElem = getElement();
-    this.containerElem = Document.get().createDivElement().cast();
+    this.containerElem = Document.get().createDivElement();
     scrollableElem.appendChild(containerElem);
     initialize();
   }
@@ -297,8 +298,8 @@ public class ScrollPanel extends SimplePanel implements SourcesScrollEvents,
   }
 
   @Override
-  protected Element getContainerElement() {
-    return containerElem;
+  protected com.google.gwt.user.client.Element getContainerElement() {
+    return DOM.asOld(containerElem);
   }
 
   /**
@@ -307,8 +308,8 @@ public class ScrollPanel extends SimplePanel implements SourcesScrollEvents,
    * 
    * @return the scrollable element
    */
-  protected Element getScrollableElement() {
-    return scrollableElem;
+  protected com.google.gwt.user.client.Element getScrollableElement() {
+    return DOM.asOld(scrollableElem);
   }
 
   @Override

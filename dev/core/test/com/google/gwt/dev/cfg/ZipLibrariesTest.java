@@ -27,9 +27,21 @@ import java.io.IOException;
 import java.util.Set;
 
 /**
- * Tests for ZipLibrary and ZipLibraryBuilder.
+ * Tests for ZipLibrary and ZipLibraryWriter.
  */
 public class ZipLibrariesTest extends TestCase {
+
+  private static class SimpleMockResource extends MockResource {
+
+    public SimpleMockResource(String path) {
+      super(path);
+    }
+
+    @Override
+    public CharSequence getContent() {
+      return "";
+    }
+  }
 
   public void testRoundTrip() throws IOException, IncompatibleLibraryVersionException {
     File zipFile = File.createTempFile("Test", ".gwtlib");
@@ -46,31 +58,44 @@ public class ZipLibrariesTest extends TestCase {
     Set<String> expectedDependencyLibraryNames = Sets.newHashSet("FooLib", "BarLib");
     MockCompilationUnit expectedCompilationUnit =
         new MockCompilationUnit("com.google.gwt.core.client.RuntimeRebinder", "blah");
+    MockCompilationUnit expectedSuperSourceCompilationUnit =
+        new MockCompilationUnit("com.google.gwt.core.client.SuperRuntimeRebinder", "superblah") {
+            @Override
+          public boolean isSuperSource() {
+            return true;
+          }
+        };
 
     // Put data in the library and save it.
-    ZipLibraryBuilder zipLibraryBuilder = new ZipLibraryBuilder(zipFile.getPath());
-    zipLibraryBuilder.setLibraryName(expectedLibraryName);
-    zipLibraryBuilder.addPublicResource(new MockResource("index.html") {
+    ZipLibraryWriter zipLibraryWriter = new ZipLibraryWriter(zipFile.getPath());
+    zipLibraryWriter.setLibraryName(expectedLibraryName);
+    // Include unusual path characters.
+    zipLibraryWriter.addPublicResource(new SimpleMockResource("ui:binder:com.foo.baz.TableView"));
+    // Include specific expected contents.
+    zipLibraryWriter.addPublicResource(new MockResource("index.html") {
         @Override
       public CharSequence getContent() {
         return expectedResourceContents;
       }
     });
-    zipLibraryBuilder.addNewConfigurationPropertyValuesByName(
+    zipLibraryWriter.addNewConfigurationPropertyValuesByName(
         "user.agent", expectedUserAgentConfigurationValues);
-    zipLibraryBuilder.addNewConfigurationPropertyValuesByName(
+    zipLibraryWriter.addNewConfigurationPropertyValuesByName(
         "locale", expectedLocaleConfigurationValues);
     for (String generatorName : expectedRanGeneratorNames) {
-      zipLibraryBuilder.addRanGeneratorName(generatorName);
+      zipLibraryWriter.addRanGeneratorName(generatorName);
     }
-    zipLibraryBuilder.addDependencyLibraryNames(expectedDependencyLibraryNames);
-    zipLibraryBuilder.addCompilationUnit(expectedCompilationUnit);
-    zipLibraryBuilder.write();
+    zipLibraryWriter.addDependencyLibraryNames(expectedDependencyLibraryNames);
+    zipLibraryWriter.addCompilationUnit(expectedCompilationUnit);
+    zipLibraryWriter.addCompilationUnit(expectedSuperSourceCompilationUnit);
+    zipLibraryWriter.write();
 
     // Read data back from disk.
     ZipLibrary zipLibrary = new ZipLibrary(zipFile.getPath());
     CompilationUnit actualCompilationUnit =
         zipLibrary.getCompilationUnitByTypeName("com.google.gwt.core.client.RuntimeRebinder");
+    CompilationUnit actualSuperSourceCompilationUnit =
+        zipLibrary.getCompilationUnitByTypeName("com.google.gwt.core.client.SuperRuntimeRebinder");
 
     // Compare it.
     assertEquals(expectedLibraryName, zipLibrary.getLibraryName());
@@ -82,9 +107,15 @@ public class ZipLibrariesTest extends TestCase {
     assertEquals(expectedLocaleConfigurationValues,
         zipLibrary.getNewConfigurationPropertyValuesByName().get("locale"));
     assertEquals(expectedDependencyLibraryNames, zipLibrary.getDependencyLibraryNames());
+    // CompilationUnit
     assertEquals(
         expectedCompilationUnit.getResourceLocation(), actualCompilationUnit.getResourceLocation());
     assertEquals(expectedCompilationUnit.getTypeName(), actualCompilationUnit.getTypeName());
+    // SuperSourceCompilationUnit
+    assertEquals(expectedSuperSourceCompilationUnit.getResourceLocation(),
+        actualSuperSourceCompilationUnit.getResourceLocation());
+    assertEquals(expectedSuperSourceCompilationUnit.getTypeName(),
+        actualSuperSourceCompilationUnit.getTypeName());
   }
 
   public void testVersionNumberException() throws IOException {
@@ -92,9 +123,9 @@ public class ZipLibrariesTest extends TestCase {
     zipFile.deleteOnExit();
 
     // Put data in the library and save it.
-    ZipLibraryBuilder zipLibraryBuilder = new ZipLibraryBuilder(zipFile.getPath());
-    zipLibraryBuilder.setLibraryName("BazLib");
-    zipLibraryBuilder.write();
+    ZipLibraryWriter zipLibraryWriter = new ZipLibraryWriter(zipFile.getPath());
+    zipLibraryWriter.setLibraryName("BazLib");
+    zipLibraryWriter.write();
 
     // Change the expected version number so that this next read should fail.
     ZipLibraries.versionNumber++;

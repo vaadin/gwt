@@ -129,7 +129,7 @@ public class LinkedHashMap<K, V> extends HashMap<K, V> implements Map<K, V> {
       Object key = entry.getKey();
       if (LinkedHashMap.this.containsKey(key)) {
         Object value = LinkedHashMap.this.get(key);
-        return Utility.equalsWithNullCheck(entry.getValue(), value);
+        return Objects.equals(entry.getValue(), value);
       }
       return false;
     }
@@ -199,6 +199,11 @@ public class LinkedHashMap<K, V> extends HashMap<K, V> implements Map<K, V> {
   }
 
   @Override
+  public Object clone() {
+    return new LinkedHashMap<K, V>(this);
+  }
+
+  @Override
   public boolean containsKey(Object key) {
     return map.containsKey(key);
   }
@@ -207,7 +212,7 @@ public class LinkedHashMap<K, V> extends HashMap<K, V> implements Map<K, V> {
   public boolean containsValue(Object value) {
     ChainEntry node = head.next;
     while (node != head) {
-      if (Utility.equalsWithNullCheck(node.getValue(), value)) {
+      if (Objects.equals(node.getValue(), value)) {
         return true;
       }
       node = node.next;

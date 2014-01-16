@@ -131,9 +131,10 @@ public class CompileOnePerm {
   private static boolean compileSpecificPermutation(TreeLogger logger,
       String moduleName, PrecompileTaskOptions precompilationOptions, int permId,
       File compilerWorkDir) throws UnableToCompleteException {
-    CompilerContext compilerContext =
-        new CompilerContext.Builder().options(precompilationOptions).build();
-    ModuleDef module = ModuleDefLoader.loadFromClassPath(logger, moduleName, compilerContext);
+    CompilerContext.Builder compilerContextBuilder = new CompilerContext.Builder();
+    CompilerContext compilerContext = compilerContextBuilder.options(precompilationOptions).build();
+    ModuleDef module = ModuleDefLoader.loadFromClassPath(logger, compilerContext, moduleName);
+    compilerContext = compilerContextBuilder.module(module).build();
 
     logger = logger.branch(TreeLogger.INFO, "Compiling permutation " + permId);
 
@@ -147,9 +148,9 @@ public class CompileOnePerm {
         new int[]{permId}, precompilation);
     assert subPerms.length == 1;
 
-    PermutationResult permResult = precompilation.getUnifiedAst().compilePermutation(
-        logger, subPerms[0]);
-    Link.linkOnePermutationToJar(logger, module,
+    PermutationResult permResult =
+        precompilation.getUnifiedAst().compilePermutation(logger, compilerContext, subPerms[0]);
+    Link.linkOnePermutationToJar(logger, module, compilerContext.getPublicResourceOracle(),
         precompilation.getGeneratedArtifacts(), permResult, makePermFilename(
             compilerWorkDir, permId), precompilationOptions);
     return true;

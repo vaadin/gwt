@@ -632,7 +632,6 @@ public class CellTable<T> extends AbstractCellTable<T> implements
       table.appendChild(tbodyLoading);
     }
     tfoot = table.createTFoot();
-    setStyleName(resources.cellTableStyle().cellTableWidget());
 
     // Attach the messages panel.
     {
@@ -907,6 +906,18 @@ public class CellTable<T> extends AbstractCellTable<T> implements
         ensureTableColElement(i).getStyle().setDisplay(Display.NONE);
       }
     }
+  }
+
+  @Override
+  protected void doAttachChildren() {
+    super.doAttachChildren();
+    doAttach(messagesPanel);
+  }
+
+  @Override
+  protected void doDetachChildren() {
+    super.doDetachChildren();
+    doDetach(messagesPanel);
   }
 
   /**
