@@ -38,8 +38,10 @@ import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
 import com.google.gwt.thirdparty.guava.common.base.Predicate;
 import com.google.gwt.thirdparty.guava.common.collect.Collections2;
 import com.google.gwt.thirdparty.guava.common.collect.Iterables;
-import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
+import com.google.gwt.thirdparty.guava.common.collect.Maps;
+import com.google.gwt.thirdparty.guava.common.collect.Multimap;
+
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -47,8 +49,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import javax.annotation.Nullable;
 
 /**
  * <p>
@@ -101,7 +101,6 @@ import javax.annotation.Nullable;
  * </p>
  */
 public class CodeSplitter {
-  // TODO(rluble): This class needs a serious refactor to be able to add significant unit tests.
 
   public static ControlFlowAnalyzer computeInitiallyLive(JProgram jprogram) {
     return computeInitiallyLive(jprogram, MultipleDependencyGraphRecorder.NULL_RECORDER);
@@ -200,6 +199,28 @@ public class CodeSplitter {
         }
       }
     }
+  }
+
+  /**
+   * Group run asyncs that have the same class literal as the first parameter in the two parameter
+   * GWT.runAsync call.
+   */
+  private static Collection<Collection<JRunAsync>> groupAsyncsByClassLiteral(
+      Collection<JRunAsync> runAsyncs) {
+    Collection<Collection<JRunAsync>> result = Lists.newArrayList();
+    Multimap<String, JRunAsync> asyncsGroupedByName =
+        CodeSplitters.computeRunAsyncsByName(runAsyncs, true);
+    // Add runAsyncs that have class literals in groups.
+    result.addAll(asyncsGroupedByName.asMap().values());
+    // Add all the rest.
+    result.addAll(CodeSplitters.getListOfLists(Collections2.filter(runAsyncs,
+        new Predicate<JRunAsync>() {
+          @Override
+          public boolean apply(JRunAsync runAsync) {
+            return !runAsync.hasExplicitClassLiteral();
+          }
+        })));
+    return result;
   }
 
   private final MultipleDependencyGraphRecorder dependencyRecorder;
@@ -431,15 +452,20 @@ public class CodeSplitter {
     // Set the initial fragment sequence.
     jprogram.setInitialFragmentIdSequence(initialFragmentNumberSequence);
 
-    // Decide exclusive fragments according to the preselected partitionStrategy.
-    List<Fragment>  exclusiveFragments =
-        partitionStrategy.partitionIntoFragments(logger, initialSequenceCfa,
-            Collections2.filter(jprogram.getRunAsyncs(), new Predicate<JRunAsync>() {
+    Collection<Collection<JRunAsync>> groupedNonInitialRunAsyncs =
+        groupAsyncsByClassLiteral(Collections2.filter(jprogram.getRunAsyncs(),
+            new Predicate<JRunAsync>() {
               @Override
-              public boolean apply(@Nullable JRunAsync jRunAsync) {
+              public boolean apply(JRunAsync jRunAsync) {
                 return !isInitial(jRunAsync);
               }
-            }));
+            }
+        ));
+
+    // Decide exclusive fragments according to the preselected partitionStrategy.
+    Collection<Fragment>  exclusiveFragments =
+        partitionStrategy.partitionIntoFragments(logger, initialSequenceCfa,
+            groupedNonInitialRunAsyncs);
 
     Fragment leftOverFragment =
         new Fragment(Fragment.Type.NOT_EXCLUSIVE, lastInitialFragment);
