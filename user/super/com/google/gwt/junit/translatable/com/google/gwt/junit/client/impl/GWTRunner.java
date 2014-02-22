@@ -47,6 +47,7 @@ public class GWTRunner implements EntryPoint {
     /**
      * Delegate to the {@link TestBlockListener}.
      */
+    @Override
     public void onFailure(Throwable caught) {
       testBlockListener.onFailure(caught);
     }
@@ -55,6 +56,7 @@ public class GWTRunner implements EntryPoint {
      * Update our client info with the server-provided session id then delegate
      * to the {@link TestBlockListener}.
      */
+    @Override
     public void onSuccess(InitialResponse result) {
       clientInfo = new ClientInfo(result.getSessionId(),
           clientInfo.getUserAgent());
@@ -77,6 +79,7 @@ public class GWTRunner implements EntryPoint {
     /**
      * A call to junitHost failed.
      */
+    @Override
     public void onFailure(Throwable caught) {
       if (maxRetryCount < 0 || curRetryCount < maxRetryCount) {
         reportWarning("Retrying syncing back to junit backend. (Exception: " + caught + ")");
@@ -96,6 +99,7 @@ public class GWTRunner implements EntryPoint {
     /**
      * A call to junitHost succeeded; run the next test case.
      */
+    @Override
     public void onSuccess(TestBlock nextTestBlock) {
       curRetryCount = 0;
       currentBlock = nextTestBlock;
@@ -116,16 +120,6 @@ public class GWTRunner implements EntryPoint {
    * A query param specifying my unique session cookie.
    */
   private static final String SESSIONID_QUERY_PARAM = "gwt.junit.sessionId";
-
-  /**
-   * A query param specifying the test class to run, for serverless mode.
-   */
-  private static final String TESTCLASS_QUERY_PARAM = "gwt.junit.testclassname";
-
-  /**
-   * A query param specifying the test method to run, for serverless mode.
-   */
-  private static final String TESTFUNC_QUERY_PARAM = "gwt.junit.testfuncname";
 
   /**
    * A query param specifying the number of times to retry if the server fails
@@ -188,11 +182,6 @@ public class GWTRunner implements EntryPoint {
    */
   private int maxRetryCount;
 
-  /**
-   * If true, run a single test case with no RPC.
-   */
-  private boolean serverless = false;
-
   private GWTTestAccessor testAccessor;
 
   // TODO(FINDBUGS): can this be a private constructor to avoid multiple
@@ -209,24 +198,14 @@ public class GWTRunner implements EntryPoint {
     GWT.setUncaughtExceptionHandler(null);
   }
 
+  @Override
   public void onModuleLoad() {
     testAccessor = new GWTTestAccessor();
     clientInfo = new ClientInfo(parseQueryParamInteger(SESSIONID_QUERY_PARAM, -1), getUserAgent());
     maxRetryCount = parseQueryParamInteger(RETRYCOUNT_QUERY_PARAM, 3);
-    currentBlock = checkForQueryParamTestToRun();
-    if (currentBlock != null) {
-      /*
-       * Just run a single test with no server-side interaction.
-       */
-      serverless = true;
-      runTest();
-    } else {
-      /*
-       * Normal operation: Kick off the test running process by getting the
-       * first method to run from the server.
-       */
-      syncToServer();
-    }
+
+    // Kick off the test running process by getting the first method to run from the server.
+    syncToServer();
   }
 
   private String getUserAgent() {
@@ -235,10 +214,6 @@ public class GWTRunner implements EntryPoint {
   }
 
   public void reportResultsAndGetNextMethod(JUnitResult result) {
-    if (serverless) {
-      // That's it, we're done
-      return;
-    }
     if (failureMessage != null) {
       RuntimeException ex = new RuntimeException(failureMessage);
       result.setException(ex);
@@ -249,6 +224,7 @@ public class GWTRunner implements EntryPoint {
     if (currentTestIndex < currentBlock.getTests().length) {
       // Run the next test after a short delay.
       Scheduler.get().scheduleDeferred(new Scheduler.ScheduledCommand() {
+        @Override
         public void execute() {
           doRunTest();
         }
@@ -264,18 +240,6 @@ public class GWTRunner implements EntryPoint {
   public void executeTestMethod(GWTTestCase testCase, String className, String methodName)
       throws Throwable {
     testAccessor.invoke(testCase, className, methodName);
-  }
-
-  private TestBlock checkForQueryParamTestToRun() {
-    String testClass = Window.Location.getParameter(TESTCLASS_QUERY_PARAM);
-    String testMethod = Window.Location.getParameter(TESTFUNC_QUERY_PARAM);
-    if (testClass == null || testMethod == null) {
-      return null;
-    }
-    // TODO: support blocks of tests?
-    TestInfo[] tests = new TestInfo[] {new TestInfo(GWT.getModuleName(),
-        testClass, testMethod)};
-    return new TestBlock(tests, 0);
   }
 
   private void doRunTest() {

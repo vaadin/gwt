@@ -117,7 +117,8 @@ public class CheckForUpdates {
       final TreeLogger logger, final long minCheckMillis) {
     final String entryPoint = computeEntryPoint();
     FutureTask<UpdateResult> task = new FutureTask<UpdateResult>(
-        new Callable<UpdateResult>() {         
+        new Callable<UpdateResult>() {
+          @Override
           public UpdateResult call() throws Exception {
             final CheckForUpdates updateChecker = createUpdateChecker(logger,
                 entryPoint);

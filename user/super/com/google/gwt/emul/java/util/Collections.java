@@ -72,8 +72,68 @@ public class Collections {
     }
 
     @Override
+    public Iterator iterator() {
+      return emptyIterator();
+    }
+
+    @Override
+    public ListIterator listIterator() {
+      return emptyListIterator();
+    }
+
+    @Override
     public int size() {
       return 0;
+    }
+  }
+
+  private static final class EmptyListIterator implements ListIterator {
+
+    static final EmptyListIterator INSTANCE = new EmptyListIterator();
+
+    @Override
+    public void add(Object o) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean hasNext() {
+      return false;
+    }
+
+    @Override
+    public boolean hasPrevious() {
+      return false;
+    }
+
+    @Override
+    public Object next() {
+      throw new NoSuchElementException();
+    }
+
+    @Override
+    public int nextIndex() {
+      return 0;
+    }
+
+    @Override
+    public Object previous() {
+      throw new NoSuchElementException();
+    }
+
+    @Override
+    public int previousIndex() {
+      return -1;
+    }
+
+    @Override
+    public void remove() {
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public void set(Object o) {
+      throw new IllegalStateException();
     }
   }
 
@@ -86,19 +146,7 @@ public class Collections {
 
     @Override
     public Iterator iterator() {
-      return new Iterator() {
-        public boolean hasNext() {
-          return false;
-        }
-
-        public Object next() {
-          throw new NoSuchElementException();
-        }
-
-        public void remove() {
-          throw new UnsupportedOperationException();
-        }
-      };
+      return emptyIterator();
     }
 
     @Override
@@ -822,8 +870,18 @@ public class Collections {
   }
 
   @SuppressWarnings(value = {"unchecked", "cast"})
+  public static <T> Iterator<T> emptyIterator() {
+    return (Iterator<T>) EmptyListIterator.INSTANCE;
+  }
+
+  @SuppressWarnings(value = {"unchecked", "cast"})
   public static <T> List<T> emptyList() {
     return (List<T>) EMPTY_LIST;
+  }
+
+  @SuppressWarnings(value = {"unchecked", "cast"})
+  public static <T> ListIterator<T> emptyListIterator() {
+    return (ListIterator<T>) EmptyListIterator.INSTANCE;
   }
 
   @SuppressWarnings(value = {"unchecked", "cast"})

@@ -29,8 +29,6 @@ import com.google.gwt.event.dom.client.MouseOverHandler;
 import com.google.gwt.event.dom.client.MouseUpHandler;
 import com.google.gwt.event.dom.client.MouseWheelHandler;
 import com.google.gwt.event.shared.HandlerRegistration;
-import com.google.gwt.junit.DoNotRunWith;
-import com.google.gwt.junit.Platform;
 import com.google.gwt.safehtml.shared.SafeHtml;
 import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.google.gwt.user.client.DOM;
@@ -54,46 +52,57 @@ public class DialogBoxTest extends PopupTest {
       initWidget(panel);
     }
 
+    @Override
     public HandlerRegistration addMouseDownHandler(MouseDownHandler handler) {
       return panel.addMouseDownHandler(handler);
     }
 
+    @Override
     public HandlerRegistration addMouseMoveHandler(MouseMoveHandler handler) {
       return panel.addMouseMoveHandler(handler);
     }
 
+    @Override
     public HandlerRegistration addMouseOutHandler(MouseOutHandler handler) {
       return panel.addMouseOutHandler(handler);
     }
 
+    @Override
     public HandlerRegistration addMouseOverHandler(MouseOverHandler handler) {
       return panel.addMouseOverHandler(handler);
     }
 
+    @Override
     public HandlerRegistration addMouseUpHandler(MouseUpHandler handler) {
       return panel.addMouseUpHandler(handler);
     }
 
+    @Override
     public HandlerRegistration addMouseWheelHandler(MouseWheelHandler handler) {
       return panel.addMouseWheelHandler(handler);
     }
 
+    @Override
     public String getHTML() {
       return htmlWidget.getHTML();
     }
 
+    @Override
     public String getText() {
       return htmlWidget.getText();
     }
 
+    @Override
     public void setHTML(SafeHtml html) {
       htmlWidget.setHTML(html);
     }
 
+    @Override
     public void setHTML(String html) {
       this.htmlWidget.setHTML(html);
     }
 
+    @Override
     public void setText(String text) {
       htmlWidget.setText(text);
     }
@@ -163,6 +172,7 @@ public class DialogBoxTest extends PopupTest {
     delayTestFinish(5000);
     // Check the header IDs
     Scheduler.get().scheduleDeferred(new ScheduledCommand() {
+      @Override
       public void execute() {
         UIObjectTest.assertDebugIdContents("myDialogBox-caption",
         "test caption");
@@ -171,10 +181,6 @@ public class DialogBoxTest extends PopupTest {
     });
   }
 
-  /**
-   * HtmlUnit test failed intermittently in nometa mode.
-   */
-  @DoNotRunWith(Platform.HtmlUnitUnknown)
   @Override
   public void testDependantPopupPanel() {
     // Create the dependent popup
@@ -254,6 +260,7 @@ public class DialogBoxTest extends PopupTest {
     final DialogBox dialogBox = new DialogBox(false, true);
     Button button = new Button();
     button.addClickHandler(new ClickHandler() {
+      @Override
       public void onClick(ClickEvent event) {
         dialogBox.hide();
       }

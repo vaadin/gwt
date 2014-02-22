@@ -52,6 +52,7 @@ import com.google.gwt.user.client.ui.HTMLPanel;
 import com.google.gwt.user.client.ui.HasHTML;
 import com.google.gwt.user.client.ui.HorizontalPanel;
 import com.google.gwt.user.client.ui.Image;
+import com.google.gwt.user.client.ui.IntegerBox;
 import com.google.gwt.user.client.ui.Label;
 import com.google.gwt.user.client.ui.ListBox;
 import com.google.gwt.user.client.ui.MenuBar;
@@ -65,7 +66,6 @@ import com.google.gwt.user.client.ui.ToggleButton;
 import com.google.gwt.user.client.ui.Tree;
 import com.google.gwt.user.client.ui.TreeItem;
 import com.google.gwt.user.client.ui.ValueLabel;
-import com.google.gwt.user.client.ui.ValueListBox;
 import com.google.gwt.user.client.ui.Widget;
 
 import java.util.List;
@@ -199,9 +199,10 @@ public class WidgetBasedUi extends Composite {
   @UiField DateLabel myDateLabel3;
   @UiField NumberLabel<Float> myNumberLabel;
   @UiField NumberLabel<Float> myNumberLabel2;
-  @UiField(provided = true)
-  Renderer<Double> doubleRenderer = DoubleRenderer.instance();
+  @UiField(provided = true) @SuppressWarnings("rawtypes")
+  Renderer doubleRenderer = DoubleRenderer.instance();
   @UiField ValueLabel<Double> myValueLabel;
+  @UiField IntegerBox myIntegerBox;
   @UiField DoubleBox myDoubleBox;
   @SuppressWarnings("rawtypes")
   @UiField ValueChangeWidget<List> myValueChangeWidget;
@@ -213,13 +214,15 @@ public class WidgetBasedUi extends Composite {
   @UiField HTML htmlWithComputedSafeHtml;
   @UiField HTML htmlWithComputedText;
   @UiField Label labelWithComputedText;
-  @UiField ValueListBox<String> myValueListBox;
 
   ValueChangeEvent<Double> doubleValueChangeEvent;
   @UiHandler("myDoubleBox")
   void onValueChange(ValueChangeEvent<Double> event) {
     this.doubleValueChangeEvent = event;
   }
+
+  @UiHandler({"myIntegerBox", "myDoubleBox"})
+  void onWildcardValueChange_Multi(ValueChangeEvent<?> event) { /* EMPTY */}
 
   @UiHandler("myValueChangeWidget")
   void onWildcardValueChange(ValueChangeEvent<?> event) { /* EMPTY */}

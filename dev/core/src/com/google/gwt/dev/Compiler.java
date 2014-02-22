@@ -21,7 +21,7 @@ import com.google.gwt.core.ext.linker.ArtifactSet;
 import com.google.gwt.dev.CompileTaskRunner.CompileTask;
 import com.google.gwt.dev.cfg.ModuleDef;
 import com.google.gwt.dev.cfg.ModuleDefLoader;
-import com.google.gwt.dev.javac.CompilationStateBuilder;
+import com.google.gwt.dev.javac.UnitCacheSingleton;
 import com.google.gwt.dev.jjs.JJSOptions;
 import com.google.gwt.dev.jjs.PermutationResult;
 import com.google.gwt.dev.shell.CheckForUpdates;
@@ -127,8 +127,7 @@ public class Compiler {
     ModuleDef[] modules = new ModuleDef[options.getModuleNames().size()];
     int i = 0;
     for (String moduleName : options.getModuleNames()) {
-      modules[i++] =
-          ModuleDefLoader.loadFromClassPath(logger, compilerContext, moduleName, true, true);
+      modules[i++] = ModuleDefLoader.loadFromClassPath(logger, compilerContext, moduleName, true);
     }
     return run(logger, modules);
   }
@@ -150,7 +149,8 @@ public class Compiler {
       if (options.getWarDir() != null && !options.getWarDir().getName().endsWith(".jar")) {
         persistentUnitCacheDir = new File(options.getWarDir(), "../");
       }
-      CompilationStateBuilder.init(logger, persistentUnitCacheDir);
+      compilerContext = compilerContextBuilder.unitCache(
+          UnitCacheSingleton.get(logger, persistentUnitCacheDir)).build();
 
       for (ModuleDef module : modules) {
         compilerContext = compilerContextBuilder.module(module).build();

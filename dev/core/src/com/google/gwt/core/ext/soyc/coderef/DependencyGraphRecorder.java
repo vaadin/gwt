@@ -55,12 +55,14 @@ public class DependencyGraphRecorder extends DependencyRecorder {
     return this.codeModel;
   }
 
+  @Override
   public void startDependencyGraph(String name, String extendz) {
     super.startDependencyGraph(name, extendz);
 
     currentGraph = name;
   }
 
+  @Override
   protected void printMethodDependencyBetween(JMethod curMethod, JMethod depMethod) {
     super.printMethodDependencyBetween(curMethod, depMethod);
 
@@ -68,11 +70,11 @@ public class DependencyGraphRecorder extends DependencyRecorder {
   }
 
   protected String signatureFor(JMethod method) {
-    JMethod original = jProgram.staticImplFor(method);
-    if (original == null) { //method is the original
+    JMethod instanceMethod = jProgram.instanceMethodForStaticImpl(method);
+    if (instanceMethod == null) { //method is the instanceMethod
       return method.getSignature();
     }
-    return original.getSignature();
+    return instanceMethod.getSignature();
   }
 
   public MethodDescriptor methodDescriptorFrom(JMethod method) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013 Google Inc.
+ * Copyright 2014 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -13,12 +13,16 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.gwt.uibinder.test.client;
-
-import com.google.gwt.user.client.ui.ValueListBox;
+package com.google.gwt.dev.util.arg;
 
 /**
- * A custom widget that add type parameter to its base class.
+ * An option controlling whether to add runtime checks for programmer errors,
+ * to emulate the runtime checking that Java would do.
+ * (This option is expected to be on for development and off for production.)
  */
-class MyValueListBox extends ValueListBox<String> {
+public interface OptionCheckedMode {
+
+  boolean shouldAddRuntimeChecks();
+
+  void setAddRuntimeChecks(boolean enabled);
 }

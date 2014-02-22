@@ -25,6 +25,7 @@ import com.google.gwt.core.ext.typeinfo.TypeOracle;
 import com.google.gwt.event.shared.EventHandler;
 import com.google.gwt.uibinder.client.UiHandler;
 import com.google.gwt.uibinder.rebind.model.OwnerClass;
+import com.google.gwt.uibinder.rebind.model.OwnerField;
 import com.google.web.bindery.event.shared.HandlerRegistration;
 
 /**
@@ -154,6 +155,9 @@ class HandlerEvaluator {
                   + "in the template."), boundMethod, objectName);
         }
         JClassType objectType = fieldWriter.getInstantiableType();
+        if (objectType.isGenericType() != null) {
+          objectType = tryEnhancingTypeInfo(objectName, objectType);
+        }
 
         // Retrieves the "add handler" method in the object.
         JMethod addHandlerMethodType = getAddHandlerMethodForObject(objectType, handlerType);
@@ -167,6 +171,23 @@ class HandlerEvaluator {
             addHandlerMethodType.getName(), objectName);
       }
     }
+  }
+
+  private JClassType tryEnhancingTypeInfo(String objectName, JClassType objectType) {
+    OwnerField uiField = ownerClass.getUiField(objectName);
+    if (uiField != null) {
+      JParameterizedType pType = uiField.getRawType().isParameterized();
+      if (pType != null) {
+        // Even field is parameterized, it might be a super class. In that case, if we use the field
+        // type then we might miss some add handlers methods from the objectType itself; something
+        // we don't want to happen!
+        if (pType.getBaseType().equals(objectType)) {
+          // Now we proved type from UiField is more specific, let's use that one
+          return pType;
+        }
+      }
+    }
+    return objectType;
   }
 
   /**
@@ -202,9 +223,8 @@ class HandlerEvaluator {
     writer.newline();
     // Create the anonymous class extending the raw type to avoid errors under the new JDT
     // if the type has a wildcard.
-    writer.write("final %1$s %2$s = (%1$s) new %3$s() {",
-        handlerType.getParameterizedQualifiedSourceName(), handlerVarName,
-        handlerType.getQualifiedSourceName());
+    writer.write("final %1$s %2$s = new %1$s() {",
+        handlerType.getQualifiedSourceName(), handlerVarName);
     writer.indent();
     writer.write("public void %1$s(%2$s event) {", methods[0].getName(),
         // Use the event raw type to match the signature as we are using implementing the raw type
@@ -282,7 +302,10 @@ class HandlerEvaluator {
           continue;
         }
 
-        JType methodParam = parameters[0].getType();
+        JClassType methodParam = parameters[0].getType().isClassOrInterface();
+        if (methodParam == null) {
+          continue;
+        }
 
         if (handlerType.equals(methodParam)) {
 
@@ -309,16 +332,12 @@ class HandlerEvaluator {
          * This is done as an alternative handler method to preserve the
          * original logic.
          */
-        JParameterizedType ptype = handlerType.isParameterized();
-        if (ptype != null) {
-          // Alt 1: TableHandler<String> => TableHandler
-          if (methodParam.equals(ptype.getRawType())) {
-            alternativeHandlerMethod = method;
-          }
-
+        if (handlerType.isAssignableFrom(methodParam)) {
+          // Alt 1: TableHandler<String> => TableHandler or TableHandler<?> => TableHandler<String>
+          alternativeHandlerMethod = method;
+        } else if (handlerType.isParameterized() != null && objectType.isGenericType() != null) {
           // Alt 2: TableHandler<String> => TableHandler<T>
-          if (objectType.isGenericType() != null
-              && methodParam.getErasedType().equals(ptype.getRawType())) {
+          if (methodParam.getErasedType().equals(handlerType.isParameterized().getErasedType())) {
             // Unfortunately this is overly lenient but it was always like this
             alternativeHandlerMethod2 = method;
           }

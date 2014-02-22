@@ -21,23 +21,26 @@ import com.google.gwt.dev.jjs.SourceInfo;
 import com.google.gwt.dev.jjs.SourceOrigin;
 import com.google.gwt.dev.jjs.ast.js.JsCastMap;
 import com.google.gwt.dev.jjs.impl.codesplitter.FragmentPartitioningResult;
+import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
+import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
+import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
 import com.google.gwt.thirdparty.guava.common.base.Function;
+import com.google.gwt.thirdparty.guava.common.collect.BiMap;
 import com.google.gwt.thirdparty.guava.common.collect.Collections2;
+import com.google.gwt.thirdparty.guava.common.collect.HashBiMap;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableList;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
+import com.google.gwt.thirdparty.guava.common.collect.Maps;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,6 +53,7 @@ import java.util.Set;
 public class JProgram extends JNode {
 
   private static final class ArrayTypeComparator implements Comparator<JArrayType>, Serializable {
+    @Override
     public int compare(JArrayType o1, JArrayType o2) {
       int comp = o1.getDims() - o2.getDims();
       if (comp != 0) {
@@ -59,9 +63,24 @@ public class JProgram extends JNode {
     }
   }
 
-  public static final Set<String> CODEGEN_TYPES_SET = new LinkedHashSet<String>(Arrays.asList(
+  private static final class TreeStatistics extends JVisitor {
+    private int nodeCount = 0;
+
+    public int getNodeCount() {
+      return nodeCount;
+    }
+
+    @Override
+    public boolean visit(JNode x, Context ctx) {
+      nodeCount++;
+      return true;
+    }
+  }
+
+  public static final Set<String> CODEGEN_TYPES_SET = Sets.newLinkedHashSet(Arrays.asList(
       "com.google.gwt.lang.Array", "com.google.gwt.lang.Cast",
-      "com.google.gwt.lang.CollapsedPropertyHolder", "com.google.gwt.lang.Exceptions",
+      "com.google.gwt.core.client.RuntimePropertyRegistry",
+      "com.google.gwt.lang.Exceptions",
       "com.google.gwt.lang.LongLib", "com.google.gwt.lang.Stats", "com.google.gwt.lang.Util"));
 
   /*
@@ -76,12 +95,12 @@ public class JProgram extends JNode {
    *
    * Classes are inserted into the JsAST in the order they appear in the Set.
    */
-  public static final Set<String> IMMORTAL_CODEGEN_TYPES_SET = new LinkedHashSet<String>(Arrays.asList(
-      "com.google.gwt.lang.SeedUtil"));
+  public static final Set<String> IMMORTAL_CODEGEN_TYPES_SET = Sets.newLinkedHashSet(Arrays.asList(
+      "com.google.gwt.lang.CollapsedPropertyHolder", "com.google.gwt.lang.SeedUtil"));
 
   public static final String JAVASCRIPTOBJECT = "com.google.gwt.core.client.JavaScriptObject";
 
-  static final Map<String, Set<String>> traceMethods = new HashMap<String, Set<String>>();
+  static final Map<String, Set<String>> traceMethods = Maps.newHashMap();
 
   private static final Comparator<JArrayType> ARRAYTYPE_COMPARATOR = new ArrayTypeComparator();
 
@@ -93,12 +112,10 @@ public class JProgram extends JNode {
 
   private static final int IS_NULL = 0;
 
-  private static final Map<String, JPrimitiveType> primitiveTypes =
-      new HashMap<String, JPrimitiveType>();
+  private static final Map<String, JPrimitiveType> primitiveTypes = Maps.newHashMap();
 
   @Deprecated
-  private static final Map<String, JPrimitiveType> primitiveTypesDeprecated =
-      new HashMap<String, JPrimitiveType>();
+  private static final Map<String, JPrimitiveType> primitiveTypesDeprecated = Maps.newHashMap();
 
   static {
     if (System.getProperty("gwt.coverage") != null) {
@@ -123,7 +140,7 @@ public class JProgram extends JNode {
           String methodName = str.substring(pos + 1);
           Set<String> set = traceMethods.get(className);
           if (set == null) {
-            set = new HashSet<String>();
+            set = Sets.newHashSet();
             traceMethods.put(className, set);
           }
           set.add(methodName);
@@ -247,34 +264,35 @@ public class JProgram extends JNode {
     }
   }
 
-  public final List<JClassType> codeGenTypes = new ArrayList<JClassType>();
-  public final List<JClassType> immortalCodeGenTypes = new ArrayList<JClassType>();
+  public final List<JClassType> codeGenTypes = Lists.newArrayList();
 
-  // TODO(rluble): (Separate compilation) the second parameter (hasWholeWorldKnoledge) must be
-  // false when doing separate compilation.
-  public final JTypeOracle typeOracle = new JTypeOracle(this, true);
+  public final List<JClassType> immortalCodeGenTypes = Lists.newArrayList();
+
+  public final JTypeOracle typeOracle;
 
   /**
    * Special serialization treatment.
    */
-  private transient List<JDeclaredType> allTypes = new ArrayList<JDeclaredType>();
+  // TODO(stalcup): make this a set, or take special care to make updates unique when lazily loading
+  // in types. At the moment duplicates are accumulating.
+  private transient List<JDeclaredType> allTypes = Lists.newArrayList();
 
-  private final HashMap<JType, JArrayType> arrayTypes = new HashMap<JType, JArrayType>();
+  private final Map<JType, JArrayType> arrayTypes = Maps.newHashMap();
 
-  private IdentityHashMap<JReferenceType, JsCastMap> castMaps;
+  private Map<JReferenceType, JsCastMap> castMaps;
 
-  private Map<JType, JField> classLiteralFields;
+  private BiMap<JType, JField> classLiteralFieldsByType;
 
-  private final List<JMethod> entryMethods = new ArrayList<JMethod>();
+  private final List<JMethod> entryMethods = Lists.newArrayList();
 
-  private final Map<String, JField> indexedFields = new HashMap<String, JField>();
+  private final Map<String, JField> indexedFields = Maps.newHashMap();
 
-  private final Map<String, JMethod> indexedMethods = new HashMap<String, JMethod>();
+  private final Map<String, JMethod> indexedMethods = Maps.newHashMap();
 
   /**
    * An index of types, from type name to type instance.
    */
-  private final Map<String, JDeclaredType> indexedTypes = new HashMap<String, JDeclaredType>();
+  private final Map<String, JDeclaredType> indexedTypes = Maps.newHashMap();
 
   /**
    * The set of names of types (beyond the basic INDEX_TYPES_SET) whose instance should be indexed
@@ -282,7 +300,12 @@ public class JProgram extends JNode {
    */
   private final Set<String> typeNamesToIndex = buildInitialTypeNamesToIndex();
 
-  private final Map<JMethod, JMethod> instanceToStaticMap = new IdentityHashMap<JMethod, JMethod>();
+  private final Map<JMethod, JMethod> instanceToStaticMap = Maps.newIdentityHashMap();
+
+  private String propertyProviderRegistratorTypeName;
+
+  // wrap up .add here, and filter out forced source
+  private Set<String> referenceOnlyTypeNames = Sets.newHashSet();
 
   private Map<JReferenceType, Integer> queryIdsByType;
 
@@ -291,11 +314,13 @@ public class JProgram extends JNode {
    */
   private List<JRunAsync> runAsyncs = Lists.newArrayList();
 
-  private LinkedHashSet<JRunAsync> initialAsyncSequence = new LinkedHashSet<JRunAsync>();
+  private LinkedHashSet<JRunAsync> initialAsyncSequence = Sets.newLinkedHashSet();
 
   private List<Integer> initialFragmentIdSequence = Lists.newArrayList();
 
-  private final Map<JMethod, JMethod> staticToInstanceMap = new IdentityHashMap<JMethod, JMethod>();
+  private String runtimeRebindRegistratorTypeName;
+
+  private final Map<JMethod, JMethod> staticToInstanceMap = Maps.newIdentityHashMap();
 
   private JClassType typeClass;
 
@@ -307,9 +332,11 @@ public class JProgram extends JNode {
 
   private JClassType typeJavaLangObject;
 
-  private final Map<String, JDeclaredType> typeNameMap = new HashMap<String, JDeclaredType>();
+  private final Map<String, JDeclaredType> typeNameMap = Maps.newHashMap();
 
   private List<JReferenceType> typesByQueryId;
+
+  private Map<JField, JType> typesByClassLiteralField;
 
   private JClassType typeSpecialClassLiteralHolder;
 
@@ -321,6 +348,12 @@ public class JProgram extends JNode {
 
   public JProgram() {
     super(SourceOrigin.UNKNOWN);
+    typeOracle = new JTypeOracle(this, true);
+  }
+
+  public JProgram(boolean hasWholeWorldKnowledge) {
+    super(SourceOrigin.UNKNOWN);
+    typeOracle = new JTypeOracle(this, hasWholeWorldKnowledge);
   }
 
   public void addEntryMethod(JMethod entryPoint) {
@@ -334,6 +367,10 @@ public class JProgram extends JNode {
    */
   public void addIndexedTypeName(String typeName) {
     typeNamesToIndex.add(typeName);
+  }
+
+  public void addReferenceOnlyType(JDeclaredType type) {
+    referenceOnlyTypeNames.add(type.getName());
   }
 
   public void addType(JDeclaredType type) {
@@ -588,7 +625,7 @@ public class JProgram extends JNode {
    * over without introducing nondeterminism.
    */
   public List<JArrayType> getAllArrayTypes() {
-    ArrayList<JArrayType> result = new ArrayList<JArrayType>(arrayTypes.values());
+    List<JArrayType> result = Lists.newArrayList(arrayTypes.values());
     Collections.sort(result, ARRAYTYPE_COMPARATOR);
     return result;
   }
@@ -603,7 +640,7 @@ public class JProgram extends JNode {
   }
 
   public JField getClassLiteralField(JType type) {
-    return classLiteralFields.get(isJavaScriptObject(type) ? getJavaScriptObject() : type);
+    return classLiteralFieldsByType.get(isJavaScriptObject(type) ? getJavaScriptObject() : type);
   }
 
   public String getClassLiteralName(JType type) {
@@ -714,6 +751,26 @@ public class JProgram extends JNode {
     return new JStringLiteral(sourceInfo, s, typeString);
   }
 
+  public List<JDeclaredType> getModuleDeclaredTypes() {
+    List<JDeclaredType> moduleDeclaredTypes = Lists.newArrayList();
+    for (JDeclaredType type : allTypes) {
+      if (isReferenceOnly(type)) {
+        continue;
+      }
+      moduleDeclaredTypes.add(type);
+    }
+    return moduleDeclaredTypes;
+  }
+
+  public int getNodeCount() {
+    Event countEvent = SpeedTracerLogger.start(CompilerEventType.OPTIMIZE, "phase", "countNodes");
+    TreeStatistics treeStats = new TreeStatistics();
+    treeStats.accept(this);
+    int numNodes = treeStats.getNodeCount();
+    countEvent.end();
+    return numNodes;
+  }
+
   public JField getNullField() {
     return JField.NULL_FIELD;
   }
@@ -732,6 +789,10 @@ public class JProgram extends JNode {
     return integer.intValue();
   }
 
+  public String getPropertyProviderRegistratorTypeName() {
+    return propertyProviderRegistratorTypeName;
+  }
+
   public List<JRunAsync> getRunAsyncs() {
     return runAsyncs;
   }
@@ -740,8 +801,14 @@ public class JProgram extends JNode {
     return fragmentPartitioninResult.getCommonAncestorFragmentId(thisFragmentId, thatFragmentId);
   }
 
+  public String getRuntimeRebindRegistratorTypeName() {
+    return runtimeRebindRegistratorTypeName;
+  }
+
   public JMethod getStaticImpl(JMethod method) {
-    return instanceToStaticMap.get(method);
+    JMethod staticImpl = instanceToStaticMap.get(method);
+    assert staticImpl == null || staticImpl.getEnclosingType().getMethods().contains(staticImpl);
+    return staticImpl;
   }
 
   public JArrayType getTypeArray(JType elementType) {
@@ -762,6 +829,10 @@ public class JProgram extends JNode {
       --dimensions;
     }
     return result;
+  }
+
+  public JType getTypeByClassLiteralField(JField field) {
+    return typesByClassLiteralField.get(field);
   }
 
   public JClassType getTypeClassLiteralHolder() {
@@ -857,10 +928,10 @@ public class JProgram extends JNode {
     return JPrimitiveType.VOID;
   }
 
-  public void initTypeInfo(IdentityHashMap<JReferenceType, JsCastMap> instantiatedCastableTypesMap) {
+  public void initTypeInfo(Map<JReferenceType, JsCastMap> instantiatedCastableTypesMap) {
     castMaps = instantiatedCastableTypesMap;
     if (castMaps == null) {
-      castMaps = new IdentityHashMap<JReferenceType, JsCastMap>();
+      castMaps = Maps.newIdentityHashMap();
     }
   }
 
@@ -871,6 +942,13 @@ public class JProgram extends JNode {
   public boolean isJavaScriptObject(JType type) {
     if (type instanceof JReferenceType && typeSpecialJavaScriptObject != null) {
       return typeOracle.canTriviallyCast((JReferenceType) type, typeSpecialJavaScriptObject);
+    }
+    return false;
+  }
+
+  public boolean isReferenceOnly(JDeclaredType type) {
+    if (type != null) {
+      return referenceOnlyTypeNames.contains(type.getName());
     }
     return false;
   }
@@ -894,7 +972,8 @@ public class JProgram extends JNode {
   }
 
   public void recordClassLiteralFields(Map<JType, JField> classLiteralFields) {
-    this.classLiteralFields = classLiteralFields;
+    this.classLiteralFieldsByType = HashBiMap.create(classLiteralFields);
+    this.typesByClassLiteralField = classLiteralFieldsByType.inverse();
   }
 
   public void recordQueryIds(Map<JReferenceType, Integer> queryIdsByType,
@@ -937,12 +1016,19 @@ public class JProgram extends JNode {
     this.initialAsyncSequence = initialAsyncSequence;
   }
 
+  public void setPropertyProviderRegistratorTypeName(String propertyProviderRegistratorTypeName) {
+    this.propertyProviderRegistratorTypeName = propertyProviderRegistratorTypeName;
+  }
+
+  public void setRuntimeRebindRegistratorTypeName(String runtimeRebindRegistratorTypeName) {
+    this.runtimeRebindRegistratorTypeName = runtimeRebindRegistratorTypeName;
+  }
+
   /**
-   * If <code>method</code> is a static impl method, returns the instance method
-   * that <code>method</code> is the implementation of. Otherwise, returns
-   * <code>null</code>.
+   * If {@code method} is a static impl method, returns the instance method
+   * that {@code method} is the implementation of. Otherwise, returns{@code null}.
    */
-  public JMethod staticImplFor(JMethod method) {
+  public JMethod instanceMethodForStaticImpl(JMethod method) {
     return staticToInstanceMap.get(method);
   }
 
@@ -977,9 +1063,10 @@ public class JProgram extends JNode {
     return type1;
   }
 
+  @Override
   public void traverse(JVisitor visitor, Context ctx) {
     if (visitor.visit(this, ctx)) {
-      visitor.accept(allTypes);
+      visitModuleTypes(visitor);
     }
     visitor.endVisit(this, ctx);
   }
@@ -990,7 +1077,7 @@ public class JProgram extends JNode {
    * requirements are discovered.
    */
   private static Set<String> buildInitialTypeNamesToIndex() {
-    Set<String> typeNamesToIndex = new HashSet<String>();
+    Set<String> typeNamesToIndex = Sets.newHashSet();
     typeNamesToIndex.addAll(ImmutableList.of("java.io.Serializable", "java.lang.Object",
         "java.lang.String", "java.lang.Class", "java.lang.CharSequence", "java.lang.Cloneable",
         "java.lang.Comparable", "java.lang.Enum", "java.lang.Iterable", "java.util.Iterator",
@@ -1004,6 +1091,19 @@ public class JProgram extends JNode {
         "com.google.gwt.core.client.prefetch.RunAsyncCode"));
     typeNamesToIndex.addAll(CODEGEN_TYPES_SET);
     return typeNamesToIndex;
+  }
+
+  public void visitAllTypes(JVisitor visitor) {
+    visitor.accept(allTypes);
+  }
+
+  public void visitModuleTypes(JVisitor visitor) {
+    for (JDeclaredType type : allTypes) {
+      if (isReferenceOnly(type)) {
+        continue;
+      }
+      visitor.accept(type);
+    }
   }
 
   private int classifyType(JReferenceType type) {
