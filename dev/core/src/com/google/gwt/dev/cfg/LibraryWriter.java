@@ -36,7 +36,9 @@ public interface LibraryWriter {
   void addBuildResource(Resource buildResource);
 
   /**
-   * Adds a previously compiled (but not yet unified) compilation unit.
+   * Adds a previously compiled (but not yet unified) compilation unit.<br />
+   *
+   * Provided compilation units are assumed to have already been validated.
    */
   void addCompilationUnit(CompilationUnit compilationUnit);
 
@@ -94,10 +96,10 @@ public interface LibraryWriter {
   PersistenceBackedObject<PermutationResult> getPermutationResultHandle();
 
   /**
-   * Returns the set of names of types which are the subject of GWT.create() calls in source code
-   * for this library.
+   * Returns the set of source names of types which are the subject of GWT.create() calls in source
+   * code for this library.
    */
-  Set<String> getReboundTypeNames();
+  Set<String> getReboundTypeSourceNames();
 
   /**
    * Records the library name.<br />
@@ -111,7 +113,7 @@ public interface LibraryWriter {
    * Records the set of names of types which are the subject of GWT.create() calls in source code
    * for this library.
    */
-  void setReboundTypeNames(Set<String> reboundTypeNames);
+  void setReboundTypeSourceNames(Set<String> reboundTypeSourceNames);
 
   /**
    * Finishes writing all library contents and closes the library.

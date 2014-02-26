@@ -29,9 +29,10 @@ final class Cast {
    * As plain JavaScript Strings (not monkey patcheed) are used to model Java Strings,
    * {@code  stringCastMap} stores runtime type info for cast purposes for string objects.
    *
-   * NOTE: it is important that it is initialized to null so that Cast does not require a clinit.
+   * NOTE: it is important that the field is left uninitialized so that Cast does not
+   * require a clinit.
    */
-  private static JavaScriptObject stringCastMap = null;
+  private static JavaScriptObject stringCastMap;
 
   static native boolean canCast(Object src, int dstId) /*-{
     return (src.@java.lang.Object::castableTypeMap || src.@java.lang.Object::castableTypeMap) && !!src.@java.lang.Object::castableTypeMap[dstId]
@@ -39,13 +40,12 @@ final class Cast {
         !!@com.google.gwt.lang.Cast::stringCastMap[dstId];
   }-*/;
 
-  // Not functional yet. Works under the assumption that queryId is seedId. This will become true
-  // when separate compilation switches to using type name Strings as seedId. Will eventually be the
-  // implementation for class.isAssignableFrom().
-  static native boolean canCastSeed(String srcId, String dstId) /*-{
-    var srcSeed = @com.google.gwt.lang.SeedUtil::seedTable[srcId];
-    return (srcSeed.prototype.@java.lang.Object::castableTypeMap &&
-            !!srcSeed.prototype.@java.lang.Object::castableTypeMap[dstId]);
+  // Will eventually be the implementation for class.isAssignableFrom().
+  // TODO(rluble): Unify the logic into a version that accepts either strings or int as typeIds.
+  static native boolean canCastTypeId(String srcTypeId, String dstTypeId) /*-{
+    var prototype = @com.google.gwt.lang.JavaClassHierarchySetupUtil::prototypesByTypeId[srcTypeId];
+    return (prototype.@java.lang.Object::castableTypeMap &&
+            !!prototype.@java.lang.Object::castableTypeMap[dstTypeId]);
   }-*/;
 
   static native String charToString(char x) /*-{
@@ -221,7 +221,8 @@ final class Cast {
    */
   // Visible for getIndexedMethod()
   static native boolean isJavaString(Object src) /*-{
-    return typeof src.valueOf() == "string";
+    // TODO(rluble): This might need to be specialized by browser.
+    return typeof(src) == "string" || src instanceof String;
   }-*/;
 
   /**

@@ -95,7 +95,7 @@ public class JProgram extends JNode {
    * Classes are inserted into the JsAST in the order they appear in the Set.
    */
   public static final Set<String> IMMORTAL_CODEGEN_TYPES_SET = Sets.newLinkedHashSet(Arrays.asList(
-      "com.google.gwt.lang.CollapsedPropertyHolder", "com.google.gwt.lang.SeedUtil"));
+      "com.google.gwt.lang.CollapsedPropertyHolder", "com.google.gwt.lang.JavaClassHierarchySetupUtil"));
 
   public static final String JAVASCRIPTOBJECT = "com.google.gwt.core.client.JavaScriptObject";
 
@@ -301,12 +301,10 @@ public class JProgram extends JNode {
 
   private final Map<JMethod, JMethod> instanceToStaticMap = Maps.newIdentityHashMap();
 
-  private String propertyProviderRegistratorTypeName;
+  private String propertyProviderRegistratorTypeSourceName;
 
   // wrap up .add here, and filter out forced source
   private Set<String> referenceOnlyTypeNames = Sets.newHashSet();
-
-  private Map<JReferenceType, Integer> queryIdsByType;
 
   /**
    * Filled in by ReplaceRunAsync, once the numbers are known.
@@ -782,8 +780,8 @@ public class JProgram extends JNode {
     return JMethod.NULL_METHOD;
   }
 
-  public String getPropertyProviderRegistratorTypeName() {
-    return propertyProviderRegistratorTypeName;
+  public String getPropertyProviderRegistratorTypeSourceName() {
+    return propertyProviderRegistratorTypeSourceName;
   }
 
   public List<JRunAsync> getRunAsyncs() {
@@ -794,7 +792,7 @@ public class JProgram extends JNode {
     return fragmentPartitioninResult.getCommonAncestorFragmentId(thisFragmentId, thatFragmentId);
   }
 
-  public String getRuntimeRebindRegistratorTypeName() {
+  public String getRuntimeRebindRegistratorTypeSourceName() {
     return runtimeRebindRegistratorTypeName;
   }
 
@@ -1003,8 +1001,9 @@ public class JProgram extends JNode {
     this.initialAsyncSequence = initialAsyncSequence;
   }
 
-  public void setPropertyProviderRegistratorTypeName(String propertyProviderRegistratorTypeName) {
-    this.propertyProviderRegistratorTypeName = propertyProviderRegistratorTypeName;
+  public void setPropertyProviderRegistratorTypeSourceName(
+      String propertyProviderRegistratorTypeSourceName) {
+    this.propertyProviderRegistratorTypeSourceName = propertyProviderRegistratorTypeSourceName;
   }
 
   public void setRuntimeRebindRegistratorTypeName(String runtimeRebindRegistratorTypeName) {

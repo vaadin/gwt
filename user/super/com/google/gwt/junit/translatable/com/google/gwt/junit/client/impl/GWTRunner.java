@@ -28,7 +28,6 @@ import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.google.gwt.user.client.rpc.ServiceDefTarget;
-import com.google.gwt.useragent.client.UserAgent;
 
 import java.util.HashMap;
 
@@ -58,8 +57,7 @@ public class GWTRunner implements EntryPoint {
      */
     @Override
     public void onSuccess(InitialResponse result) {
-      clientInfo = new ClientInfo(result.getSessionId(),
-          clientInfo.getUserAgent());
+      clientInfo = new ClientInfo(result.getSessionId());
       testBlockListener.onSuccess(result.getTestBlock());
     }
   }
@@ -81,10 +79,9 @@ public class GWTRunner implements EntryPoint {
      */
     @Override
     public void onFailure(Throwable caught) {
-      if (maxRetryCount < 0 || curRetryCount < maxRetryCount) {
+      if (curRetryCount++ < MAX_RETRY_COUNT) {
         reportWarning("Retrying syncing back to junit backend. (Exception: " + caught + ")");
         // Try the call again
-        curRetryCount++;
         new Timer() {
           @Override
           public void run() {
@@ -122,10 +119,9 @@ public class GWTRunner implements EntryPoint {
   private static final String SESSIONID_QUERY_PARAM = "gwt.junit.sessionId";
 
   /**
-   * A query param specifying the number of times to retry if the server fails
-   * to respond.
+   * The maximum number of times to retry communication with the server per test batch.
    */
-  private static final String RETRYCOUNT_QUERY_PARAM = "gwt.junit.retrycount";
+  private static final int MAX_RETRY_COUNT = 3;
 
   /**
    * A query param specifying the block index to start on.
@@ -176,12 +172,6 @@ public class GWTRunner implements EntryPoint {
    */
   private final TestBlockListener testBlockListener = new TestBlockListener();
 
-  /**
-   * The maximum number of times to retry communication with the server per
-   * test batch.
-   */
-  private int maxRetryCount;
-
   private GWTTestAccessor testAccessor;
 
   // TODO(FINDBUGS): can this be a private constructor to avoid multiple
@@ -201,16 +191,10 @@ public class GWTRunner implements EntryPoint {
   @Override
   public void onModuleLoad() {
     testAccessor = new GWTTestAccessor();
-    clientInfo = new ClientInfo(parseQueryParamInteger(SESSIONID_QUERY_PARAM, -1), getUserAgent());
-    maxRetryCount = parseQueryParamInteger(RETRYCOUNT_QUERY_PARAM, 3);
+    clientInfo = new ClientInfo(parseQueryParamInteger(SESSIONID_QUERY_PARAM, -1));
 
     // Kick off the test running process by getting the first method to run from the server.
     syncToServer();
-  }
-
-  private String getUserAgent() {
-    UserAgent userAgentProperty = GWT.create(UserAgent.class);
-    return userAgentProperty.getCompileTimeValue();
   }
 
   public void reportResultsAndGetNextMethod(JUnitResult result) {
