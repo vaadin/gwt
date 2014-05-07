@@ -36,13 +36,14 @@ import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JRunAsync;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.impl.ArrayNormalizer;
-import com.google.gwt.dev.jjs.impl.CastNormalizer;
+import com.google.gwt.dev.jjs.impl.ComputeCastabilityInformation;
+import com.google.gwt.dev.jjs.impl.ImplementCastsAndTypeChecks;
 import com.google.gwt.dev.jjs.impl.ControlFlowAnalyzer;
 import com.google.gwt.dev.jjs.impl.GenerateJavaScriptAST;
 import com.google.gwt.dev.jjs.impl.JJSTestBase;
 import com.google.gwt.dev.jjs.impl.JavaToJavaScriptMap;
 import com.google.gwt.dev.jjs.impl.MethodCallTightener;
-import com.google.gwt.dev.jjs.impl.ResolveRuntimeTypeReferencesIntoIntLiterals;
+import com.google.gwt.dev.jjs.impl.ResolveRuntimeTypeReferences;
 import com.google.gwt.dev.jjs.impl.TypeTightener;
 import com.google.gwt.dev.js.ast.JsBlock;
 import com.google.gwt.dev.js.ast.JsContext;
@@ -520,11 +521,13 @@ public class CodeSplitterTest extends JJSTestBase {
             "com.google.gwt.lang.Exceptions");
     jProgram.addEntryMethod(findMethod(jProgram, "onModuleLoad"));
 
-    CastNormalizer.exec(jProgram, false);
+    ComputeCastabilityInformation.exec(jProgram, false);
+    ImplementCastsAndTypeChecks.exec(jProgram, false);
     ArrayNormalizer.exec(jProgram, false);
     TypeTightener.exec(jProgram);
     MethodCallTightener.exec(jProgram);
-    Map<JType, JLiteral> typeIdsByType = ResolveRuntimeTypeReferencesIntoIntLiterals.exec(jProgram);
+    Map<JType, JLiteral> typeIdsByType =
+        ResolveRuntimeTypeReferences.IntoIntLiterals.exec(jProgram);
 
     Map<StandardSymbolData, JsName> symbolTable =
         new TreeMap<StandardSymbolData, JsName>(new SymbolData.ClassIdentComparator());
