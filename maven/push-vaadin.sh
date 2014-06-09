@@ -22,6 +22,11 @@ if [[ "$gwtPath" == "" || ! -f  $gwtPath ]]; then
   exit 1
 fi
 
+if [ -e "$gpgPassphraseFile" ]
+then
+	export gpgPassphrase=`cat $gpgPassphraseFile|sed "s/.*=//"`
+fi
+
 maven-gwt "$gwtVersion" \
           "$gwtPath" \
 	  "$repoUrl" \
