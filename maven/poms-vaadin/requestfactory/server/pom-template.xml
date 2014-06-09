@@ -4,11 +4,11 @@
     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>com.google.web.bindery</groupId>
+        <groupId>com.vaadin.external.gwt.web.bindery</groupId>
         <artifactId>requestfactory</artifactId>
         <version>${gwtVersion}</version>
     </parent>
-    <groupId>com.google.web.bindery</groupId>
+    <groupId>com.vaadin.external.gwt.web.bindery</groupId>
     <artifactId>requestfactory-server</artifactId>
     <packaging>jar</packaging>
     <version>${gwtVersion}</version>
@@ -18,8 +18,8 @@
 	    <artifactId>validation-api</artifactId>
 	</dependency>
 	<dependency>
-	    <groupId>org.json</groupId>
-	    <artifactId>json</artifactId>
+	    <groupId>com.vaadin.external.google</groupId>
+	    <artifactId>android-json</artifactId>
 	</dependency>
     </dependencies>
 </project>

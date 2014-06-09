@@ -8,7 +8,7 @@
 	<version>4</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.google.gwt</groupId>
+    <groupId>com.vaadin.external.gwt</groupId>
     <artifactId>gwt</artifactId>
     <packaging>pom</packaging>
     <name>GWT</name>

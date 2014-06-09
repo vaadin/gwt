@@ -8,7 +8,7 @@
 	<version>4</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.google.web.bindery</groupId>
+    <groupId>com.vaadin.external.gwt.web.bindery</groupId>
     <artifactId>requestfactory</artifactId>
     <packaging>pom</packaging>
     <name>RequestFactory</name>
