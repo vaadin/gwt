@@ -21,7 +21,7 @@
             <optional>true</optional>
         </dependency>
         <dependency>
-            <groupId>com.vaadin.external.google.android-json</groupId>
+            <groupId>com.vaadin.external.google</groupId>
             <artifactId>android-json</artifactId>
             <version>0.0.20131108.vaadin1</version>
             <optional>true</optional>
