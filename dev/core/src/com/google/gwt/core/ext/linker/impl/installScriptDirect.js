@@ -5,13 +5,19 @@ function installScript(filename) {
   __WAIT_FOR_BODY_LOADED__
   
   function installCode(code) {
-    var docbody = getInstallLocation();
-    var script = getInstallLocationDoc().createElement('script');
+    var doc = getInstallLocationDoc();
+    var docbody = doc.body;
+    var script = doc.createElement('script');
     script.language='javascript';
     script.src = code;
-    sendStats('moduleStartup', 'moduleRequested');
     docbody.appendChild(script);
+    sendStats('moduleStartup', 'scriptTagAdded');
   }
+
+  // Start measuring from the time the caller asked for this file,
+  // for consistency with installScriptEarlyDownload.js.
+  // The elapsed time will include waiting for the body.
+  sendStats('moduleStartup', 'moduleRequested');
 
   // Just pass along the filename so that a script tag can be installed in the
   // iframe to download it.  Since we will be adding the iframe to the body,

@@ -16,32 +16,49 @@
 package com.google.gwt.dev.cfg;
 
 import com.google.gwt.core.ext.TreeLogger;
+import com.google.gwt.thirdparty.guava.common.base.Objects;
 
 /**
  * A deferred binding condition to determine whether the type being rebound is
  * exactly a particular type.
  */
+//TODO(stalcup): guard against attempts to replace classes that have special prototype handling
+//like String and Array.
 public class ConditionWhenTypeIs extends Condition {
 
-  private final String exactTypeName;
+  private final String exactTypeSourceName;
 
-  public ConditionWhenTypeIs(String exactTypeName) {
-    this.exactTypeName = exactTypeName;
+  public ConditionWhenTypeIs(String exactTypeSourceName) {
+    this.exactTypeSourceName = exactTypeSourceName;
+  }
+
+  @Override
+  public boolean equals(Object object) {
+    if (object instanceof ConditionWhenTypeIs) {
+      ConditionWhenTypeIs that = (ConditionWhenTypeIs) object;
+      return Objects.equal(this.exactTypeSourceName, that.exactTypeSourceName);
+    }
+    return false;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hashCode(exactTypeSourceName);
   }
 
   @Override
   public String toSource() {
-    return String.format("requestTypeName.equals(\"%s\")", exactTypeName);
+    return String.format("requestTypeClass == @%s::class", exactTypeSourceName);
   }
 
   @Override
   public String toString() {
-    return "<when-type-is class='" + exactTypeName + "'/>";
+    return "<when-type-is class='" + exactTypeSourceName + "'/>";
   }
 
   @Override
   protected boolean doEval(TreeLogger logger, DeferredBindingQuery query) {
-    return exactTypeName.equals(query.getTestType());
+    return exactTypeSourceName.equals(query.getTestType());
   }
 
   @Override

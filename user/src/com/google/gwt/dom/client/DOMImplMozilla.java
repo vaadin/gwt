@@ -31,6 +31,16 @@ class DOMImplMozilla extends DOMImplStandard {
   }-*/;
 
   /**
+   * Return true if using Gecko 1.9 (Firefox 3) or later.
+   *
+   * @return true if using Gecko 1.9 (Firefox 3) or later
+   */
+  private static boolean isGecko19() {
+    int geckoVersion = getGeckoVersion();
+    return (geckoVersion != -1) && (geckoVersion >= 1009000);
+  }
+
+  /**
    * Return true if using Gecko 1.9.0 (Firefox 3) or earlier.
    * 
    * @return true if using Gecko 1.9.0 (Firefox 3) or earlier
@@ -260,16 +270,6 @@ class DOMImplMozilla extends DOMImplStandard {
       return doc.getBoxObjectFor(elem).screenY -
         doc.getBoxObjectFor(doc.documentElement).screenY;
     }
-  }-*/;
-
-  /**
-   * Return true if using Gecko 1.9 (Firefox 3) or later.
-   * 
-   * @return true if using Gecko 1.9 (Firefox 3) or later
-   */
-  private native boolean isGecko19() /*-{
-    var geckoVersion = @com.google.gwt.dom.client.DOMImplMozilla::getGeckoVersion()();
-    return (geckoVersion != -1) && (geckoVersion >= 1009000);
   }-*/;
 
   private native boolean isRTL(Element elem) /*-{

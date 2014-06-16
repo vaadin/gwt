@@ -36,12 +36,12 @@ import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.i18n.client.LocaleInfo;
 import com.google.gwt.user.client.DOM;
 import com.google.gwt.user.client.Event;
+import com.google.gwt.user.client.Event.NativePreviewEvent;
+import com.google.gwt.user.client.Event.NativePreviewHandler;
 import com.google.gwt.user.client.EventPreview;
 import com.google.gwt.user.client.History;
 import com.google.gwt.user.client.Timer;
 import com.google.gwt.user.client.Window;
-import com.google.gwt.user.client.Event.NativePreviewEvent;
-import com.google.gwt.user.client.Event.NativePreviewHandler;
 import com.google.gwt.user.client.ui.impl.PopupImpl;
 
 import java.util.ArrayList;
@@ -115,11 +115,11 @@ public class PopupPanel extends SimplePanel implements SourcesPopupEvents,
    *
    * <ul>
    * <li>CENTER - Expand from the center of the popup</li>
-   * <li>ONE_WAY_CORNER - Expand from the top left corner, do not animate hiding
-   * </li>
+   * <li>ONE_WAY_CORNER - Expand from the top left corner, do not animate hiding</li>
+   * <li>ROLL_DOWN - Expand from the top to the bottom, do not animate hiding</li>
    * </ul>
    */
-  static enum AnimationType {
+  public static enum AnimationType {
     CENTER, ONE_WAY_CORNER, ROLL_DOWN
   }
 
@@ -394,11 +394,6 @@ public class PopupPanel extends SimplePanel implements SourcesPopupEvents,
     }
   };
 
-  /**
-   * If true, animate the opening of this popup from the center. If false,
-   * animate it open from top to bottom, and do not animate closing. Use false
-   * to animate menus.
-   */
   private AnimationType animType = AnimationType.CENTER;
 
   private boolean autoHide, previewAllNativeEvents, modal, showing;
@@ -1114,12 +1109,23 @@ public class PopupPanel extends SimplePanel implements SourcesPopupEvents,
   }
 
   /**
-   * Enable or disable animation of the {@link PopupPanel}.
+   * Set the type of animation to use when opening and closing the popup.
    *
+   * @see AnimationType
    * @param type the type of animation to use
    */
-  void setAnimationType(AnimationType type) {
-    animType = type;
+  public void setAnimationType(AnimationType type) {
+    animType = type != null ? type : AnimationType.CENTER;
+  }
+
+  /**
+   * Get the type of animation to use when opening and closing the popup.
+   *
+   * @see AnimationType
+   * @return the type of animation used
+   */
+  public AnimationType getAnimationType() {
+    return animType;
   }
 
   /**

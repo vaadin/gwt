@@ -15,6 +15,7 @@ package com.google.gwt.dev.cfg;
 
 import com.google.gwt.core.ext.BadPropertyValueException;
 import com.google.gwt.core.ext.Generator;
+import com.google.gwt.core.ext.Generator.RunsLocal;
 import com.google.gwt.core.ext.GeneratorContext;
 import com.google.gwt.core.ext.SelectionProperty;
 import com.google.gwt.core.ext.TreeLogger;
@@ -41,27 +42,13 @@ public class RuleGenerateWithTest extends TestCase {
   /**
    * Test Generator that cares about properties Foo and Bar.
    */
-  public static class CaresAboutPropertiesGenerator extends Generator {
-
-    @Override
-    public boolean contentDependsOnProperties() {
-      return true;
-    }
-
-    @Override
-    public boolean contentDependsOnTypes() {
-      return false;
-    }
+  @RunsLocal(requiresProperties = {"Foo", "Bar"})
+  public static class CaresAboutSomePropertiesGenerator extends Generator {
 
     @Override
     public String generate(TreeLogger logger, GeneratorContext context, String typeName)
         throws UnableToCompleteException {
       return null;
-    }
-
-    @Override
-    public Set<String> getAccessedPropertyNames() {
-      return Sets.newHashSet("Foo", "Bar");
     }
   }
 
@@ -69,17 +56,8 @@ public class RuleGenerateWithTest extends TestCase {
    * Test Generator that wants to create types for some combination of user.agent and flavor
    * property values.
    */
+  @RunsLocal(requiresProperties = {"user.agent", "flavor"})
   public static class FooGenerator extends Generator {
-
-    @Override
-    public boolean contentDependsOnProperties() {
-      return true;
-    }
-
-    @Override
-    public boolean contentDependsOnTypes() {
-      return false;
-    }
 
     @Override
     public String generate(TreeLogger logger, GeneratorContext context, String typeName)
@@ -112,10 +90,15 @@ public class RuleGenerateWithTest extends TestCase {
         throw new UnableToCompleteException();
       }
     }
+  }
+
+  @RunsLocal(requiresProperties = RunsLocal.ALL)
+  private class CaresAboutAllPropertiesGenerator extends Generator {
 
     @Override
-    public Set<String> getAccessedPropertyNames() {
-      return Sets.newHashSet("user.agent", "flavor");
+    public String generate(TreeLogger logger, GeneratorContext context, String typeName)
+        throws UnableToCompleteException {
+      return null;
     }
   }
 
@@ -151,8 +134,25 @@ public class RuleGenerateWithTest extends TestCase {
     }
   }
 
-  public void testCaresAboutProperties() {
-    RuleGenerateWith rule = new RuleGenerateWith(CaresAboutPropertiesGenerator.class);
+  private class SimpleGenerator extends Generator {
+
+    @Override
+    public String generate(TreeLogger logger, GeneratorContext context, String typeName)
+        throws UnableToCompleteException {
+      return null;
+    }
+  }
+
+  public void testCaresAboutAllProperties() {
+    RuleGenerateWith rule = new RuleGenerateWith(CaresAboutAllPropertiesGenerator.class);
+
+    assertFalse(rule.caresAboutProperties(Sets.<String> newHashSet()));
+    assertTrue(rule.caresAboutProperties(Sets.newHashSet("SomeArbitraryString")));
+    assertTrue(rule.caresAboutProperties(Sets.newHashSet("Foo", "Bar")));
+  }
+
+  public void testCaresAboutSomeProperties() {
+    RuleGenerateWith rule = new RuleGenerateWith(CaresAboutSomePropertiesGenerator.class);
 
     assertFalse(rule.caresAboutProperties(Sets.<String>newHashSet()));
     assertFalse(rule.caresAboutProperties(Sets.newHashSet("Baz")));
@@ -160,6 +160,17 @@ public class RuleGenerateWithTest extends TestCase {
     assertTrue(rule.caresAboutProperties(Sets.newHashSet("Bar")));
     assertTrue(rule.caresAboutProperties(Sets.newHashSet("Foo", "Bar")));
     assertTrue(rule.caresAboutProperties(Sets.newHashSet("Foo", "Bar", "Baz")));
+  }
+
+  public void testDefaultRelevantPropertyNames() {
+    SimpleGenerator simpleGenerator = new SimpleGenerator();
+    assertEquals(RuleGenerateWith.ALL_PROPERTIES,
+        RuleGenerateWith.getAccessedPropertyNames(simpleGenerator.getClass()));
+  }
+
+  public void testDefaultTypeStability() {
+    RuleGenerateWith rule = new RuleGenerateWith(SimpleGenerator.class);
+    assertTrue(rule.contentDependsOnTypes());
   }
 
   public void testGenerate() throws UnableToCompleteException {
@@ -196,29 +207,37 @@ public class RuleGenerateWithTest extends TestCase {
     String runtimeRebindRule0 = runtimeRebindRuleSourcesByName.get("RuntimeRebindRule0");
     assertTrue(runtimeRebindRule0.contains("com.google.gwt.FooMozillaVanilla::new()"));
     assertTrue(runtimeRebindRule0.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"user.agent\").equals(\"mozilla\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"user.agent\") == \"mozilla\""));
     assertTrue(runtimeRebindRule0.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"flavor\").equals(\"Vanilla\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"flavor\") == \"Vanilla\""));
 
     String runtimeRebindRule1 = runtimeRebindRuleSourcesByName.get("RuntimeRebindRule1");
     assertTrue(runtimeRebindRule1.contains("com.google.gwt.FooWebkit::new()"));
     assertTrue(runtimeRebindRule1.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"user.agent\").equals(\"webkit\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"user.agent\") == \"webkit\""));
     assertTrue(runtimeRebindRule1.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"flavor\").equals(\"Vanilla\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"flavor\") == \"Vanilla\""));
 
     String runtimeRebindRule2 = runtimeRebindRuleSourcesByName.get("RuntimeRebindRule2");
     assertTrue(runtimeRebindRule2.contains("com.google.gwt.FooWebkit::new()"));
     assertTrue(runtimeRebindRule2.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"user.agent\").equals(\"webkit\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"user.agent\") == \"webkit\""));
     assertTrue(runtimeRebindRule2.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"flavor\").equals(\"Chocolate\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"flavor\") == \"Chocolate\""));
 
     String runtimeRebindRule3 = runtimeRebindRuleSourcesByName.get("RuntimeRebindRule3");
     assertTrue(runtimeRebindRule3.contains("com.google.gwt.FooMozillaChocolate::new()"));
     assertTrue(runtimeRebindRule3.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"user.agent\").equals(\"mozilla\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"user.agent\") == \"mozilla\""));
     assertTrue(runtimeRebindRule3.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"flavor\").equals(\"Chocolate\")"));
+        "@com.google.gwt.lang.RuntimePropertyRegistry::getPropertyValue(*)"
+        + "(\"flavor\") == \"Chocolate\""));
   }
 }

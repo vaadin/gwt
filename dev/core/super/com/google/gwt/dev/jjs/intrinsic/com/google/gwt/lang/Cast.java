@@ -20,13 +20,16 @@ import com.google.gwt.core.client.JavaScriptObject;
 // CHECKSTYLE_NAMING_OFF: Uses legacy conventions of underscore prefixes.
 
 /**
- * This is a magic class the compiler uses to perform any cast operations that
- * require code.
+ * This is a magic class the compiler uses to perform any cast operations that require code.<br />
+ *
+ * The cast operations are only as accurate as the contents of the castableTypeMaps and should not
+ * be used directly by user code. The compiler takes care to record most cast operations in user
+ * code so that it can build limited but accurate castableTypeMaps.
  */
 final class Cast {
 
   /**
-   * As plain JavaScript Strings (not monkey patcheed) are used to model Java Strings,
+   * As plain JavaScript Strings (not monkey patched) are used to model Java Strings,
    * {@code  stringCastMap} stores runtime type info for cast purposes for string objects.
    *
    * NOTE: it is important that the field is left uninitialized so that Cast does not
@@ -35,16 +38,16 @@ final class Cast {
   private static JavaScriptObject stringCastMap;
 
   static native boolean canCast(Object src, JavaScriptObject dstId) /*-{
-    return (src.@java.lang.Object::castableTypeMap && !!src.@java.lang.Object::castableTypeMap[dstId]) && !!src.@java.lang.Object::castableTypeMap[dstId]
-        || @com.google.gwt.lang.Cast::isJavaString(Ljava/lang/Object;)(src) &&
-        !!@com.google.gwt.lang.Cast::stringCastMap[dstId];
+    return @com.google.gwt.lang.Cast::isJavaString(*)(src) &&
+        !!@com.google.gwt.lang.Cast::stringCastMap[dstId] ||
+        src.@java.lang.Object::castableTypeMap && !!src.@java.lang.Object::castableTypeMap[dstId] && !!src.@java.lang.Object::castableTypeMap[dstId];
   }-*/;
 
-  // Will eventually be the implementation for class.isAssignableFrom().
-  static native boolean canCastTypeId(JavaScriptObject srcTypeId, JavaScriptObject dstTypeId) /*-{
+  static native boolean canCastClass(Class<?> srcClazz, Class<?> dstClass) /*-{
+    var srcTypeId = srcClazz.@java.lang.Class::typeId;
+    var dstTypeId = dstClass.@java.lang.Class::typeId;
     var prototype = @com.google.gwt.lang.JavaClassHierarchySetupUtil::prototypesByTypeId[srcTypeId];
-    return (prototype.@java.lang.Object::castableTypeMap &&
-            !!prototype.@java.lang.Object::castableTypeMap[dstTypeId]);
+    return @com.google.gwt.lang.Cast::canCast(*)(prototype, dstTypeId);
   }-*/;
 
   static native String charToString(char x) /*-{
@@ -58,12 +61,18 @@ final class Cast {
     return src;
   }
 
+  static Object dynamicCastToString(Object src) {
+    if (src != null && !isJavaString(src)) {
+      throw new ClassCastException();
+    }
+    return src;
+  }
+
   /**
    * Allow a dynamic cast to an object, always succeeding if it's a JSO.
    */
   static Object dynamicCastAllowJso(Object src, JavaScriptObject dstId) {
-    if (src != null && !isJavaScriptObject(src) &&
-        !canCast(src, dstId)) {
+    if (src != null && !isJavaScriptObject(src) && !canCast(src, dstId)) {
       throw new ClassCastException();
     }
     return src;
@@ -73,7 +82,17 @@ final class Cast {
    * Allow a cast to JSO only if there's no type ID.
    */
   static Object dynamicCastJso(Object src) {
-    if (src != null && isJavaObject(src)) {
+    if (src != null && !isJavaScriptObject(src)) {
+      throw new ClassCastException();
+    }
+    return src;
+  }
+
+  /**
+   * A dynamic cast that optionally checks for JsInterface prototypes.
+   */
+  static Object dynamicCastWithPrototype(Object src, JavaScriptObject dstId, String jsType) {
+    if (src != null && !canCast(src, dstId) && !jsInstanceOf(src, jsType)) {
       throw new ClassCastException();
     }
     return src;
@@ -81,6 +100,10 @@ final class Cast {
 
   static boolean instanceOf(Object src, JavaScriptObject dstId) {
     return (src != null) && canCast(src, dstId);
+  }
+
+  static boolean instanceOfJsInterface(Object src, JavaScriptObject dstId, String jsType) {
+    return instanceOf(src, dstId) || jsInstanceOf(src, jsType);
   }
 
   static boolean instanceOfJso(Object src) {
@@ -96,16 +119,12 @@ final class Cast {
         (isJavaScriptObject(src) || canCast(src, dstId));
   }
 
-  static boolean isJavaObject(Object src) {
-    return isNonStringJavaObject(src) || isJavaString(src);
-  }
-
   static boolean isJavaScriptObject(Object src) {
-    return !isNonStringJavaObject(src) && !isJavaString(src);
+    return !isJavaString(src) && !Util.hasTypeMarker(src);
   }
 
   static boolean isJavaScriptObjectOrString(Object src) {
-    return !isNonStringJavaObject(src);
+    return !Util.hasTypeMarker(src);
   }
 
   /**
@@ -127,6 +146,60 @@ final class Cast {
 
   static native boolean jsEquals(Object a, Object b) /*-{
     return a == b;
+  }-*/;
+
+  /**
+   * Determine if object is an instanceof jsType regardless of window or frame.
+   */
+  static native boolean jsInstanceOf(Object obj, String jsTypeStr) /*-{
+    if (!obj) {
+        return false;
+    }
+
+    // fast check for $wnd versions when CastNormalizer can pass function refs directly
+    // TODO(cromwellian) restore JSymbolLiteral to allow JS reference literals to be passed through
+    var jsType = window[jsTypeStr];
+    if (typeof(jsType) === 'function'  && obj instanceof jsType) {
+        return true;
+    }
+
+    // early out for non-Java types because this check is expensive
+    if (typeof(obj) === 'string' || @Util::hasTypeMarker(Ljava/lang/Object;)(obj)) {
+        return false;
+    }
+
+    // hack workaround for HtmlUnit and fast early exit
+    // This *ONLY* works for functions in JS that are non-anonymous and doesn't obey hierarchy
+    // TODO(cromwellian) TEMPORARY: fix HtmlUnit patch upstream and remove this
+    if (obj.constructor && obj.constructor.name == jsTypeStr) {
+        return true;
+    }
+
+    // More general check, works on all browsers
+    if (obj.constructor) {
+      // TODO: remove support for $wnd
+      var isMainWindow = jsTypeStr.substring(0, 5) == '$wnd.';
+      var jsFunction = obj.constructor;
+      var jsTypeInContext = $wnd;
+      if (!isMainWindow) {
+        // Find native 'Function' function
+        while (jsFunction != jsFunction.constructor) {
+          jsFunction = jsFunction.constructor;
+        }
+        // eval 'return this' in context to get global scope which defines obj's constructor
+        var jsTypeInContext = jsFunction("return window || self;")();
+      } else {
+        // strip of $wnd.
+        jsTypeStr = jsTypeStr.substring(5);
+      }
+      // build up contextWindow.some.type.Path
+      for (var parts = jsTypeStr.split("."), i = 0, l = parts.length; i < l && jsTypeInContext;
+          i++) {
+          jsTypeInContext = jsTypeInContext[parts[i]];
+      }
+      return obj instanceof jsTypeInContext;
+    }
+    return false;
   }-*/;
 
   static native boolean jsNotEquals(Object a, Object b) /*-{
@@ -209,10 +282,6 @@ final class Cast {
     return o;
   }
 
-  private static native JavaScriptObject getNullMethod() /*-{
-    return @null::nullMethod();
-  }-*/;
-
   /**
    * Returns whether the Object is a Java String.
    *
@@ -221,22 +290,44 @@ final class Cast {
   // Visible for getIndexedMethod()
   static native boolean isJavaString(Object src) /*-{
     // TODO(rluble): This might need to be specialized by browser.
-    return typeof(src) == "string" || src instanceof String;
+    return typeof(src) === "string" || src instanceof String;
   }-*/;
 
   /**
-   * Returns whether the Object is a Java Object but not a String.
+   * Returns true if Object can dispatch instance methods and does not need a compiler
+   * provided trampoline.
    *
-   * Depends on all Java Objects (except for String) having the typeMarker field
-   * generated, and set to the nullMethod for the current GWT module.  Note this
-   * test essentially tests whether an Object is a java object for the current
-   * GWT module.  Java Objects from external GWT modules are not recognizable as
-   * Java Objects in this context.
+   * Java non primitive objects fall into 3 classes: Strings, arrays (of primitive or non primitive
+   * types) and regular Java Objects (all others).
+   *
+   * Only regular Java object have dynamic instance dispatch, strings and arrays need compiler
+   * generated trampolines to implement instance dispatch.
    */
   // Visible for getIndexedMethod()
-  static boolean isNonStringJavaObject(Object src) {
-    return Util.getTypeMarker(src) == getNullMethod();
+  static boolean hasJavaObjectVirtualDispatch(Object src) {
+    return !instanceofArray(src) && Util.hasTypeMarker(src);
   }
+
+  /**
+   * Returns true if the object is tagged and can respond to cast queries.
+   *
+   * All regular Java objects and arrays are tagged.
+   */
+
+
+  /**
+   * Returns true if {@code src} is a Java array.
+   */
+  static boolean isJavaArray(Object src) {
+    return instanceofArray(src) && Util.hasTypeMarker(src);
+  }
+
+  /**
+   * Returns true if {@code src} is an array (native or not).
+   */
+  static native boolean instanceofArray(Object src) /*-{
+    return Array.isArray(src);
+  }-*/;
 }
 
 // CHECKSTYLE_NAMING_ON

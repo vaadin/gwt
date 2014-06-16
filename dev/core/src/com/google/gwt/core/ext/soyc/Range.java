@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -14,7 +14,7 @@
  * the License.
  */
 /**
- * 
+ *
  */
 package com.google.gwt.core.ext.soyc;
 
@@ -74,8 +74,10 @@ public final class Range {
   }
 
   /**
-   * Constructor.
-   * 
+   * A range whose start and end are specified both as character positions and as
+   * line numbers and columns. Everything is zero-based (similar to Java arrays).
+   * The ending position must be greater or equal to the starting position.
+   *
    * @param start must be non-negative
    * @param end must be greater than or equal to <code>start</code>
    */
@@ -90,6 +92,13 @@ public final class Range {
     this.startColumn = startColumn;
     this.endLine = endLine;
     this.endColumn = endColumn;
+  }
+
+  /**
+   * Returns a copy with the end moved.
+   */
+  public Range withNewEnd(int newEnd, int newEndLine, int newEndColumn) {
+    return new Range(start, newEnd, startLine, startColumn, newEndLine, newEndColumn);
   }
 
   /**

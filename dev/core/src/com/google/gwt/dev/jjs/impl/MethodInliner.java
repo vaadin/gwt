@@ -1,12 +1,12 @@
 /*
  * Copyright 2007 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -40,8 +40,8 @@ import com.google.gwt.dev.jjs.ast.js.JMultiExpression;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -50,7 +50,7 @@ import java.util.Set;
  * Inline methods that can be inlined. The current implementation limits the
  * methods that can be inlined to those that are composed of at most two
  * top-level expressions.
- * 
+ *
  * Future improvements will allow more complex methods to be inlined based on
  * the number of call sites, as well as adding support for more complex target
  * method expressions.
@@ -83,7 +83,7 @@ public class MethodInliner {
      * Resets with each new visitor, which is good since things that couldn't be
      * inlined before might become inlinable.
      */
-    private final Set<JMethod> cannotInline = new HashSet<JMethod>();
+    private final Set<JMethod> cannotInline = Sets.newHashSet();
     private JExpression ignoringReturnValueFor;
 
     @Override
@@ -104,32 +104,53 @@ public class MethodInliner {
         return;
       }
 
-      boolean possibleToInline = false;
-
-      if (method.isStatic() && !method.isNative()) {
-        JMethodBody body = (JMethodBody) method.getBody();
-        List<JStatement> stmts = body.getStatements();
-
-        if (method.getEnclosingType() != null
-            && method.getEnclosingType().getClinitMethod() == method && !stmts.isEmpty()) {
-          // clinit() calls cannot be inlined unless they are empty
-          possibleToInline = false;
-        } else if (!body.getLocals().isEmpty()) {
-          // methods with local variables cannot be inlined
-          possibleToInline = false;
-        } else {
-          JMultiExpression multi = createMultiExpressionFromBody(body, ignoringReturnValueFor == x);
-          if (multi != null) {
-            possibleToInline = tryInlineExpression(x, ctx, multi);
-          }
-        }
-      }
-
-      // If it will never be possible to inline the method, add it to a
-      // blacklist
-      if (!possibleToInline) {
+      if (!tryInlineMethodCall(x, ctx)) {
+        // Do not try to inline this method again
         cannotInline.add(method);
       }
+    }
+
+    private boolean tryInlineMethodCall(JMethodCall x, Context ctx) {
+      JMethod method = x.getTarget();
+      if (JProgram.isJsInterfacePrototype(method.getEnclosingType())) {
+         // don't inline calls to JsInterface Prototype methods, since these are merely stubs to
+         // preserve super calls
+        return false;
+      }
+
+      if (!method.isStatic() || method.isNative()) {
+        // Only inline static methods that are not native.
+        return false;
+      }
+
+      if (!program.isInliningAllowed(method)) {
+        return false;
+      }
+
+      JMethodBody body = (JMethodBody) method.getBody();
+      List<JStatement> stmts = body.getStatements();
+
+      if (method.getEnclosingType() != null
+         && method.getEnclosingType().getClinitMethod() == method && !stmts.isEmpty()) {
+          // clinit() calls cannot be inlined unless they are empty
+        return false;
+      }
+
+      if (!body.getLocals().isEmpty()) {
+          // methods with local variables cannot be inlined
+        return false;
+      }
+
+      // try to inline
+      JMultiExpression multi = createMultiExpressionFromBody(body, ignoringReturnValueFor == x);
+      if (multi == null || !tryInlineExpression(x, ctx, multi)) {
+        // If it will never be possible to inline the method, add it to a
+        // blacklist
+        return false;
+      }
+
+      // Successfully inlined.
+      return true;
     }
 
     @Override
@@ -154,7 +175,7 @@ public class MethodInliner {
          * tighten an instance call to its static impl after the static impl had
          * already been inlined, this meant any "flow" type optimizer would have
          * to fake artifical flow from the instance method to the static impl.
-         * 
+         *
          * TODO: allow the inlining if we are the last remaining call site, and
          * prune the static impl? But it might tend to generate more code.
          */
@@ -213,7 +234,7 @@ public class MethodInliner {
      * Creates a JMultiExpression from a set of JExpressionStatements,
      * optionally terminated by a JReturnStatement. If the method doesn't match
      * this pattern, it returns <code>null</code>.
-     * 
+     *
      * If a method has a non-void return statement and can be represented as a
      * multi-expression, the output of the multi-expression will be the return
      * expression of the method. If the method is void, the output of the
@@ -289,7 +310,7 @@ public class MethodInliner {
        * Limit inlined methods to multiexpressions of length 2 for now. This
        * handles the simple { return JVariableRef; } or { expression; return
        * something; } cases.
-       * 
+       *
        * TODO: add an expression complexity analyzer.
        */
       if (targetExpr.getNumberOfExpressions() > 2) {
@@ -320,7 +341,7 @@ public class MethodInliner {
       /*
        * There are a different number of parameters than args - this is likely a
        * result of parameter pruning. Don't consider this call site a candidate.
-       * 
+       *
        * TODO: would this be possible in the trivial delegation case?
        */
       if (x.getTarget().getParams().size() != x.getArgs().size()) {
@@ -391,7 +412,7 @@ public class MethodInliner {
    * Verifies that all the parameters are referenced once and only once, not
    * within a conditionally-executing expression, and any before trouble some
    * expressions evaluate. Examples of troublesome expressions include:
-   * 
+   *
    * <ul>
    * <li>assignments to any variable</li>
    * <li>expressions that throw exceptions</li>
@@ -555,9 +576,6 @@ public class MethodInliner {
       result = source;
     } else {
       result = target;
-    }
-    if ((!target.canBeNull())) {
-      result = result.getNonNull();
     }
     return result;
   }

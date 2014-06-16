@@ -26,7 +26,6 @@ import com.google.gwt.thirdparty.org.eclipse.jetty.server.AbstractHttpConnection
 import com.google.gwt.thirdparty.org.eclipse.jetty.server.Request;
 import com.google.gwt.thirdparty.org.eclipse.jetty.server.Server;
 import com.google.gwt.thirdparty.org.eclipse.jetty.server.nio.SelectChannelConnector;
-import com.google.gwt.thirdparty.org.eclipse.jetty.servlet.FilterHolder;
 import com.google.gwt.thirdparty.org.eclipse.jetty.servlet.ServletContextHandler;
 import com.google.gwt.thirdparty.org.eclipse.jetty.servlet.ServletHolder;
 import com.google.gwt.thirdparty.org.eclipse.jetty.servlets.GzipFilter;
@@ -37,15 +36,14 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
-import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.servlet.ServletException;
 import javax.servlet.DispatcherType;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -85,7 +83,6 @@ public class WebServer {
       Pattern.compile("([a-zA-Z_][a-zA-Z0-9_]*\\.)*[a-zA-Z_][a-zA-Z0-9_]*");
 
   private static final MimeTypes MIME_TYPES = new MimeTypes();
-  private static final String TIME_IN_THE_PAST = "Fri, 01 Jan 1990 00:00:00 GMT";
 
   private final SourceHandler handler;
 
@@ -113,27 +110,27 @@ public class WebServer {
     connector.setReuseAddress(false);
     connector.setSoLingerTime(0);
 
-    Server server = new Server();
-    server.addConnector(connector);
+    Server newServer = new Server();
+    newServer.addConnector(connector);
 
-    ServletContextHandler handler = new ServletContextHandler(ServletContextHandler.SESSIONS);
-    handler.setContextPath("/");
-    handler.addServlet(new ServletHolder(new HttpServlet() {
+    ServletContextHandler newHandler = new ServletContextHandler(ServletContextHandler.SESSIONS);
+    newHandler.setContextPath("/");
+    newHandler.addServlet(new ServletHolder(new HttpServlet() {
       @Override
       protected void doGet(HttpServletRequest request, HttpServletResponse response)
           throws ServletException, IOException {
         handleRequest(request.getPathInfo(), request, response);
       }
     }), "/*");
-    handler.addFilter(GzipFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
-    server.setHandler(handler);
+    newHandler.addFilter(GzipFilter.class, "/*", EnumSet.allOf(DispatcherType.class));
+    newServer.setHandler(newHandler);
     try {
-      server.start();
+      newServer.start();
     } catch (Exception e) {
       logger.log(TreeLogger.ERROR, "cannot start web server", e);
       throw new UnableToCompleteException();
     }
-    this.server = server;
+    this.server = newServer;
   }
 
   public int getPort() {
@@ -163,6 +160,13 @@ public class WebServer {
 
   private void doGet(String target, HttpServletRequest request, HttpServletResponse response)
       throws IOException {
+
+    if (!target.endsWith(".cache.js")) {
+      // Make sure IE9 doesn't cache any pages.
+      // (Nearly all pages may change on server restart.)
+      PageUtil.setNoCacheHeaders(response);
+    }
+
     if (target.equals("/")) {
       setHandled(request);
       JsonObject config = makeConfig();
@@ -288,11 +292,6 @@ public class WebServer {
 
     if (target.endsWith(".cache.js")) {
       response.setHeader("X-SourceMap", sourceMapLocationForModule(moduleName));
-    } else if (target.endsWith(".nocache.js")) {
-      response.setHeader("Cache-Control", "no-cache, no-store, max-age=0, must-revalidate");
-      response.setHeader("Pragma", "no-cache");
-      response.setHeader("Expires", TIME_IN_THE_PAST);
-      response.setDateHeader("Date", new Date().getTime());
     }
     response.setHeader("Access-Control-Allow-Origin", "*");
     String mimeType = guessMimeType(target);
@@ -409,6 +408,7 @@ public class WebServer {
       HttpServletResponse response) throws IOException {
 
     response.setStatus(HttpServletResponse.SC_OK);
+    response.setHeader("Cache-control", "no-cache");
     response.setContentType("application/javascript");
     PrintWriter out = response.getWriter();
 

@@ -1,12 +1,12 @@
 /*
  * Copyright 2011 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -48,7 +48,7 @@ public class CompilationProblemReporter {
    * Used as a convenience to catch all exceptions thrown by the compiler. For
    * instances of {@link InternalCompilerException}, extra diagnostics are
    * printed.
-   * 
+   *
    * @param logger logger used to report errors to the console
    * @param e the exception to analyze and log
    * @return Always returns an instance of {@link UnableToCompleteException} so
@@ -101,7 +101,7 @@ public class CompilationProblemReporter {
    * Provides a meaningful error message when a type is missing from the
    * {@link com.google.gwt.core.ext.typeinfo.TypeOracle} or
    * {@link com.google.gwt.dev.shell.CompilingClassLoader}.
-   * 
+   *
    * @param logger logger for logging errors to the console
    * @param missingType The qualified source name of the type to report
    */
@@ -121,6 +121,11 @@ public class CompilationProblemReporter {
         Messages.HINT_CHECK_MODULE_NONCLIENT_SOURCE_DECL.log(logger, null);
       }
     } else if (!missingType.equals("java.lang.Object")) {
+      boolean strictSourceResources =
+          compilationState.getCompilerContext().getOptions().enforceStrictSourceResources();
+      if (strictSourceResources) {
+        Messages.HINT_STRICT_SOURCE_ENTRIES.log(logger, null);
+      }
       Messages.HINT_CHECK_TYPENAME.log(logger, missingType, null);
       Messages.HINT_CHECK_CLASSPATH_SOURCE_ENTRIES.log(logger, null);
     }
@@ -138,7 +143,7 @@ public class CompilationProblemReporter {
 
   /**
    * Logs errors to the console.
-   * 
+   *
    * @param logger logger for reporting errors to the console
    * @param unit Compilation unit that may have errors
    * @param suppressErrors Controls he log level for logging errors. If

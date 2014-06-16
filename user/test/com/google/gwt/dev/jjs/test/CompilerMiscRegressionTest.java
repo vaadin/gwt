@@ -15,8 +15,23 @@
  */
 package com.google.gwt.dev.jjs.test;
 
+import com.google.gwt.dev.jjs.test.overrides.package1.Caller;
+import com.google.gwt.dev.jjs.test.overrides.package1.ClassExposingM;
+import com.google.gwt.dev.jjs.test.overrides.package1.SomeParent;
+import com.google.gwt.dev.jjs.test.overrides.package1.SomeParentParent;
+import com.google.gwt.dev.jjs.test.overrides.package1.SomeParentParentParent;
+import com.google.gwt.dev.jjs.test.overrides.package1.SubClassExposingM;
+import com.google.gwt.dev.jjs.test.overrides.package2.SomeSubClassInAnotherPackage;
+import com.google.gwt.dev.jjs.test.overrides.package2.SomeSubSubClassInAnotherPackage;
+import com.google.gwt.dev.jjs.test.overrides.package3.SomeInterface;
+import com.google.gwt.dev.jjs.test.overrides.package3.SomePackageConfusedParent;
 import com.google.gwt.dom.client.Document;
 import com.google.gwt.junit.client.GWTTestCase;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Tests Miscelaneous fixes.
@@ -42,6 +57,19 @@ public class CompilerMiscRegressionTest extends GWTTestCase {
   }-*/;
 
   /**
+   * The array {@code map.get("one")[0]} gets normalized (by {@link ImplementCastsAndTypeChecks}) to
+   * {@code Cast.dynamicCast(map.get("one"), ...)[0]}. The expression resulting from dynamiCast
+   * would have type Object and that would not be a valid type for an array access operation.
+   */
+  public void testOverridingReturnType() {
+    Map<String, String[]> map = new HashMap();
+    map.put("one", new String[10]);
+
+    map.get("one")[0] = "one";
+    assertEquals("one", map.get("one")[0]);
+  }
+
+  /**
    * Test for issues 6373 and 3942.
    */
   public void testUnaryPlus() {
@@ -60,6 +88,39 @@ public class CompilerMiscRegressionTest extends GWTTestCase {
 
   private void throwE(String message) {
     throw new RuntimeException(message);
+  }
+
+  /**
+   * Test for issue 8243.
+   */
+  public void testAddAllLargeNumberOfElements() {
+
+    int dstLength = 10;
+    // Some browser have a limit on the number of parameters a function can have and 130000 barely
+    // exceeds Chrome limit (as of V34).
+    // This limit also applies when functions are called through apply().
+    int srcLength =  130000;
+    List<String> original = new ArrayList<String>();
+    for (int i = 0; i < dstLength; i++) {
+      original.add("foo");
+    }
+    List<String> src = new ArrayList<String>();
+    for (int i = 0; i < srcLength; i++) {
+      src.add("bar");
+    }
+
+    original.addAll(src);
+    final int totalLength = srcLength + dstLength;
+    assertEquals(totalLength, original.size());
+
+    // Check the result sampling as iterating through large arrays seems costly in IE.
+    for (int i = 0; i < totalLength; i += 1000) {
+      if (i < dstLength) {
+        assertEquals("foo", original.get(i));
+      } else {
+        assertEquals("bar", original.get(i));
+      }
+    }
   }
 
   /**
@@ -109,6 +170,52 @@ public class CompilerMiscRegressionTest extends GWTTestCase {
     foo = Document.get().createDivElement();
     foo.setPropertyString("x", "y");
     assertEquals("y", foo.getPropertyString("x"));
+  }
+
+  /**
+   * Tests complex overriding patterns involving package private methods.
+   * <p>
+   * Test for issue 8654.
+   */
+  public void testOverride() {
+    Caller aCaller = new Caller();
+    assertEquals("SomeParentParent", aCaller.callPackagePrivatem(new SomeParentParent()));
+    assertEquals("SomeParent", aCaller.callPackagePrivatem(new SomeParent()));
+    assertEquals("SomeParent", aCaller.callPackagePrivatem(
+        new SomeSubClassInAnotherPackage()));
+
+    assertEquals("SomeSubClassInAnotherPackage",
+        SomeSubClassInAnotherPackage.pleaseCallm(new SomeSubClassInAnotherPackage()));
+    assertEquals("SomeSubSubClassInAnotherPackage",
+        SomeSubClassInAnotherPackage.pleaseCallm(new SomeSubSubClassInAnotherPackage()));
+
+    assertEquals("ClassExposingM",
+        aCaller.callPackagePrivatem(new ClassExposingM()));
+
+    SomeInterface i = new ClassExposingM();
+    assertEquals("ClassExposingM", i.m());
+    assertEquals("live at ClassExposingM", new ClassExposingM().f());
+
+    // Confirm that both calling m through SomeInterface and through SomeParentParentParent
+    // dispatch to the right implementation.
+    SomeInterface i1 = new SubClassExposingM();
+    assertEquals("SubClassExposingM", i1.m());
+
+    assertEquals("SubClassExposingM",
+        SomeParentParentParent.callSomeParentParentParentM(new SubClassExposingM()));
+
+    assertEquals("SomeParentParentParent",
+        SomeParentParentParent.callSomeParentParentParentM(new SomeParentParentParent()));
+    assertEquals("SomeParentParentParent",
+        SomeParentParentParent.callSomeParentParentParentM(new SomePackageConfusedParent()));
+    assertEquals("SomeParentParent",
+        SomeParentParentParent.callSomeParentParentParentM(new SomeParentParent()));
+    assertEquals("SomeParent",
+        SomeParentParentParent.callSomeParentParentParentM(new SomeParent()));
+    assertEquals("SomeParent",
+        SomeParentParentParent.callSomeParentParentParentM(new SomeSubClassInAnotherPackage()));
+    assertEquals("SomeParent",
+        SomeParentParentParent.callSomeParentParentParentM(new SomeSubSubClassInAnotherPackage()));
   }
 
   private static void assertEqualContents(float[] expected, float[] actual) {

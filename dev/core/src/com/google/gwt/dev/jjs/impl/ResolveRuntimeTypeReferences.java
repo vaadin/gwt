@@ -23,25 +23,26 @@ import com.google.gwt.dev.jjs.ast.JModVisitor;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JReferenceType;
 import com.google.gwt.dev.jjs.ast.JRuntimeTypeReference;
+import com.google.gwt.dev.jjs.ast.JStringLiteral;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.ast.JVisitor;
 import com.google.gwt.thirdparty.guava.common.collect.HashMultiset;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableMultiset;
+import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import com.google.gwt.thirdparty.guava.common.collect.Multiset;
 import com.google.gwt.thirdparty.guava.common.collect.Multisets;
 
 import java.util.Map;
+import java.util.Map.Entry;
 
 /**
- * Assigns and replaces JRuntimeTypeReference nodes with an type id literal.<br />
- *
- * Ints are assigned sequentially under the assumption that all types in the application are known.
+ * Assigns and replaces JRuntimeTypeReference nodes with a type id literal.
  */
 public abstract class ResolveRuntimeTypeReferences {
 
   /**
-   * A resolver that translates type ids into int literals.
+   * Sequentially creates int type ids for castable and instantiable types.
    */
   public static class IntoIntLiterals extends ResolveRuntimeTypeReferences {
 
@@ -57,7 +58,7 @@ public abstract class ResolveRuntimeTypeReferences {
       typeIdLiteralsByType.put(type, JIntLiteral.get(id));
     }
 
-    public static Map<JType, JLiteral>  exec(JProgram program) {
+    public static Map<JType, JLiteral> exec(JProgram program) {
       return new ResolveRuntimeTypeReferences.IntoIntLiterals(program).execImpl();
     }
 
@@ -76,37 +77,29 @@ public abstract class ResolveRuntimeTypeReferences {
 
       ImmutableMultiset<JReferenceType> typesOrderedByFrequency =
           Multisets.copyHighestCountFirst(typesWithReferenceCounts);
-      for (JType type : typesOrderedByFrequency) {
+      for (JType type : typesOrderedByFrequency.elementSet()) {
         assignId(type);
       }
     }
   }
 
   /**
-   * A resolver that translates type ids into String literals.
+   * Predictably creates String type ids for castable and instantiable types.
    */
   public static class IntoStringLiterals extends ResolveRuntimeTypeReferences {
 
     private void assignId(JType type) {
-      if (typeIdLiteralsByType.containsKey(type)) {
-        return;
-      }
-      typeIdLiteralsByType.put(type,
-          program.getStringLiteral(type.getSourceInfo(), type.getName()));
+      JStringLiteral stringLiteral = program.getStringLiteral(type.getSourceInfo(), type.getName());
+      typeIdLiteralsByType.put(type, stringLiteral);
     }
 
-    public static Map<JType, JLiteral>  exec(JProgram program) {
+    public static Map<JType, JLiteral> exec(JProgram program) {
       return new ResolveRuntimeTypeReferences.IntoStringLiterals(program).execImpl();
     }
 
     @Override
     protected void assignTypes(Multiset<JReferenceType> typesWithReferenceCounts) {
-      // Make sure that JavaScriptObject, java.lang.Object and java.lang,String get an Id.
-      assignId(program.getJavaScriptObject());
-      assignId(program.getTypeJavaLangObject());
-      assignId(program.getTypeJavaLangString());
-
-      for (JType type : typesWithReferenceCounts) {
+      for (JType type : typesWithReferenceCounts.elementSet()) {
         assignId(type);
       }
     }
@@ -116,22 +109,26 @@ public abstract class ResolveRuntimeTypeReferences {
     }
   }
 
-  // TODO(rluble): Maybe this pass should insert the defineClass in Java.
   /**
-   * Collects all types that need an Id at runtime.
+   * Collects all types that need an id at runtime.
    */
+  // TODO(rluble): Maybe this pass should insert the defineClass in Java.
   private class RuntimeTypeCollectorVisitor extends JVisitor {
 
     private final Multiset<JReferenceType> typesRequiringRuntimeIds = HashMultiset.create();
 
     @Override
     public void endVisit(JRuntimeTypeReference x, Context ctx) {
+      // Collects types in cast maps.
       typesRequiringRuntimeIds.add(x.getReferredType());
     }
 
+    @Override
     public void endVisit(JReferenceType x, Context ctx) {
-      // All reference types retained will need an id.
-      typesRequiringRuntimeIds.add(x);
+      // Collects types that need a runtime type id for defineClass().
+      if (program.typeOracle.isInstantiatedType(x)) {
+        typesRequiringRuntimeIds.add(x);
+      }
     }
   }
 
@@ -153,20 +150,32 @@ public abstract class ResolveRuntimeTypeReferences {
     this.program = program;
   }
 
-  protected abstract void assignTypes(Multiset<JReferenceType> types);
+  protected abstract void assignTypes(Multiset<JReferenceType> typesWithReferenceCounts);
 
   protected Map<JType, JLiteral> execImpl() {
-    RuntimeTypeCollectorVisitor visitor = new RuntimeTypeCollectorVisitor();
-    visitor.accept(program);
+    RuntimeTypeCollectorVisitor runtimeTypeCollector = new RuntimeTypeCollectorVisitor();
+    // Collects runtime type references visible from types in the program that are part of the
+    // current compile.
+    runtimeTypeCollector.accept(program);
+    // Collects runtime type references that are missed (inside of annotations) in a normal AST
+    // traversal.
+    runtimeTypeCollector.accept(Lists.newArrayList(program.getCastMap().values()));
+    // Collects runtime type references in the ClassLiteralHolder even if the ClassLiteralHolder
+    // isn't part of the current compile.
+    runtimeTypeCollector.accept(program.getIndexedType("ClassLiteralHolder"));
+    // TODO(stalcup): each module should have it's own ClassLiteralHolder or some agreed upon
+    // location that is default accessible to all.
 
-    assignTypes(visitor.typesRequiringRuntimeIds);
+    assignTypes(runtimeTypeCollector.typesRequiringRuntimeIds);
 
     ReplaceRuntimeTypeReferencesVisitor replaceTypeIdsVisitor = new ReplaceRuntimeTypeReferencesVisitor();
     replaceTypeIdsVisitor.accept(program);
+    replaceTypeIdsVisitor.accept(program.getIndexedType("ClassLiteralHolder"));
     // TODO(rluble): Improve the code so that things are not scattered all over; here cast maps
     // that appear as parameters to soon to be generated
     // {@link JavaClassHierarchySetup::defineClass()} are NOT traversed when traversing the program.
-    for (JCastMap castMap : program.getCastMaps()) {
+    for (Entry<JReferenceType, JCastMap> entry : program.getCastMap().entrySet()) {
+      JCastMap castMap = entry.getValue();
       replaceTypeIdsVisitor.accept(castMap);
     }
 

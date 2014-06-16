@@ -42,6 +42,7 @@ import java.util.List;
  * <p>These flags are EXPERIMENTAL and subject to change.</p>
  */
 public class Options {
+  private boolean compileIncremental = false;
   private boolean noPrecompile = false;
   private boolean isCompileTest = false;
   private File workDir;
@@ -52,10 +53,12 @@ public class Options {
   private String preferredHost = "localhost";
   private int port = 9876;
   private RecompileListener recompileListener = RecompileListener.NONE;
-  private TreeLogger.Type logLevel = TreeLogger.Type.WARN;
+  private TreeLogger.Type logLevel = TreeLogger.Type.INFO;
   // Use the same default as the GWT compiler.
   private SourceLevel sourceLevel = SourceLevel.DEFAULT_SOURCE_LEVEL;
+  private boolean failOnError = false;
   private boolean strictResources = false;
+  private int compileTestRecompiles = 0;
 
   /**
    * Sets each option to the appropriate value, based on command-line arguments.
@@ -115,6 +118,13 @@ public class Options {
   }
 
   /**
+   * Whether to compile a series of reusable libraries that are linked at the end.
+   */
+  boolean shouldCompileIncremental() {
+    return compileIncremental;
+  }
+
+  /**
    * Whether the codeServer should start without precompiling modules.
    */
   boolean getNoPrecompile() {
@@ -149,6 +159,10 @@ public class Options {
     return bindAddress;
   }
 
+  int getCompileTestRecompiles() {
+    return compileTestRecompiles;
+  }
+
   /**
    * The hostname to put in a URL pointing to the code server.
    */
@@ -174,18 +188,29 @@ public class Options {
     return sourcePath;
   }
 
+  /**
+   * If true, run the compiler in "strict" mode, which fails the compile if any Java file
+   * cannot be compiled, whether or not it is used.
+   */
+  boolean isFailOnError() {
+    return failOnError;
+  }
+
   private class ArgProcessor extends ArgProcessorBase {
 
     public ArgProcessor() {
       registerHandler(new NoPrecompileFlag());
       registerHandler(new CompileTestFlag());
+      registerHandler(new CompileTestRecompilesFlag());
       registerHandler(new BindAddressFlag());
       registerHandler(new PortFlag());
       registerHandler(new WorkDirFlag());
       registerHandler(new AllowMissingSourceDirFlag());
       registerHandler(new SourceFlag());
       registerHandler(new ModuleNameArgument());
+      registerHandler(new FailOnErrorFlag());
       registerHandler(new StrictResourcesFlag());
+      registerHandler(new CompileIncrementalFlag());
       registerHandler(new ArgHandlerSourceLevel(new OptionSourceLevel() {
         @Override
         public SourceLevel getSourceLevel() {
@@ -214,7 +239,6 @@ public class Options {
     protected String getName() {
       return CodeServer.class.getName();
     }
-
   }
 
   private class NoPrecompileFlag extends ArgHandlerFlag {
@@ -238,6 +262,35 @@ public class Options {
     @Override
     public boolean getDefaultValue() {
       return !noPrecompile;
+    }
+  }
+
+  private class CompileIncrementalFlag extends ArgHandlerFlag {
+
+    @Override
+    public String getLabel() {
+      return "incremental";
+    }
+
+    @Override
+    public String getPurposeSnippet() {
+      return "Compile and link the application as a set of separate libraries.";
+    }
+
+    @Override
+    public boolean setFlag(boolean value) {
+      compileIncremental = value;
+      return true;
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return false;
+    }
+
+    @Override
+    public boolean isExperimental() {
+      return true;
     }
   }
 
@@ -265,6 +318,29 @@ public class Options {
     }
   }
 
+  private class CompileTestRecompilesFlag extends ArgHandlerInt {
+
+    @Override
+    public String getTag() {
+      return "-compileTestRecompiles";
+    }
+
+    @Override
+    public String[] getTagArgs() {
+      return new String[] { "count" };
+    }
+
+    @Override
+    public String getPurpose() {
+      return "The number of times to recompile (after the first one) during a compile test.";
+    }
+
+    @Override
+    public void setInt(int value) {
+      compileTestRecompiles = value;
+    }
+  }
+
   private class BindAddressFlag extends ArgHandlerString {
 
     @Override
@@ -285,8 +361,8 @@ public class Options {
     @Override
     public boolean setString(String newValue) {
       try {
-        InetAddress bindAddress = InetAddress.getByName(newValue);
-        if (bindAddress.isAnyLocalAddress()) {
+        InetAddress newBindAddress = InetAddress.getByName(newValue);
+        if (newBindAddress.isAnyLocalAddress()) {
           preferredHost = InetAddress.getLocalHost().getHostName();
         } else {
           preferredHost = newValue;
@@ -346,6 +422,35 @@ public class Options {
     }
   }
 
+  private class FailOnErrorFlag extends ArgHandlerFlag {
+
+    FailOnErrorFlag() {
+      // Backward compatibility with -strict in the regular compiler.
+      addTagValue("-strict", true);
+    }
+
+    @Override
+    public String getLabel() {
+      return "failOnError";
+    }
+
+    @Override
+    public boolean getDefaultValue() {
+      return false;
+    }
+
+    @Override
+    public String getPurposeSnippet() {
+      return "Stop compiling if a module has a Java file with a compile error, even if unused.";
+    }
+
+    @Override
+    public boolean setFlag(boolean value) {
+      failOnError = value;
+      return true;
+    }
+  }
+
   private class StrictResourcesFlag extends ArgHandlerFlag {
 
     public StrictResourcesFlag() {
@@ -364,8 +469,8 @@ public class Options {
 
     @Override
     public String getPurposeSnippet() {
-      return "Avoid adding implicit dependencies on \"client\" and \"public\" for "
-          + "modules that don't define any dependencies.";
+      return "Don't implicitly depend on \"client\" and \"public\" when "
+          + "a module doesn't define any dependencies.";
     }
 
     @Override

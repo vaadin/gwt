@@ -33,6 +33,7 @@ import com.google.gwt.core.ext.linker.impl.StandardGeneratedResource;
 import com.google.gwt.core.ext.typeinfo.JClassType;
 import com.google.gwt.core.ext.typeinfo.TypeOracle;
 import com.google.gwt.dev.CompilerContext;
+import com.google.gwt.dev.cfg.RuleGenerateWith;
 import com.google.gwt.dev.resource.ResourceOracle;
 import com.google.gwt.dev.util.DiskCache;
 import com.google.gwt.dev.util.Util;
@@ -79,7 +80,7 @@ public class StandardGeneratorContext implements GeneratorContext {
    * that source isn't requested until the generator has finished writing it.
    * This version is backed by {@link StandardGeneratorContext#diskCache}.
    */
-  private static class GeneratedUnitImpl implements Generated {
+  public static class GeneratedUnitImpl implements Generated {
 
     /**
      * A token to retrieve this object's bytes from the disk cache.
@@ -264,8 +265,6 @@ public class StandardGeneratorContext implements GeneratorContext {
         CompilerEventType.GENERATOR_I18N);
     eventsByGeneratorType.put("com.google.gwt.user.rebind.rpc.ServiceInterfaceProxyGenerator",
         CompilerEventType.GENERATOR_RPC);
-    eventsByGeneratorType.put("com.google.gwt.rpc.rebind.RpcServiceGenerator",
-        CompilerEventType.GENERATOR_RPC); // deRPC
     eventsByGeneratorType.put("com.google.gwt.uibinder.rebind.UiBinderGenerator",
         CompilerEventType.GENERATOR_UIBINDER);
     eventsByGeneratorType.put("com.google.gwt.inject.rebind.GinjectorGenerator",
@@ -679,8 +678,8 @@ public class StandardGeneratorContext implements GeneratorContext {
       // incompatible way) so that all Generators are forced to accurately declare the names of
       // properties they care about.
       propertyOracle = new SubsetFilteringPropertyOracle(
-          generator.getAccessedPropertyNames(), originalPropertyOracle,
-          generatorClassName + ".getAccessedPropertyNames() may need to be updated.");
+          RuleGenerateWith.getAccessedPropertyNames(generator.getClass()), originalPropertyOracle,
+          generatorClassName + "'s RunsLocal annotation may need to be updated.");
       if (generator instanceof IncrementalGenerator) {
         IncrementalGenerator incGenerator = (IncrementalGenerator) generator;
 

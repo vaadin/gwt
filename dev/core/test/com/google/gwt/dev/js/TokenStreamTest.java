@@ -66,6 +66,9 @@ public class TokenStreamTest extends TestCase {
     assertGoodJsni("@org.group.Foo::bar(*)");
     assertBadJsni("@org.group.Foo::bar(*");
 
+    // References to default or imported class
+    assertGoodJsni("@Foo::bar");
+
     // Refs that span lines
     assertGoodJsni("@org.group.Foo::bar(\nLorg/group/Foo;)");
     assertGoodJsni("@org.group.Foo::bar(\nLorg/group/Foo;\n)");
@@ -84,6 +87,8 @@ public class TokenStreamTest extends TestCase {
     assertBadJsni("@org.group.Foo:");
     assertBadJsni("@org.group.Foo::");
     assertBadJsni("@org.group.Foo::(");
+    assertBadJsni("@::bar()");
+    assertBadJsni("@bar");
   }
 
   private void assertBadJsni(String token) throws IOException {

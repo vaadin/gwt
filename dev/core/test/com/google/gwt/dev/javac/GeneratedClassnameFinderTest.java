@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -26,7 +26,7 @@ import java.util.List;
 /**
  * Test-cases to check that we indeed obtain the correct list of nested types
  * with generated classNames by examining bytecodes using ASM.
- * 
+ *
  */
 public class GeneratedClassnameFinderTest extends TestCase {
   enum EnumClass {
@@ -107,13 +107,31 @@ public class GeneratedClassnameFinderTest extends TestCase {
 
   public void testJavacWeirdness() {
     List<String> classNames = new JavacWeirdnessTester().getGeneratedClasses();
-    assertEquals(3, classNames.size());
-    assertTrue(classNames.get(0) + " should not contain Foo",
+    if (classNames.size() == 3) {
+      // javac7 - JavacWeirdnessTester$1 doesn't verify, so it's excluded
+      assertTrue(classNames.get(0) + " should not contain Foo",
+          classNames.get(0).indexOf("Foo") == -1);
+      assertTrue(classNames.get(1) + " should contain Foo",
+          classNames.get(1).indexOf("Foo") != -1);
+      assertTrue(classNames.get(2) + " should contain Foo",
+          classNames.get(2).indexOf("Foo") != -1);
+    } else if (classNames.size() == 4) {
+      // javac8:
+      // JavacWeirdnessTester$1
+      // JavacWeirdnessTester$2
+      // JavacWeirdnessTester$2Foo
+      // JavacWeirdnessTester$3Foo
+      assertTrue(classNames.get(0) + " should not contain Foo",
         classNames.get(0).indexOf("Foo") == -1);
-    assertTrue(classNames.get(1) + " should contain Foo",
-        classNames.get(1).indexOf("Foo") != -1);
-    assertTrue(classNames.get(2) + " should contain Foo",
-        classNames.get(2).indexOf("Foo") != -1);
+      assertTrue(classNames.get(1) + " should not contain Foo",
+        classNames.get(1).indexOf("Foo") == -1);
+      assertTrue(classNames.get(2) + " should contain Foo",
+          classNames.get(2).indexOf("Foo") != -1);
+      assertTrue(classNames.get(3) + " should contain Foo",
+        classNames.get(3).indexOf("Foo") != -1);
+    } else {
+      fail();
+    }
   }
 
   public void testNamedLocal() {
@@ -209,7 +227,7 @@ class EnumTester {
  * Normally, it generates the synthetic class, but in this case, it decides not
  * to generate the class. However, the bytecode still has reference to the
  * synthetic class -- it just passes null for the synthetic class.
- * 
+ *
  * This code also tests for an anonymous class extending a named local class.
  */
 class JavacWeirdnessTester {

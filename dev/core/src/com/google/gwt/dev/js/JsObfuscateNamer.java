@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -15,7 +15,7 @@
  */
 package com.google.gwt.dev.js;
 
-import com.google.gwt.core.ext.PropertyOracle;
+import com.google.gwt.dev.cfg.ConfigProps;
 import com.google.gwt.dev.js.ast.JsName;
 import com.google.gwt.dev.js.ast.JsProgram;
 import com.google.gwt.dev.js.ast.JsScope;
@@ -40,8 +40,8 @@ public class JsObfuscateNamer extends JsNamer implements FreshNameGenerator {
     return exec(program, null);
   }
 
-  public static FreshNameGenerator exec(JsProgram program, PropertyOracle[] propertyOracles) {
-    JsObfuscateNamer namer = new JsObfuscateNamer(program, propertyOracles);
+  public static FreshNameGenerator exec(JsProgram program, ConfigProps config) {
+    JsObfuscateNamer namer = new JsObfuscateNamer(program, config);
     namer.execImpl();
     return namer;
   }
@@ -78,8 +78,8 @@ public class JsObfuscateNamer extends JsNamer implements FreshNameGenerator {
    */
   private final char[] sIdentBuf = new char[6];
 
-  public JsObfuscateNamer(JsProgram program, PropertyOracle[] propertyOracles) {
-    super(program, propertyOracles);
+  public JsObfuscateNamer(JsProgram program, ConfigProps config) {
+    super(program, config);
   }
 
   @Override

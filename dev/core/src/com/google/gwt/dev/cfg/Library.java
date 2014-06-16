@@ -32,7 +32,14 @@ import java.util.Set;
  *
  * Implementers are encouraged to load their contents lazily to minimize work.
  */
+// TODO(stalcup): refactor UnifyAst to only perform binary name based lookups so that libraries
+// don't need to index compilation units by both source and binary name
 public interface Library {
+
+  /**
+   * Closes all read streams.
+   */
+  void close();
 
   /**
    * Returns a resource handle or null for the provided path.
@@ -51,9 +58,16 @@ public interface Library {
   InputStream getClassFileStream(String classFilePath);
 
   /**
-   * Returns the compilation unit with the given type source name. The returned compilation unit
-   * might be regular or might be super sourced depending on which was stored during library
-   * construction.
+   * Returns the compilation unit containing the type with the given binary name. The returned
+   * compilation unit might be regular or might be super sourced depending on which was stored
+   * during library construction.
+   */
+  CompilationUnit getCompilationUnitByTypeBinaryName(String typeBinaryName);
+
+  /**
+   * Returns the compilation unit containing the type with the given source name. The returned
+   * compilation unit might be regular or might be super sourced depending on which was stored
+   * during library construction.
    */
   CompilationUnit getCompilationUnitByTypeSourceName(String typeSourceName);
 
@@ -74,21 +88,14 @@ public interface Library {
   String getLibraryName();
 
   /**
+   * Returns a mapping from compilation unit type source name to a list of nested type binary names.
+   */
+  Multimap<String, String> getNestedBinaryNamesByCompilationUnitName();
+
+  /**
    * Returns a mapping from compilation unit type source name to a list of nested type source names.
    */
-  Multimap<String, String> getNestedNamesByCompilationUnitName();
-
-  /**
-   * Returns a mapping from binding property name to a list of values which were made legal for that
-   * binding property by this library. Facilitates partial generator execution.
-   */
-  Multimap<String, String> getNewBindingPropertyValuesByName();
-
-  /**
-   * Returns a mapping from configuration property name to a value or list of values which were set
-   * for that configuration property by this library. Facilitates partial generator execution.
-   */
-  Multimap<String, String> getNewConfigurationPropertyValuesByName();
+  Multimap<String, String> getNestedSourceNamesByCompilationUnitName();
 
   /**
    * Returns a handle to the serialized permutation result of this library. Final linking relies on
@@ -97,6 +104,12 @@ public interface Library {
   // TODO(stalcup): refactor PersistenceBackedObject name to PersistedObjectHandle or remove it
   // completely
   PersistenceBackedObject<PermutationResult> getPermutationResultHandle();
+
+  /**
+   * Returns a mapping from generator name to the set of source names of types that have been
+   * processed by that generator in this library.
+   */
+  Multimap<String, String> getProcessedReboundTypeSourceNamesByGenerator();
 
   /**
    * Returns a resource handle or null for the provided path.
@@ -108,13 +121,6 @@ public interface Library {
    * retrieval across large groups of provided libraries.
    */
   Set<String> getPublicResourcePaths();
-
-  /**
-   * Returns the set of names of generators which were executed for this library and thus whose
-   * output is current for this library and all of its libraries. Facilitates partial generator
-   * execution.
-   */
-  Set<String> getRanGeneratorNames();
 
   /**
    * Returns the set of source names of types which are the subject of GWT.create() calls in source

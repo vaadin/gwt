@@ -37,11 +37,18 @@ import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
+import com.google.gwt.dev.util.transitiveclosure.TransitiveClosureSolver;
+import com.google.gwt.thirdparty.guava.common.base.Objects;
 import com.google.gwt.thirdparty.guava.common.base.Preconditions;
 import com.google.gwt.thirdparty.guava.common.base.Predicates;
+import com.google.gwt.thirdparty.guava.common.collect.ArrayListMultimap;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableList;
 import com.google.gwt.thirdparty.guava.common.collect.Iterators;
+import com.google.gwt.thirdparty.guava.common.collect.LinkedHashMultimap;
+import com.google.gwt.thirdparty.guava.common.collect.ListMultimap;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
+import com.google.gwt.thirdparty.guava.common.collect.Maps;
+import com.google.gwt.thirdparty.guava.common.collect.Queues;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
 import java.io.File;
@@ -56,17 +63,18 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Queue;
 import java.util.Set;
 
 /**
  * Represents a module specification. In principle, this could be built without
  * XML for unit tests.
  */
-public class ModuleDef {
-
+public class ModuleDef implements DepsInfoProvider {
   /**
    * Marks a module in a way that can be used to calculate the effective bounds of a library module
    * in a module tree.
@@ -96,6 +104,44 @@ public class ModuleDef {
    */
   private enum AttributeSource {
     EXTERNAL_LIBRARY, TARGET_LIBRARY
+  }
+
+  /**
+   * Encapsulates two String names which conceptually represent the starting and ending points of a
+   * path.
+   * <p>
+   * For example in the following module dependency path ["com.acme.MyApp",
+   * "com.acme.widgets.Widgets", "com.google.gwt.user.User"] the fromName is "com.acme.MyApp" and
+   * the toName is "com.google.gwt.user.User" and together they form a PathEndNames instance.
+   * <p>
+   * The purpose of the class is to serve as a key by which to lookup the fileset path that connects
+   * two libraries. It makes it possible to insert fileset entries into a circular module reference
+   * report.
+   */
+  private static class LibraryDependencyEdge {
+
+    private String fromName;
+    private String toName;
+
+    public LibraryDependencyEdge(String fromName, String toName) {
+      this.fromName = fromName;
+      this.toName = toName;
+    }
+
+    @Override
+    public boolean equals(Object object) {
+      if (object instanceof LibraryDependencyEdge) {
+        LibraryDependencyEdge that = (LibraryDependencyEdge) object;
+        return Objects.equal(this.fromName, that.fromName)
+            && Objects.equal(this.toName, that.toName);
+      }
+      return false;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(fromName, toName);
+    }
   }
 
   private static final ResourceFilter NON_JAVA_RESOURCES = new ResourceFilter() {
@@ -132,6 +178,13 @@ public class ModuleDef {
     return true;
   }
 
+  private static LinkedList<String> createExtendedCopy(LinkedList<String> list,
+      String extendingElement) {
+    LinkedList<String> extendedCopy = Lists.newLinkedList(list);
+    extendedCopy.add(extendingElement);
+    return extendedCopy;
+  }
+
   /**
    * All resources found on the public path, specified by <public> directives in
    * modules (or the implicit ./public directory). Marked 'lazy' because it does not
@@ -162,12 +215,44 @@ public class ModuleDef {
 
   private final DefaultFilters defaultFilters;
 
+  private TransitiveClosureSolver<String> depsTransitiveClosureSolver;
+
+  /**
+   * The canonical module names of dependency library modules per depending library module.
+   */
+  private LinkedHashMultimap<String, String> directDepModuleNamesByModuleName =
+      LinkedHashMultimap.create();
+
   private final List<String> entryPointTypeNames = new ArrayList<String>();
 
   /**
    * Names of free-standing compilable library modules that are depended upon by this module.
    */
-  private final Set<String> externalLibraryModuleNames = Sets.newLinkedHashSet();
+  private final Set<String> externalLibraryCanonicalModuleNames = Sets.newLinkedHashSet();
+
+  /**
+   * A stack that keeps track of the type of the current module in the enterModule/exitModule tree.
+   */
+  private final Deque<ModuleType> currentModuleType = Lists.newLinkedList();
+
+  /**
+   * A stack that keeps track of the name of the current module in the enterModule/exitModule tree.
+   */
+  private final Deque<String> currentLibraryModuleNames = Lists.newLinkedList();
+
+  /**
+   * Records the canonical module names for filesets.
+   */
+  private Set<String> filesetModuleNames = Sets.newHashSet();
+
+  /**
+   * A mapping from a pair of starting and ending module names of a path to the ordered list of
+   * names of fileset modules that connect those end points. The mapping allows one to discover what
+   * path of filesets are connecting a pair of libraries when those libraries do not directly depend
+   * on one another. Multiple paths may exist; this map contains only one of them.
+   */
+  private ListMultimap<LibraryDependencyEdge, String> filesetPathPerEdge =
+      ArrayListMultimap.create();
 
   private final Set<File> gwtXmlFiles = new HashSet<File>();
 
@@ -220,32 +305,46 @@ public class ModuleDef {
 
   private final Map<String, String> servletClassNamesByPath = new HashMap<String, String>();
 
-  private PathPrefixSet sourcePrefixSet = new PathPrefixSet();
+  private final PathPrefixSet sourcePrefixSet;
 
   private final Styles styles = new Styles();
 
   /**
-   * Names of non-independently-compilable modules (mostly filesets) that together make up the
-   * current module.
+   * Canonical names of non-independently-compilable modules (mostly filesets) that together make up
+   * the current module.
    */
-  private final Set<String> targetLibraryModuleNames = Sets.newLinkedHashSet();
+  private final Set<String> targetLibraryCanonicalModuleNames = Sets.newLinkedHashSet();
+
+  /**
+   * A mapping from names of modules to path to their associated .gwt.xml file.
+   */
+  private Map<String, String> gwtXmlPathByModuleName = Maps.newHashMap();
 
   public ModuleDef(String name) {
     this(name, ResourceLoaders.forClassLoader(Thread.currentThread()));
   }
 
   public ModuleDef(String name, ResourceLoader resources) {
-    this(name, resources, true);
+    this(name, resources, true, true);
   }
 
   /**
    * Constructs a ModuleDef.
    */
-  public ModuleDef(String name, ResourceLoader resources, boolean monolithic) {
+  public ModuleDef(String name, ResourceLoader resources, boolean monolithic,
+      boolean mergePathPrefixes) {
     this.name = name;
     this.resources = resources;
     this.monolithic = monolithic;
+    sourcePrefixSet = new PathPrefixSet(mergePathPrefixes);
     defaultFilters = new DefaultFilters();
+  }
+
+  /**
+   * Register a {@code dependencyModuleName} as a directDependency of {@code currentModuleName}
+   */
+  public void addDirectDependency(String currentModuleName, String dependencyModuleName) {
+    directDepModuleNamesByModuleName.put(currentModuleName, dependencyModuleName);
   }
 
   public synchronized void addEntryPointTypeName(String typeName) {
@@ -253,6 +352,13 @@ public class ModuleDef {
       return;
     }
     entryPointTypeNames.add(typeName);
+  }
+
+  /**
+   * Registers a module as a fileset.
+   */
+  public void addFileset(String filesetModuleName) {
+    filesetModuleNames.add(filesetModuleName);
   }
 
   public void addGwtXmlFile(File xmlFile) {
@@ -282,8 +388,9 @@ public class ModuleDef {
     if (!attributeIsForTargetLibrary()) {
       return;
     }
-    publicPrefixSet.add(new PathPrefix(publicPackage, defaultFilters.customResourceFilter(
-        includeList, excludeList, skipList, defaultExcludes, caseSensitive), true, excludeList));
+    publicPrefixSet.add(new PathPrefix(getCurrentLibraryModuleName(), publicPackage, defaultFilters
+        .customResourceFilter(includeList, excludeList, skipList, defaultExcludes, caseSensitive),
+        true, excludeList));
   }
 
   public void addResourcePath(String resourcePath) {
@@ -293,7 +400,8 @@ public class ModuleDef {
     if (!attributeIsForTargetLibrary()) {
       return;
     }
-    resourcePrefixes.add(new PathPrefix(resourcePath, NON_JAVA_RESOURCES));
+    resourcePrefixes.add(new PathPrefix(getCurrentLibraryModuleName(), resourcePath,
+        NON_JAVA_RESOURCES, false, null));
   }
 
   public void addRule(Rule rule) {
@@ -318,9 +426,9 @@ public class ModuleDef {
     if (!attributeIsForTargetLibrary()) {
       return;
     }
-    PathPrefix pathPrefix =
-        new PathPrefix(sourcePackage, defaultFilters.customJavaFilter(includeList, excludeList,
-            skipList, defaultExcludes, caseSensitive), isSuperSource, excludeList);
+    PathPrefix pathPrefix = new PathPrefix(getCurrentLibraryModuleName(),
+        sourcePackage, defaultFilters.customJavaFilter(includeList, excludeList, skipList,
+            defaultExcludes, caseSensitive), isSuperSource, excludeList);
     sourcePrefixSet.add(pathPrefix);
   }
 
@@ -385,11 +493,17 @@ public class ModuleDef {
    * At the moment the ModuleDef uses it's monolithic property in combination with the entering
    * modules ModuleType to updates its idea of attribute source.
    */
-  public void enterModule(ModuleType moduleType, String moduleName) {
+  public void enterModule(ModuleType moduleType, String canonicalModuleName) {
+    currentModuleType.push(moduleType);
+    if (moduleType == ModuleType.FILESET) {
+      addFileset(canonicalModuleName);
+    } else {
+      currentLibraryModuleNames.push(canonicalModuleName);
+    }
     if (monolithic) {
       // When you're monolithic the module tree is all effectively one giant library.
       currentAttributeSource.push(AttributeSource.TARGET_LIBRARY);
-      targetLibraryModuleNames.add(moduleName);
+      targetLibraryCanonicalModuleNames.add(canonicalModuleName);
       return;
     }
 
@@ -402,7 +516,7 @@ public class ModuleDef {
     if (currentAttributeSource.isEmpty() && moduleType == ModuleType.LIBRARY) {
       // Then any attributes you see are your own.
       currentAttributeSource.push(AttributeSource.TARGET_LIBRARY);
-      targetLibraryModuleNames.add(moduleName);
+      targetLibraryCanonicalModuleNames.add(canonicalModuleName);
       return;
     }
 
@@ -412,11 +526,11 @@ public class ModuleDef {
       if (moduleType == ModuleType.FILESET) {
         // Then any attributes you see are still your own.
         currentAttributeSource.push(AttributeSource.TARGET_LIBRARY);
-        targetLibraryModuleNames.add(moduleName);
+        targetLibraryCanonicalModuleNames.add(canonicalModuleName);
       } else {
         // But if you enter a library module then any attributes you see are external.
         currentAttributeSource.push(AttributeSource.EXTERNAL_LIBRARY);
-        addExternalLibraryModuleName(moduleName);
+        addExternalLibraryCanonicalModuleName(canonicalModuleName);
       }
     } else if (currentAttributeSource.peek() == AttributeSource.EXTERNAL_LIBRARY) {
       // If your current attribute source is an external library then regardless of whether you
@@ -426,6 +540,9 @@ public class ModuleDef {
   }
 
   public void exitModule() {
+    if (currentModuleType.pop() == ModuleType.LIBRARY) {
+      currentLibraryModuleNames.pop();
+    }
     currentAttributeSource.pop();
   }
 
@@ -511,8 +628,8 @@ public class ModuleDef {
       // well.
       PathPrefixSet newPathPrefixes = new PathPrefixSet();
       for (PathPrefix pathPrefix : pathPrefixes.values()) {
-        newPathPrefixes.add(
-            new PathPrefix(pathPrefix.getPrefix(), NON_JAVA_RESOURCES, pathPrefix.shouldReroot()));
+        newPathPrefixes.add(new PathPrefix(pathPrefix.getModuleName(), pathPrefix.getPrefix(),
+            NON_JAVA_RESOURCES, pathPrefix.shouldReroot(), null));
       }
 
       // Register build resource paths.
@@ -544,6 +661,14 @@ public class ModuleDef {
     return compilationState;
   }
 
+  /**
+   * The module names for its direct non fileset dependents.
+   */
+  public Collection<String> getDirectDependencies(String libraryModuleName) {
+    assert !filesetModuleNames.contains(libraryModuleName);
+    return directDepModuleNamesByModuleName.get(libraryModuleName);
+  }
+
   public synchronized String[] getEntryPointTypeNames() {
     final int n = entryPointTypeNames.size();
     return entryPointTypeNames.toArray(new String[n]);
@@ -553,8 +678,12 @@ public class ModuleDef {
    * Returns the names of free-standing compilable library modules that are depended upon by this
    * module.
    */
-  public Set<String> getExternalLibraryModuleNames() {
-    return externalLibraryModuleNames;
+  public Set<String> getExternalLibraryCanonicalModuleNames() {
+    return externalLibraryCanonicalModuleNames;
+  }
+
+  public List<String> getFileSetPathBetween(String fromModuleName, String toModuleName) {
+    return filesetPathPerEdge.get(new LibraryDependencyEdge(fromModuleName, toModuleName));
   }
 
   public synchronized String getFunctionName() {
@@ -564,6 +693,11 @@ public class ModuleDef {
   public List<Rule> getGeneratorRules() {
     return ImmutableList.copyOf(
         Iterators.filter(rules.iterator(), Predicates.instanceOf(RuleGenerateWith.class)));
+  }
+
+  @Override
+  public String getGwtXmlFilePath(String moduleName) {
+    return gwtXmlPathByModuleName.get(moduleName);
   }
 
   public Class<? extends Linker> getLinker(String name) {
@@ -644,6 +778,12 @@ public class ModuleDef {
     return servletClassNamesByPath.keySet().toArray(Empty.STRINGS);
   }
 
+  @Override
+  public Set<String> getSourceModuleNames(String typeSourceName) {
+    ensureResourcesScanned();
+    return lazySourceOracle.getSourceModulesByTypeSourceName().get(typeSourceName);
+  }
+
   public synchronized ResourceOracle getSourceResourceOracle() {
     ensureResourcesScanned();
     return lazySourceOracle;
@@ -660,8 +800,13 @@ public class ModuleDef {
    * Returns the names of non-independently-compilable modules (mostly filesets) that together make
    * up the current module.
    */
-  public Set<String> getTargetLibraryModuleNames() {
-    return targetLibraryModuleNames;
+  public Set<String> getTargetLibraryCanonicalModuleNames() {
+    return targetLibraryCanonicalModuleNames;
+  }
+
+  @Override
+  public Set<String> getTransitiveDepModuleNames(String libraryModuleName) {
+    return getDepsTransitiveClosureSolver().getReachableNodes(libraryModuleName);
   }
 
   public boolean isGwtXmlFileStale() {
@@ -692,6 +837,14 @@ public class ModuleDef {
    */
   public synchronized void mapServlet(String path, String servletClassName) {
     servletClassNamesByPath.put(path, servletClassName);
+  }
+
+  public void printOverlappingSourceWarnings(TreeLogger logger) {
+    lazySourceOracle.printOverlappingModuleIncludeWarnings(logger);
+  }
+
+  public void recordModuleGwtXmlFile(String moduleName, String fileSourcePath) {
+    gwtXmlPathByModuleName.put(moduleName, fileSourcePath);
   }
 
   public synchronized void refresh() {
@@ -747,29 +900,29 @@ public class ModuleDef {
   synchronized void normalize(TreeLogger logger) {
     Event moduleDefNormalize =
         SpeedTracerLogger.start(CompilerEventType.MODULE_DEF, "phase", "normalize");
+
+    // Compute compact dependency graph;
+    computeLibraryDependencyGraph();
+
     // Normalize property providers.
     //
-    for (Property current : getProperties()) {
-      if (current instanceof BindingProperty) {
-        BindingProperty prop = (BindingProperty) current;
+    for (BindingProperty prop : properties.getBindingProperties()) {
+      if (collapseAllProperties) {
+        prop.addCollapsedValues("*");
+      }
 
-        if (collapseAllProperties) {
-          prop.addCollapsedValues("*");
-        }
+      prop.normalizeCollapsedValues();
 
-        prop.normalizeCollapsedValues();
-
-        /*
-         * Create a default property provider for any properties with more than
-         * one possible value and no existing provider.
-         */
-        if (prop.getProvider() == null && prop.getConstrainedValue() == null) {
-          String src = "{";
-          src += "return __gwt_getMetaProperty(\"";
-          src += prop.getName();
-          src += "\"); }";
-          prop.setProvider(new PropertyProvider(src));
-        }
+      /*
+       * Create a default property provider for any properties with more than
+       * one possible value and no existing provider.
+       */
+      if (prop.getProvider() == null && prop.getConstrainedValue() == null) {
+        String src = "{";
+        src += "return __gwt_getMetaProperty(\"";
+        src += prop.getName();
+        src += "\"); }";
+        prop.setProvider(new PropertyProvider(src));
       }
     }
 
@@ -795,12 +948,12 @@ public class ModuleDef {
     }
   }
 
-  private void addExternalLibraryModuleName(String moduleName) {
+  private void addExternalLibraryCanonicalModuleName(String externalLibraryCanonicalModuleName) {
     // Ignore circular dependencies on self.
-    if (moduleName.equals(getName())) {
+    if (externalLibraryCanonicalModuleName.equals(getCanonicalName())) {
       return;
     }
-    externalLibraryModuleNames.add(moduleName);
+    externalLibraryCanonicalModuleNames.add(externalLibraryCanonicalModuleName);
   }
 
   private boolean attributeIsForTargetLibrary() {
@@ -835,6 +988,58 @@ public class ModuleDef {
     }
   }
 
+  /**
+   * Reduce the direct dependency graph to exclude filesets.
+   */
+  private void computeLibraryDependencyGraph() {
+    for (String moduleName : Lists.newArrayList(directDepModuleNamesByModuleName.keySet())) {
+      Set<String> libraryModules = Sets.newHashSet();
+      Set<String> filesetsProcessed = Sets.newHashSet();
+
+      // Direct dependents might be libraries or fileset, so add them to a queue of modules
+      // to process.
+      Queue<LinkedList<String>> modulePathsToProcess = Queues.newArrayDeque();
+      Collection<String> directDependencyModuleNames =
+          directDepModuleNamesByModuleName.get(moduleName);
+      for (String directDependencyModuleName : directDependencyModuleNames) {
+        modulePathsToProcess.add(Lists.newLinkedList(ImmutableList.of(directDependencyModuleName)));
+      }
+      while (!modulePathsToProcess.isEmpty()) {
+        LinkedList<String> dependentModuleNamePath = modulePathsToProcess.poll();
+        String dependentModuleName = dependentModuleNamePath.getLast();
+
+        boolean isLibrary = !filesetModuleNames.contains(dependentModuleName);
+        if (isLibrary) {
+          // Current dependent is not a fileset so it will be in the list of dependents unless it is
+          // the library itself.
+          if (!moduleName.equals(dependentModuleName)) {
+            libraryModules.add(dependentModuleName);
+
+            dependentModuleNamePath.removeLast();
+            filesetPathPerEdge.putAll(new LibraryDependencyEdge(moduleName, dependentModuleName),
+                dependentModuleNamePath);
+          }
+          continue;
+        }
+        // Mark the module as processed to avoid an infinite loop.
+        filesetsProcessed.add(dependentModuleName);
+
+        // Get the dependencies of the dependent module under consideration and add all those
+        // that have not been already processed to the queue of modules to process.
+        Set<String> unProcessedModules =
+            Sets.newHashSet(directDepModuleNamesByModuleName.get(dependentModuleName));
+        unProcessedModules.removeAll(filesetsProcessed);
+        for (String unProcessedModule : unProcessedModules) {
+          modulePathsToProcess.add(createExtendedCopy(dependentModuleNamePath, unProcessedModule));
+        }
+      }
+      // Rewrite the dependents with the set just computed.
+      directDepModuleNamesByModuleName.replaceValues(moduleName, libraryModules);
+    }
+    // Remove all fileset entries.
+    directDepModuleNamesByModuleName.removeAll(filesetModuleNames);
+  }
+
   private synchronized void ensureResourcesScanned() {
     if (resourcesScanned) {
       return;
@@ -849,5 +1054,19 @@ public class ModuleDef {
     lazyPublicOracle.scanResources(TreeLogger.NULL);
     lazySourceOracle.scanResources(TreeLogger.NULL);
     moduleDefEvent.end();
+  }
+
+  private String getCurrentLibraryModuleName() {
+    return currentLibraryModuleNames.isEmpty() ? "" : currentLibraryModuleNames.peek();
+  }
+
+  private TransitiveClosureSolver<String> getDepsTransitiveClosureSolver() {
+    if (depsTransitiveClosureSolver == null) {
+      depsTransitiveClosureSolver = new TransitiveClosureSolver<String>();
+      for (Entry<String, String> entry : directDepModuleNamesByModuleName.entries()) {
+        depsTransitiveClosureSolver.addConnection(entry.getKey(), entry.getValue());
+      }
+    }
+    return depsTransitiveClosureSolver;
   }
 }

@@ -41,6 +41,7 @@ import java.io.ObjectInputStream;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.zip.ZipEntry;
@@ -49,7 +50,7 @@ import java.util.zip.ZipFile;
 /**
  * A library that lazily reads and caches data from a zip file.
  */
-class ZipLibrary implements Library {
+public class ZipLibrary implements Library {
 
   private class ZipLibraryReader {
 
@@ -66,6 +67,28 @@ class ZipLibrary implements Library {
       } catch (IOException e) {
         throw new CompilerIoException("Failed to open zip file " + libraryPath + ".", e);
       }
+    }
+
+    private void close() {
+      try {
+        // Close our ZipFile.
+        zipFile.close();
+        zipFile = null;
+      } catch (IOException e) {
+        // nothing to be done about it.
+      }
+    }
+
+    private String decode(String string) {
+      string = decodeCharacter(string, Libraries.VALUE_SEPARATOR);
+      string = decodeCharacter(string, Libraries.LINE_SEPARATOR);
+      string = decodeCharacter(string, Libraries.KEY_VALUE_SEPARATOR);
+      string = decodeCharacter(string, Libraries.ENCODE_PREFIX);
+      return string;
+    }
+
+    private String decodeCharacter(String string, char character) {
+      return string.replace(Libraries.ENCODE_PREFIX + Integer.toString(character), character + "");
     }
 
     private InputStream getClassFileStream(String classFilePath) {
@@ -151,16 +174,16 @@ class ZipLibrary implements Library {
       return readString(Libraries.LIBRARY_NAME_ENTRY_NAME);
     }
 
-    private Multimap<String, String> readNestedNamesByCompilationUnitName() {
-      return readStringMultimap(Libraries.NESTED_NAMES_BY_ENCLOSING_NAME_ENTRY_NAME);
+    private Multimap<String, String> readNestedBinaryNamesByCompilationUnitName() {
+      return readStringMultimap(Libraries.NESTED_BINARY_NAMES_BY_ENCLOSING_NAME_ENTRY_NAME);
     }
 
-    private Multimap<String, String> readNewBindingPropertyValuesByName() {
-      return readStringMultimap(Libraries.NEW_BINDING_PROPERTY_VALUES_BY_NAME_ENTRY_NAME);
+    private Multimap<String, String> readNestedSourceNamesByCompilationUnitName() {
+      return readStringMultimap(Libraries.NESTED_SOURCE_NAMES_BY_ENCLOSING_NAME_ENTRY_NAME);
     }
 
-    private Multimap<String, String> readNewConfigurationPropertyValuesByName() {
-      return readStringMultimap(Libraries.NEW_CONFIGURATION_PROPERTY_VALUES_BY_NAME_ENTRY_NAME);
+    private Multimap<String, String> readProcessedReboundTypeSourceNamesByGenerator() {
+      return readStringMultimap(Libraries.PROCESSED_REBOUND_TYPE_SOURCE_NAMES_ENTRY_NAME);
     }
 
     private Resource readPublicResourceByPath(String path) {
@@ -170,10 +193,6 @@ class ZipLibrary implements Library {
 
     private Set<String> readPublicResourcePaths() {
       return readStringSet(Libraries.PUBLIC_RESOURCE_PATHS_ENTRY_NAME);
-    }
-
-    private Set<String> readRanGeneratorNames() {
-      return readStringSet(Libraries.RAN_GENERATOR_NAMES_ENTRY_NAME);
     }
 
     private Set<String> readReboundTypeSourceNames() {
@@ -215,10 +234,14 @@ class ZipLibrary implements Library {
         LinkedList<String> entry = Lists.newLinkedList(
             Splitter.on(Libraries.KEY_VALUE_SEPARATOR).omitEmptyStrings().split(line));
 
-        String key = entry.getFirst();
+        String key = decode(entry.getFirst());
         Iterable<String> values =
             Splitter.on(Libraries.VALUE_SEPARATOR).omitEmptyStrings().split(entry.getLast());
-        stringMultimap.putAll(key, values);
+        List<String> decodedValues = Lists.newArrayList();
+        for (String value : values) {
+          decodedValues.add(decode(value));
+        }
+        stringMultimap.putAll(key, decodedValues);
       }
       return stringMultimap;
     }
@@ -252,30 +275,36 @@ class ZipLibrary implements Library {
   private Set<String> buildResourcePaths;
   private Map<String, Resource> buildResourcesByPath = Maps.newHashMap();
   private Set<String> classFilePaths;
+  private Multimap<String, String> compilationUnitNamesByNestedBinaryName = HashMultimap.create();
+  private Multimap<String, String> compilationUnitNamesByNestedSourceName = HashMultimap.create();
+  private Map<String, CompilationUnit> compilationUnitsByTypeBinaryName = Maps.newHashMap();
   private Map<String, CompilationUnit> compilationUnitsByTypeSourceName = Maps.newHashMap();
   private Set<String> dependencyLibraryNames;
   private ArtifactSet generatedArtifacts;
   private String libraryName;
-  private Multimap<String, String> nestedNamesByCompilationUnitName;
-  private Multimap<String, String> compilationUnitNamesByNestedName = HashMultimap.create();
-  private Multimap<String, String> newBindingPropertyValuesByName;
-  private Multimap<String, String> newConfigurationPropertyValuesByName;
+  private Multimap<String, String> nestedBinaryNamesByCompilationUnitName;
+  private Multimap<String, String> nestedSourceNamesByCompilationUnitName;
   private ZipEntryBackedObject<PermutationResult> permutationResultHandle;
+  private Multimap<String, String> processedReboundTypeSourceNamesByGenerator;
   private Set<String> publicResourcePaths;
   private Map<String, Resource> publicResourcesByPath = Maps.newHashMap();
-  private Set<String> ranGeneratorNames;
   private Set<String> reboundTypeSourceNames;
   private Set<String> regularCompilationUnitTypeSourceNames;
   private Set<String> superSourceClassFilePaths;
   private Set<String> superSourceCompilationUnitTypeSourceNames;
   private final ZipLibraryReader zipLibraryReader;
 
-  ZipLibrary(String fileName) throws IncompatibleLibraryVersionException {
+  public ZipLibrary(String fileName) throws IncompatibleLibraryVersionException {
     zipLibraryReader = new ZipLibraryReader(fileName);
     if (ZipLibraries.versionNumber != zipLibraryReader.readVersionNumber()) {
       throw new IncompatibleLibraryVersionException(
           ZipLibraries.versionNumber, zipLibraryReader.readVersionNumber());
     }
+  }
+
+  @Override
+  public void close() {
+    zipLibraryReader.close();
   }
 
   @Override
@@ -300,14 +329,39 @@ class ZipLibrary implements Library {
   }
 
   @Override
+  public CompilationUnit getCompilationUnitByTypeBinaryName(String typeBinaryName) {
+    // If the type cache doesn't contain the type yet.
+    if (!compilationUnitsByTypeBinaryName.containsKey(typeBinaryName)) {
+
+      // Ensure the nested name mapping has been read.
+      getNestedBinaryNamesByCompilationUnitName();
+      // Convert nested to enclosing type name.
+      String typeSourceName =
+          compilationUnitNamesByNestedBinaryName.get(typeBinaryName).iterator().next();
+
+      // and the library on disk doesn't contain the type at all.
+      if (!containsCompilationUnit(typeSourceName)) {
+        // cache the fact that the type isn't available on disk.
+        compilationUnitsByTypeBinaryName.put(typeBinaryName, null);
+        return null;
+      }
+      // otherwise read and cache the type.
+      CompilationUnit compilationUnit =
+          zipLibraryReader.readCompilationUnitByTypeSourceName(typeSourceName);
+      compilationUnitsByTypeBinaryName.put(typeBinaryName, compilationUnit);
+    }
+    return compilationUnitsByTypeBinaryName.get(typeBinaryName);
+  }
+
+  @Override
   public CompilationUnit getCompilationUnitByTypeSourceName(String typeSourceName) {
     // If the type cache doesn't contain the type yet.
     if (!compilationUnitsByTypeSourceName.containsKey(typeSourceName)) {
 
       // Ensure the nested name mapping has been read.
-      getNestedNamesByCompilationUnitName();
+      getNestedSourceNamesByCompilationUnitName();
       // Convert nested to enclosing type name.
-      typeSourceName = compilationUnitNamesByNestedName.get(typeSourceName).iterator().next();
+      typeSourceName = compilationUnitNamesByNestedSourceName.get(typeSourceName).iterator().next();
 
       // and the library on disk doesn't contain the type at all.
       if (!containsCompilationUnit(typeSourceName)) {
@@ -348,31 +402,25 @@ class ZipLibrary implements Library {
   }
 
   @Override
-  public Multimap<String, String> getNestedNamesByCompilationUnitName() {
-    if (nestedNamesByCompilationUnitName == null) {
-      nestedNamesByCompilationUnitName = Multimaps.unmodifiableMultimap(
-          zipLibraryReader.readNestedNamesByCompilationUnitName());
-      Multimaps.invertFrom(nestedNamesByCompilationUnitName, compilationUnitNamesByNestedName);
+  public Multimap<String, String> getNestedBinaryNamesByCompilationUnitName() {
+    if (nestedBinaryNamesByCompilationUnitName == null) {
+      nestedBinaryNamesByCompilationUnitName = Multimaps.unmodifiableMultimap(
+          zipLibraryReader.readNestedBinaryNamesByCompilationUnitName());
+      Multimaps.invertFrom(nestedBinaryNamesByCompilationUnitName,
+          compilationUnitNamesByNestedBinaryName);
     }
-    return nestedNamesByCompilationUnitName;
+    return nestedBinaryNamesByCompilationUnitName;
   }
 
   @Override
-  public Multimap<String, String> getNewBindingPropertyValuesByName() {
-    if (newBindingPropertyValuesByName == null) {
-      newBindingPropertyValuesByName =
-          Multimaps.unmodifiableMultimap(zipLibraryReader.readNewBindingPropertyValuesByName());
+  public Multimap<String, String> getNestedSourceNamesByCompilationUnitName() {
+    if (nestedSourceNamesByCompilationUnitName == null) {
+      nestedSourceNamesByCompilationUnitName = Multimaps.unmodifiableMultimap(
+          zipLibraryReader.readNestedSourceNamesByCompilationUnitName());
+      Multimaps.invertFrom(nestedSourceNamesByCompilationUnitName,
+          compilationUnitNamesByNestedSourceName);
     }
-    return newBindingPropertyValuesByName;
-  }
-
-  @Override
-  public Multimap<String, String> getNewConfigurationPropertyValuesByName() {
-    if (newConfigurationPropertyValuesByName == null) {
-      newConfigurationPropertyValuesByName = Multimaps.unmodifiableMultimap(
-          zipLibraryReader.readNewConfigurationPropertyValuesByName());
-    }
-    return newConfigurationPropertyValuesByName;
+    return nestedSourceNamesByCompilationUnitName;
   }
 
   @Override
@@ -381,6 +429,15 @@ class ZipLibrary implements Library {
       permutationResultHandle = zipLibraryReader.getPermutationResultHandle();
     }
     return permutationResultHandle;
+  }
+
+  @Override
+  public Multimap<String, String> getProcessedReboundTypeSourceNamesByGenerator() {
+    if (processedReboundTypeSourceNamesByGenerator == null) {
+      processedReboundTypeSourceNamesByGenerator = Multimaps.unmodifiableMultimap(
+          zipLibraryReader.readProcessedReboundTypeSourceNamesByGenerator());
+    }
+    return processedReboundTypeSourceNamesByGenerator;
   }
 
   @Override
@@ -397,14 +454,6 @@ class ZipLibrary implements Library {
       publicResourcePaths = Collections.unmodifiableSet(zipLibraryReader.readPublicResourcePaths());
     }
     return publicResourcePaths;
-  }
-
-  @Override
-  public Set<String> getRanGeneratorNames() {
-    if (ranGeneratorNames == null) {
-      ranGeneratorNames = Collections.unmodifiableSet(zipLibraryReader.readRanGeneratorNames());
-    }
-    return ranGeneratorNames;
   }
 
   @Override

@@ -41,9 +41,12 @@ public class JjsTypeTest extends TestCase {
   private JArrayType arrayOfArrayOfB;
   private JReferenceType arrayOfArrayOfInt;
   private JArrayType arrayOfB;
+  private JArrayType arrayOfBase;
   private JArrayType arrayOfBSub;
   private JArrayType arrayOfC;
   private JReferenceType arrayOfInt;
+  private JArrayType arrayOfIntfI;
+  private JArrayType arrayOfIntfIBase;
   private JArrayType arrayOfObject;
   private JClassType classA;
   private JClassType classArrayList;
@@ -71,6 +74,10 @@ public class JjsTypeTest extends TestCase {
   private SourceInfo synthSource;
   private JReferenceType typeNull;
   private JTypeOracle typeOracle;
+  private JArrayType arrayOfArrayOfBase;
+  private JArrayType arrayOfArrayOfObject;
+  private JArrayType arrayOfArrayOfIntfI;
+  private JArrayType arrayOfArrayOfIntfIBase;
 
   public void testCanTheoreticallyCast() {
     assertFalse(typeOracle.canTheoreticallyCast(classBnn, typeNull));
@@ -210,26 +217,32 @@ public class JjsTypeTest extends TestCase {
   }
 
   public void testGetSuperHierarchy() {
-    assertSuperHierarchy(classObject);
-    assertSuperHierarchy(classString, classObject);
-    assertSuperHierarchy(classJso, classObject);
-    assertSuperHierarchy(intfSerializable);
-    assertSuperHierarchy(intfCloneable);
-    assertSuperHierarchy(intfIBase);
-    assertSuperHierarchy(intfI, intfIBase);
-    assertSuperHierarchy(intfJ);
-    assertSuperHierarchy(intfK);
-    assertSuperHierarchy(classBase, classObject);
-    assertSuperHierarchy(classA, classObject, classBase);
-    assertSuperHierarchy(classB, classObject, classBase, intfIBase, intfI);
-    assertSuperHierarchy(classC, classObject, intfIBase, intfI);
-    assertSuperHierarchy(classBSub, classObject, classBase, classB, intfIBase, intfI);
-    assertSuperHierarchy(classJso1, classObject, classJso, intfJ);
-    assertSuperHierarchy(classJso2, classObject, classJso, intfK);
-    assertSuperHierarchy(intfIterable);
-    assertSuperHierarchy(intfCollection, intfIterable);
-    assertSuperHierarchy(intfList, intfIterable, intfCollection);
-    assertSuperHierarchy(classArrayList, intfList, classObject, intfIterable, intfCollection);
+    assertSuperHierarchy(classObject, classObject);
+    assertSuperHierarchy(classString, classString, classObject);
+    assertSuperHierarchy(classJso, classJso, classObject);
+    assertSuperHierarchy(intfSerializable, intfSerializable);
+    assertSuperHierarchy(intfCloneable, intfCloneable);
+    assertSuperHierarchy(intfIBase, intfIBase);
+    assertSuperHierarchy(intfI, intfI, intfIBase);
+    assertSuperHierarchy(intfJ, intfJ);
+    assertSuperHierarchy(intfK, intfK);
+    assertSuperHierarchy(classBase, classBase, classObject);
+    assertSuperHierarchy(classA, classA, classObject, classBase);
+    assertSuperHierarchy(classB, classB, classObject, classBase, intfIBase, intfI);
+    assertSuperHierarchy(classC, classC, classObject, intfIBase, intfI);
+    assertSuperHierarchy(classBSub, classBSub, classObject, classBase, classB, intfIBase, intfI);
+    assertSuperHierarchy(classJso1, classJso1, classObject, classJso, intfJ);
+    assertSuperHierarchy(classJso2, classJso2, classObject, classJso, intfK);
+    assertSuperHierarchy(intfIterable, intfIterable);
+    assertSuperHierarchy(intfCollection, intfCollection, intfIterable);
+    assertSuperHierarchy(intfList, intfList, intfIterable, intfCollection);
+    assertSuperHierarchy(classArrayList, classArrayList, intfList, classObject, intfIterable,
+        intfCollection);
+    assertSuperHierarchy(arrayOfB, arrayOfB, arrayOfBase, arrayOfObject, arrayOfIntfI,
+        arrayOfIntfIBase, classObject);
+    assertSuperHierarchy(arrayOfArrayOfB, arrayOfArrayOfB, arrayOfArrayOfBase, arrayOfArrayOfObject,
+        arrayOfArrayOfIntfI, arrayOfArrayOfIntfIBase, classObject);
+    assertSuperHierarchy(arrayOfInt, arrayOfInt, classObject);
   }
 
   public void testJavahSignatures() {
@@ -330,23 +343,32 @@ public class JjsTypeTest extends TestCase {
     classArrayList = createClass("java.util.ArrayList", classObject, false, false);
     classArrayList.addImplements(intfList);
 
+    classBnn = classB.getNonNull();
+    classBaseNn = classBase.getNonNull();
+
+    // 1 dimensional
+    arrayOfObject = program.getTypeArray(classObject);
+    arrayOfBase = program.getTypeArray(classBase);
+    arrayOfA = program.getTypeArray(classA);
+    arrayOfB = program.getTypeArray(classB);
+    arrayOfBSub = program.getTypeArray(classBSub);
+    arrayOfIntfIBase = program.getTypeArray(intfIBase);
+    arrayOfIntfI = program.getTypeArray(intfI);
+    arrayOfC = program.getTypeArray(classC);
+    arrayOfInt = program.getTypeArray(program.getTypePrimitiveInt());
+
+    // 2 dimensional
+    arrayOfArrayOfBase = program.getTypeArray(classBase, 2);
+    arrayOfArrayOfObject = program.getTypeArray(classObject, 2);
+    arrayOfArrayOfIntfI = program.getTypeArray(intfI, 2);
+    arrayOfArrayOfIntfIBase = program.getTypeArray(intfIBase, 2);
+    arrayOfArrayOfInt = program.getTypeArray(program.getTypePrimitiveInt(), 2);
+    arrayOfArrayOfB = program.getTypeArray(classB, 2);
+
     program.typeOracle.computeBeforeAST();
 
     // Save off some miscellaneous types to test against
     typeNull = program.getTypeNull();
-
-    classBnn = classB.getNonNull();
-    classBaseNn = classBase.getNonNull();
-
-    arrayOfA = program.getTypeArray(classA);
-    arrayOfB = program.getTypeArray(classB);
-    arrayOfBSub = program.getTypeArray(classBSub);
-    arrayOfC = program.getTypeArray(classC);
-    arrayOfObject = program.getTypeArray(classObject);
-    arrayOfInt = program.getTypeArray(program.getTypePrimitiveInt());
-    arrayOfArrayOfInt = program.getTypeArray(program.getTypePrimitiveInt(), 2);
-
-    arrayOfArrayOfB = program.getTypeArray(classB, 2);
   }
 
   private JReferenceType generalizeTypes(JReferenceType type1, JReferenceType type2) {

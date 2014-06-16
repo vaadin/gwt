@@ -17,69 +17,23 @@ package com.google.gwt.lang;
 
 import com.google.gwt.core.client.JavaScriptObject;
 
+
 /**
- * This is a magic class the compiler uses as a base class for injected array
- * classes.
+ * This is an intrinsic class that contains the implementation details for Java arrays. <p>
+ *
+ * This class should contain only static methods or fields.
  */
 public final class Array {
-
-  private static final class ExpandoWrapper {
-    /**
-     * A JS array containing the names of any expandos we need to add to arrays
-     * (such as "hashCode", "equals", "toString").
-     */
-    private static final Object expandoNames = makeEmptyJsArray();
-
-    /**
-     * A JS array containing the values of any expandos we need to add to arrays
-     * (such as hashCode(), equals(), toString()).
-     */
-    private static final Object expandoValues = makeEmptyJsArray();
-
-    static {
-      initExpandos(new Array(), expandoNames, expandoValues);
-    }
-
-    public static void wrapArray(Array array) {
-      wrapArray(array, expandoNames, expandoValues);
-    }
-
-    private static native void initExpandos(Array protoType,
-        Object expandoNames, Object expandoValues) /*-{
-      var i = 0, value;
-      for ( var name in protoType) {
-        // Only copy non-null values over; this generally means only functions
-        // will get copied over, and not fields, which is good because we will
-        // setup the fields manually and it's best if length doesn't get blown
-        // away.
-        if (value = protoType[name]) {
-          expandoNames[i] = name;
-          expandoValues[i] = value;
-          ++i;
-        }
-      }
-    }-*/;
-
-    private static native Object makeEmptyJsArray() /*-{
-      return [];
-    }-*/;
-
-    private static native void wrapArray(Array array, Object expandoNames,
-        Object expandoValues) /*-{
-      for ( var i = 0, c = expandoNames.length; i < c; ++i) {
-        array[expandoNames[i]] = expandoValues[i];
-      }
-    }-*/;
-  }
-
   // Array element type classes
   private static final int TYPE_JAVA_OBJECT = 0;
   private static final int TYPE_JAVA_OBJECT_OR_JSO = 1;
   private static final int TYPE_JSO = 2;
   private static final int TYPE_JAVA_LANG_OBJECT = 3;
-  private static final int TYPE_PRIMITIVE_LONG = 4;
-  private static final int TYPE_PRIMITIVE_NUMBER = 5;
-  private static final int TYPE_PRIMITIVE_BOOLEAN = 6;
+  private static final int TYPE_JAVA_LANG_STRING = 4;
+  private static final int TYPE_JS_INTERFACE = 5;
+  private static final int TYPE_PRIMITIVE_LONG = 6;
+  private static final int TYPE_PRIMITIVE_NUMBER = 7;
+  private static final int TYPE_PRIMITIVE_BOOLEAN = 8;
 
   /**
    * Creates a copy of the specified array.
@@ -92,10 +46,9 @@ public final class Array {
    * Creates a copy of a subrange of the specified array.
    */
   public static <T> T[] cloneSubrange(T[] array, int fromIndex, int toIndex) {
-    Array a = asArrayType(array);
-    Array result = arraySlice(a, fromIndex, toIndex);
-    initValues(a.getClass(), Util.getCastableTypeMap(a), a.elementTypeId,
-        a.elementTypeClass, result);
+    Object result = arraySlice(array, fromIndex, toIndex);
+    initValues(array.getClass(), Util.getCastableTypeMap(array), Array.getElementTypeId(array),
+        Array.getElementTypeCategory(array), result);
     // implicit type arg not inferred (as of JDK 1.5.0_07)
     return Array.<T> asArray(result);
   }
@@ -112,14 +65,13 @@ public final class Array {
    * specified length.
    */
   public static <T> T[] createFrom(T[] array, int length) {
-    Array a = asArrayType(array);
     // TODO(rluble): The behaviour here seems erroneous as the array elements will not be
     // initialized but left undefined. However the usages seem to be safe and changing here
     // might have performace penalty. Maybe rename to createUninitializedFrom(), to make
     // the meaning clearer.
-    Array result = initializeArrayElementsWithDefaults(TYPE_JAVA_OBJECT, length);
-    initValues(a.getClass(), Util.getCastableTypeMap(a), a.elementTypeId,  a.elementTypeClass,
-        result);
+    Object result = initializeArrayElementsWithDefaults(TYPE_JAVA_OBJECT, length);
+    initValues(array.getClass(), Util.getCastableTypeMap(array), Array.getElementTypeId(array),
+        Array.getElementTypeCategory(array), result);
     // implicit type arg not inferred (as of JDK 1.5.0_07)
     return Array.<T> asArray(result);
   }
@@ -132,7 +84,7 @@ public final class Array {
    * @param castableTypeMap the map of types to which this array can be casted,
    *          in the form of a JSON map object
    * @param elementTypeId the typeId of array elements
-   * @param elementTypeClass whether the element type is java.lang.Object
+   * @param elementTypeCategory whether the element type is java.lang.Object
    *        ({@link TYPE_JAVA_LANG_OBJECT}), is guaranteed to be a java object
    *        ({@link TYPE_JAVA_OBJECT}), is guaranteed to be a JSO
    *        ({@link TYPE_JSO}), can be either ({@link TYPE_JAVA_OBJECT_OR_JSO}) or
@@ -141,10 +93,10 @@ public final class Array {
    * @param length the length of the array
    * @return the new array
    */
-  public static Array initDim(Class<?> arrayClass, JavaScriptObject castableTypeMap,
-      JavaScriptObject elementTypeId, int length, int elementTypeClass) {
-    Array result = initializeArrayElementsWithDefaults(elementTypeClass, length);
-    initValues(arrayClass, castableTypeMap, elementTypeId, elementTypeClass, result);
+  public static Object initDim(Class<?> arrayClass, JavaScriptObject castableTypeMap,
+      JavaScriptObject elementTypeId, int length, int elementTypeCategory) {
+    Object result = initializeArrayElementsWithDefaults(elementTypeCategory, length);
+    initValues(arrayClass, castableTypeMap, elementTypeId, elementTypeCategory, result);
     return result;
   }
 
@@ -156,7 +108,7 @@ public final class Array {
    * @param castableTypeMapExprs the JSON castableTypeMap of each dimension,
    *          from highest to lowest
    * @param elementTypeIds the elementTypeId of each dimension, from highest to lowest
-   * @param leafElementTypeClass whether the element type is java.lang.Object
+   * @param leafElementTypeCategory whether the element type is java.lang.Object
    *        ({@link TYPE_JAVA_LANG_OBJECT}), is guaranteed to be a java object
    *        ({@link TYPE_JAVA_OBJECT}), is guaranteed to be a JSO
    *        ({@link TYPE_JSO}), can be either ({@link TYPE_JAVA_OBJECT_OR_JSO}) or
@@ -165,9 +117,9 @@ public final class Array {
    * @param dimExprs the length of each dimension, from highest to lower
    * @return the new array
    */
-  public static Array initDims(Class<?> arrayClasses[], JavaScriptObject[] castableTypeMapExprs,
-      JavaScriptObject[] elementTypeIds, int leafElementTypeClass, int[] dimExprs, int count) {
-    return initDims(arrayClasses, castableTypeMapExprs, elementTypeIds, leafElementTypeClass,
+  public static Object initDims(Class<?> arrayClasses[], JavaScriptObject[] castableTypeMapExprs,
+      JavaScriptObject[] elementTypeIds, int leafElementTypeCategory, int[] dimExprs, int count) {
+    return initDims(arrayClasses, castableTypeMapExprs, elementTypeIds, leafElementTypeCategory,
         dimExprs, 0, count);
   }
 
@@ -179,7 +131,7 @@ public final class Array {
    * @param castableTypeMap the map of types to which this array can be casted,
    *          in the form of a JSON map object
    * @param elementTypeId the typeId of array elements
-   * @param elementTypeClass whether the element type is java.lang.Object
+   * @param elementTypeCategory whether the element type is java.lang.Object
    *        ({@link TYPE_JAVA_LANG_OBJECT}), is guaranteed to be a java object
    *        ({@link TYPE_JAVA_OBJECT}), is guaranteed to be a JSO
    *        ({@link TYPE_JSO}), can be either ({@link TYPE_JAVA_OBJECT_OR_JSO}) or
@@ -188,23 +140,77 @@ public final class Array {
    * @param array the JSON array that will be transformed into a GWT array
    * @return values; having wrapped it for GWT
    */
-  public static Array initValues(Class<?> arrayClass, JavaScriptObject castableTypeMap,
-      JavaScriptObject elementTypeId, int elementTypeClass, Array array) {
-    ExpandoWrapper.wrapArray(array);
+  public static Object initValues(Class<?> arrayClass, JavaScriptObject castableTypeMap,
+      JavaScriptObject elementTypeId, int elementTypeCategory, Object array) {
     setClass(array, arrayClass);
     Util.setCastableTypeMap(array, castableTypeMap);
-    array.elementTypeId = elementTypeId;
-    array.elementTypeClass = elementTypeClass;
+    Util.setTypeMarker(array);
+    Array.setElementTypeId(array, elementTypeId);
+    Array.setElementTypeCategory(array, elementTypeCategory);
     return array;
   }
 
   /**
+   * Copy an array using native Javascript. The destination array must be a real
+   * Java array (ie, already has the GWT type info on it). No error checking is performed -- the
+   * caller is expected to have verified everything first.
+   *
+   * @param src source array for copy
+   * @param srcOfs offset into source array
+   * @param dest destination array for copy
+   * @param destOfs offset into destination array
+   * @param len number of elements to copy
+   */
+  public static void nativeArraycopy(Object src, int srcOfs, Object dest, int destOfs, int len) {
+    nativeArraySplice(src, srcOfs, dest, destOfs, len, true);
+  }
+
+  /**
+   * Insert one array into another native Javascript. The destination array must be a real
+   * Java array (ie, already has the GWT type info on it). No error checking is performed -- the
+   * caller is expected to have verified everything first.
+   *
+   * @param src source array where the data is taken from
+   * @param srcOfs offset into source array
+   * @param dest destination array for the data to be inserted
+   * @param destOfs offset into destination array
+   * @param len number of elements to insert
+   */
+  public static void nativeArrayInsert(Object src, int srcOfs, Object dest, int destOfs,
+      int len) {
+    nativeArraySplice(src, srcOfs, dest, destOfs, len, false);
+  }
+
+  /**
+   * A replacement for Array.prototype.splice to overcome the limits imposed to the number of
+   * function parameters by browsers.
+   */
+  private static native void nativeArraySplice(
+      Object src, int srcOfs, Object dest, int destOfs, int len, boolean overwrite) /*-{
+    // Work around function.prototype.apply call stack size limits.
+    // Performance: http://jsperf.com/java-system-arraycopy/2
+    if (src === dest) {
+      // copying to the same array, make a copy first
+      src = src.slice(srcOfs, srcOfs + len);
+      srcOfs = 0;
+    }
+    for (var batchStart = srcOfs, end = srcOfs + len; batchStart < end;) { // increment in block
+      var batchEnd = Math.min(batchStart + 10000, end);
+      len = batchEnd - batchStart;
+      Array.prototype.splice.apply(dest, [destOfs, overwrite ? len : 0]
+          .concat(src.slice(batchStart, batchEnd)));
+      batchStart = batchEnd;
+      destOfs += len;
+    }
+  }-*/;
+
+  /**
    * Performs an array assignment, after validating the type of the value being
-   * stored. The form of the type check depends on the value of elementTypeId and elementTypeClass
-   * as follows:
+   * stored. The form of the type check depends on the value of elementTypeId and
+   * elementTypeCategory as follows:
    * <p>
-   * If the elementTypeClass is {@link TYPE_JAVA_OBJECT}, this indicates a normal cast check should
-   * be performed, using the elementTypeId as the cast destination type.
+   * If the elementTypeCategory is {@link TYPE_JAVA_OBJECT}, this indicates a normal cast check
+   * should be performed, using the elementTypeId as the cast destination type.
    * JavaScriptObjects cannot be stored in this case.
    * <p>
    * If the elementTypeId is {@link TYPE_JAVA_LANG_OBJECT}, this is the cast target for the Object
@@ -223,57 +229,60 @@ public final class Array {
    * Attempting to store an object that cannot satisfy the castability check
    * throws an {@link ArrayStoreException}.
    */
-  public static Object setCheck(Array array, int index, Object value) {
+  public static Object setCheck(Object array, int index, Object value) {
     if (value != null) {
-      if (array.elementTypeClass == TYPE_JAVA_OBJECT
-          && !Cast.canCast(value, array.elementTypeId)) {
-        // value must be castable to elementType.
-        throw new ArrayStoreException();
-      } else if (array.elementTypeClass == TYPE_JSO && Cast.isJavaObject(value)) {
-        // value must be a JavaScriptObject
-        throw new ArrayStoreException();
-      } else if (array.elementTypeClass == TYPE_JAVA_OBJECT_OR_JSO
-          && !Cast.isJavaScriptObject(value)
-          && !Cast.canCast(value, array.elementTypeId)) {
-        // value must be a JavaScriptObject, or else castable to the elementType.
-        throw new ArrayStoreException();
+      int elementTypeCategory = Array.getElementTypeCategory(array);
+      JavaScriptObject elementTypeId = Array.getElementTypeId(array);
+      switch (elementTypeCategory) {
+        case TYPE_JAVA_LANG_STRING:
+          if (!Cast.isJavaString(value)) {
+            // value must be a string.
+            throw new ArrayStoreException();
+          }
+          break;
+        case TYPE_JAVA_OBJECT:
+          if (!Cast.canCast(value, elementTypeId)) {
+          // value must be castable to elementType.
+            throw new ArrayStoreException();
+          }
+          break;
+        case TYPE_JSO:
+          if (!Cast.isJavaScriptObject(value)) {
+            // value must be a JavaScriptObject
+            throw new ArrayStoreException();
+          }
+          break;
+        case TYPE_JAVA_OBJECT_OR_JSO:
+          if (!Cast.isJavaScriptObject(value)
+            && !Cast.canCast(value, elementTypeId)) {
+            // value must be a JavaScriptObject, or else castable to the elementType.
+            throw new ArrayStoreException();
+          }
+          break;
       }
     }
     return set(array, index, value);
   }
 
-  private static native Array arraySlice(Array array, int fromIndex, int toIndex) /*-{
+  private static native Object arraySlice(Object array, int fromIndex, int toIndex) /*-{
     return array.slice(fromIndex, toIndex);
   }-*/;
 
   /**
    * Use JSNI to effect a castless type change.
    */
-  private static native <T> T[] asArray(Array array) /*-{
-    return array;
-  }-*/;
-
-  /**
-   * Use JSNI to effect a castless type change.
-   */
-  private static native <T> Array asArrayType(T[] array) /*-{
+  private static native <T> T[] asArray(Object array) /*-{
     return array;
   }-*/;
 
   /**
    * Creates a primitive JSON array of a given the element type class.
    */
-  private static native Array initializeArrayElementsWithDefaults(
-      int elementTypeClass, int length) /*-{
+  private static native Object initializeArrayElementsWithDefaults(
+      int elementTypeCategory, int length) /*-{
     var array = new Array(length);
     var initValue;
-    switch (elementTypeClass) {
-      case @com.google.gwt.lang.Array::TYPE_JAVA_OBJECT:
-      case @com.google.gwt.lang.Array::TYPE_JAVA_OBJECT_OR_JSO:
-      case @com.google.gwt.lang.Array::TYPE_JAVA_LANG_OBJECT:
-      case @com.google.gwt.lang.Array::TYPE_JSO:
-        // Do not initialize as undefined is equivalent to null
-        return array;
+    switch (elementTypeCategory) {
       case @com.google.gwt.lang.Array::TYPE_PRIMITIVE_LONG:
         // Fill array with the type used by LongLib
         // TODO(rluble): This should refer to the zero long value defined in LongLib
@@ -285,6 +294,9 @@ public final class Array {
       case @com.google.gwt.lang.Array::TYPE_PRIMITIVE_BOOLEAN:
         initValue = false;
         break;
+      default:
+        // Do not initialize as undefined is equivalent to null
+        return array;
     }
 
     for ( var i = 0; i < length; ++i) {
@@ -293,24 +305,24 @@ public final class Array {
     return array;
   }-*/;
 
-  private static Array initDims(Class<?> arrayClasses[], JavaScriptObject[] castableTypeMapExprs,
-      JavaScriptObject[] elementTypeIds, int leafElementTypeClass, int[] dimExprs,
+  private static Object initDims(Class<?> arrayClasses[], JavaScriptObject[] castableTypeMapExprs,
+      JavaScriptObject[] elementTypeIds, int leafElementTypeCategory, int[] dimExprs,
       int index, int count) {
     int length = dimExprs[index];
     boolean isLastDim = (index == (count - 1));
     // All dimensions but the last are plain reference types.
-    int elementTypeClass = isLastDim ? leafElementTypeClass : TYPE_JAVA_OBJECT;
+    int elementTypeCategory = isLastDim ? leafElementTypeCategory : TYPE_JAVA_OBJECT;
 
-    Array result = initializeArrayElementsWithDefaults(elementTypeClass, length);
+    Object result = initializeArrayElementsWithDefaults(elementTypeCategory, length);
     initValues(arrayClasses[index], castableTypeMapExprs[index],
-        elementTypeIds[index], elementTypeClass, result);
+        elementTypeIds[index], elementTypeCategory, result);
 
     if (!isLastDim) {
       // Recurse to next dimension.
       ++index;
       for (int i = 0; i < length; ++i) {
         set(result, i, initDims(arrayClasses, castableTypeMapExprs,
-            elementTypeIds, leafElementTypeClass, dimExprs, index, count));
+            elementTypeIds, leafElementTypeCategory, dimExprs, index, count));
       }
     }
     return result;
@@ -319,7 +331,7 @@ public final class Array {
   /**
    * Sets a value in the array.
    */
-  private static native Object set(Array array, int index, Object value) /*-{
+  private static native Object set(Object array, int index, Object value) /*-{
     return array[index] = value;
   }-*/;
 
@@ -328,17 +340,23 @@ public final class Array {
     o.@java.lang.Object::___clazz = clazz;
   }-*/;
 
-  /*
-   * Explicitly initialize all fields to JS false values; see comment in
-   * ExpandoWrapper.initExpandos().
-   */
+  private static native void setElementTypeId(Object array, JavaScriptObject elementTypeId) /*-{
+    array.__elementTypeId$ = elementTypeId;
+  }-*/;
 
-  /**
-   * A representation of the necessary cast target for objects stored into this
-   * array.
-   *
-   * @see #setCheck
-   */
-  protected JavaScriptObject elementTypeId = null;
-  protected int elementTypeClass = 0;
+  private static native JavaScriptObject getElementTypeId(Object array) /*-{
+    return array.__elementTypeId$;
+  }-*/;
+
+  private static native void setElementTypeCategory(Object array, int elementTypeCategory) /*-{
+    array.__elementTypeCategory$ = elementTypeCategory;
+  }-*/;
+
+  private static native int getElementTypeCategory(Object array) /*-{
+    return array.__elementTypeCategory$;
+  }-*/;
+
+  private Array() {
+  }
 }
+

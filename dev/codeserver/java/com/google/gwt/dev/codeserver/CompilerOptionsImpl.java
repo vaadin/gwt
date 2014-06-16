@@ -17,6 +17,7 @@
 package com.google.gwt.dev.codeserver;
 
 import com.google.gwt.core.ext.TreeLogger;
+import com.google.gwt.dev.cfg.Properties;
 import com.google.gwt.dev.jjs.JsOutputOption;
 import com.google.gwt.dev.js.JsNamespaceOption;
 import com.google.gwt.dev.util.arg.OptionOptimize;
@@ -33,25 +34,31 @@ import java.util.List;
  */
 class CompilerOptionsImpl extends UnmodifiableCompilerOptions {
   private final CompileDir compileDir;
-  private final List<String> libraryPaths;
+  private final boolean failOnError;
+  private final TreeLogger.Type logLevel;
   private final List<String> moduleNames;
   private final SourceLevel sourceLevel;
-  private final boolean strictResources;
-  private final TreeLogger.Type logLevel;
+  private final boolean strictPublicResources;
+  private final boolean strictSourceResources;
 
-  CompilerOptionsImpl(CompileDir compileDir, List<String> moduleNames, SourceLevel sourceLevel,
-      boolean strictResources, TreeLogger.Type logLevel) {
+  CompilerOptionsImpl(CompileDir compileDir, String moduleName, Options options) {
     this.compileDir = compileDir;
-    this.libraryPaths = ImmutableList.<String>of();
-    this.moduleNames = Lists.newArrayList(moduleNames);
-    this.sourceLevel = sourceLevel;
-    this.strictResources = strictResources;
-    this.logLevel = logLevel;
+    this.moduleNames = Lists.newArrayList(moduleName);
+    this.sourceLevel = options.getSourceLevel();
+    this.failOnError = options.isFailOnError();
+    this.strictSourceResources = options.enforceStrictResources();
+    this.strictPublicResources = options.enforceStrictResources();
+    this.logLevel = options.getLogLevel();
   }
 
   @Override
-  public boolean enforceStrictResources() {
-    return strictResources;
+  public boolean enforceStrictPublicResources() {
+    return strictPublicResources;
+  }
+
+  @Override
+  public boolean enforceStrictSourceResources() {
+    return strictSourceResources;
   }
 
   @Override
@@ -62,6 +69,11 @@ class CompilerOptionsImpl extends UnmodifiableCompilerOptions {
   @Override
   public File getExtraDir() {
     return compileDir.getExtraDir();
+  }
+
+  @Override
+  public Properties getFinalProperties() {
+    return null; // handling this in a different way
   }
 
   @Override
@@ -81,7 +93,7 @@ class CompilerOptionsImpl extends UnmodifiableCompilerOptions {
 
   @Override
   public List<String> getLibraryPaths() {
-    return libraryPaths;
+    return ImmutableList.of();
   }
 
   /**
@@ -100,6 +112,11 @@ class CompilerOptionsImpl extends UnmodifiableCompilerOptions {
   @Override
   public int getMaxPermsPerPrecompile() {
     return -1;
+  }
+
+  @Override
+  public File getMissingDepsFile() {
+    return null; // Don't record and save missing dependency information to a file.
   }
 
   @Override
@@ -215,7 +232,7 @@ class CompilerOptionsImpl extends UnmodifiableCompilerOptions {
 
   @Override
   public boolean isStrict() {
-    return false;
+    return failOnError;
   }
 
   @Override
@@ -230,7 +247,7 @@ class CompilerOptionsImpl extends UnmodifiableCompilerOptions {
 
   @Override
   public boolean shouldAddRuntimeChecks() {
-    // TODO set to true in a separate patch
+    // Not needed since no optimizations are on.
     return false;
   }
 
@@ -267,5 +284,20 @@ class CompilerOptionsImpl extends UnmodifiableCompilerOptions {
   @Override
   public boolean shouldSaveSource() {
     return false; // handling this a different way
+  }
+
+  @Override
+  public String getSourceMapFilePrefix() {
+    return SourceHandler.SOURCEROOT_TEMPLATE_VARIABLE;
+  }
+
+  @Override
+  public boolean warnOverlappingSource() {
+    return false;
+  }
+
+  @Override
+  public boolean warnMissingDeps() {
+    return false;
   }
 }

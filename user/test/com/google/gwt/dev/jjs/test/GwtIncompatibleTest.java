@@ -1,12 +1,12 @@
 /*
  * Copyright 2013 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -15,9 +15,10 @@
  */
 package com.google.gwt.dev.jjs.test;
 
-import com.google.gwt.dev.jjs.test.gwtincompatible.GwtIncompatible;
 import static com.google.gwt.dev.jjs.test.gwtincompatible.ClassWithGwtIncompatibleMethod.gwtIncompatibleMethod;
 
+import com.google.gwt.dev.jjs.test.gwtincompatible.AbstractGwtIncompatibleClass;
+import com.google.gwt.dev.jjs.test.gwtincompatible.GwtIncompatible;
 import com.google.gwt.dev.jjs.test.gwtincompatible.GwtIncompatibleClass;
 import com.google.gwt.junit.client.GWTTestCase;
 
@@ -100,6 +101,13 @@ public class GwtIncompatibleTest extends GWTTestCase {
   public void testGwtIncompatibleReference() {
     // Have a reference to a GwtIncompatibleClass
     GwtIncompatibleClass instance = (GwtIncompatibleClass) null;
+
+    assertNull(instance);
+  }
+
+  public void testAbstractGwtIncompatibleReference() {
+    // Have a reference to a GwtIncompatibleClass
+    AbstractGwtIncompatibleClass instance = (AbstractGwtIncompatibleClass) null;
 
     assertNull(instance);
   }

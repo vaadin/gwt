@@ -18,8 +18,8 @@ import com.google.gwt.dev.javac.CompilationUnit;
 import com.google.gwt.dev.javac.CompiledClass;
 import com.google.gwt.dev.jjs.PermutationResult;
 import com.google.gwt.dev.resource.Resource;
+import com.google.gwt.dev.util.Name.InternalName;
 import com.google.gwt.dev.util.ZipEntryBackedObject;
-import com.google.gwt.thirdparty.guava.common.collect.ArrayListMultimap;
 import com.google.gwt.thirdparty.guava.common.collect.HashMultimap;
 import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
@@ -59,16 +59,16 @@ public class MockLibrary implements Library {
   }
 
   private Set<String> buildResourcePaths = Sets.newHashSet();
-  private Multimap<String, String> compilationUnitNamesByNestedName = HashMultimap.create();
+  private Multimap<String, String> compilationUnitNamesByNestedBinaryName = HashMultimap.create();
+  private Multimap<String, String> compilationUnitNamesByNestedSourceName = HashMultimap.create();
   private Map<String, CompilationUnit> compilationUnitsByTypeName = Maps.newHashMap();
   private Set<String> compilationUnitTypeNames = Sets.newHashSet();
   private Set<String> dependencyLibraryNames = Sets.newLinkedHashSet();
   private String libraryName;
-  private Multimap<String, String> nestedNamesByCompilationUnitName = HashMultimap.create();
-  private Multimap<String, String> newBindingPropertyValuesByName = ArrayListMultimap.create();
-  private Multimap<String, String> newConfigurationPropertyValuesByName =
-      ArrayListMultimap.create();
-  private Set<String> ranGeneratorNames = Sets.newHashSet();
+  private Multimap<String, String> nestedBinaryNamesByCompilationUnitName = HashMultimap.create();
+  private Multimap<String, String> nestedSourceNamesByCompilationUnitName = HashMultimap.create();
+  private Multimap<String, String> processedReboundTypeSourceNamesByGenerator =
+      HashMultimap.create();
   private Set<String> reboundTypeNames = Sets.newHashSet();
   private Set<String> superSourceCompilationUnitTypeNames = Sets.newHashSet();
 
@@ -82,10 +82,13 @@ public class MockLibrary implements Library {
     compilationUnitTypeNames.add(compilationUnitTypeSourceName);
 
     Collection<CompiledClass> compiledClasses = compilationUnit.getCompiledClasses();
-    for (CompiledClass compiledClasse : compiledClasses) {
-    String sourceName = compiledClasse.getSourceName();
-      nestedNamesByCompilationUnitName.put(compilationUnitTypeSourceName, sourceName);
-      compilationUnitNamesByNestedName.put(sourceName, compilationUnitTypeSourceName);
+    for (CompiledClass compiledClass : compiledClasses) {
+      String sourceName = compiledClass.getSourceName();
+      String binaryName = InternalName.toBinaryName(compiledClass.getInternalName());
+      nestedSourceNamesByCompilationUnitName.put(compilationUnitTypeSourceName, sourceName);
+      nestedBinaryNamesByCompilationUnitName.put(compilationUnitTypeSourceName, binaryName);
+      compilationUnitNamesByNestedSourceName.put(sourceName, compilationUnitTypeSourceName);
+      compilationUnitNamesByNestedBinaryName.put(binaryName, compilationUnitTypeSourceName);
     }
   }
 
@@ -96,11 +99,22 @@ public class MockLibrary implements Library {
     compilationUnitTypeNames.add(superSourceCompilationUnitTypeSourceName);
 
     Collection<CompiledClass> compiledClasses = superSourceCompilationUnit.getCompiledClasses();
-    for (CompiledClass compiledClasse : compiledClasses) {
-    String sourceName = compiledClasse.getSourceName();
-      nestedNamesByCompilationUnitName.put(superSourceCompilationUnitTypeSourceName, sourceName);
-      compilationUnitNamesByNestedName.put(sourceName, superSourceCompilationUnitTypeSourceName);
+    for (CompiledClass compiledClass : compiledClasses) {
+      String sourceName = compiledClass.getSourceName();
+      String binaryName = InternalName.toBinaryName(compiledClass.getInternalName());
+      nestedSourceNamesByCompilationUnitName.put(superSourceCompilationUnitTypeSourceName,
+          sourceName);
+      nestedBinaryNamesByCompilationUnitName.put(superSourceCompilationUnitTypeSourceName,
+          binaryName);
+      compilationUnitNamesByNestedSourceName.put(sourceName,
+          superSourceCompilationUnitTypeSourceName);
+      compilationUnitNamesByNestedBinaryName.put(binaryName,
+          superSourceCompilationUnitTypeSourceName);
     }
+  }
+
+  @Override
+  public void close() {
   }
 
   @Override
@@ -119,9 +133,17 @@ public class MockLibrary implements Library {
   }
 
   @Override
+  public CompilationUnit getCompilationUnitByTypeBinaryName(String typeBinaryName) {
+    // Convert nested binary name to enclosing type source name.
+    String typeSourceName =
+        compilationUnitNamesByNestedBinaryName.get(typeBinaryName).iterator().next();
+    return compilationUnitsByTypeName.get(typeSourceName);
+  }
+
+  @Override
   public CompilationUnit getCompilationUnitByTypeSourceName(String typeSourceName) {
-    // Convert nested to enclosing type name.
-    typeSourceName = compilationUnitNamesByNestedName.get(typeSourceName).iterator().next();
+    // Convert nested source name to enclosing type source name.
+    typeSourceName = compilationUnitNamesByNestedSourceName.get(typeSourceName).iterator().next();
     return compilationUnitsByTypeName.get(typeSourceName);
   }
 
@@ -141,23 +163,23 @@ public class MockLibrary implements Library {
   }
 
   @Override
-  public Multimap<String, String> getNestedNamesByCompilationUnitName() {
-    return nestedNamesByCompilationUnitName;
+  public Multimap<String, String> getNestedBinaryNamesByCompilationUnitName() {
+    return nestedBinaryNamesByCompilationUnitName;
   }
 
   @Override
-  public Multimap<String, String> getNewBindingPropertyValuesByName() {
-    return newBindingPropertyValuesByName;
-  }
-
-  @Override
-  public Multimap<String, String> getNewConfigurationPropertyValuesByName() {
-    return newConfigurationPropertyValuesByName;
+  public Multimap<String, String> getNestedSourceNamesByCompilationUnitName() {
+    return nestedSourceNamesByCompilationUnitName;
   }
 
   @Override
   public ZipEntryBackedObject<PermutationResult> getPermutationResultHandle() {
     return null;
+  }
+
+  @Override
+  public Multimap<String, String> getProcessedReboundTypeSourceNamesByGenerator() {
+    return processedReboundTypeSourceNamesByGenerator;
   }
 
   @Override
@@ -171,16 +193,6 @@ public class MockLibrary implements Library {
   }
 
   @Override
-  public Set<String> getRanGeneratorNames() {
-    return ranGeneratorNames;
-  }
-
-  @Override
-  public Set<String> getReboundTypeSourceNames() {
-    return reboundTypeNames;
-  }
-
-  @Override
   public Set<String> getRegularClassFilePaths() {
     return null;
   }
@@ -188,6 +200,11 @@ public class MockLibrary implements Library {
   @Override
   public Set<String> getRegularCompilationUnitTypeSourceNames() {
     return compilationUnitTypeNames;
+  }
+
+  @Override
+  public Set<String> getReboundTypeSourceNames() {
+    return reboundTypeNames;
   }
 
   @Override

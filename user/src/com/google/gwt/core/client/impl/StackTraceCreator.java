@@ -28,9 +28,16 @@ import com.google.gwt.core.client.JsArrayString;
 public class StackTraceCreator {
 
   /**
+   * Maximum # of frames to look for {@link Throwable#fillInStackTrace()} in the generated stack
+   * trace. This is just a safe guard just in case if {@code fillInStackTrace} doesn't show up in
+   * the stack trace for some reason.
+   */
+  private static final int DROP_FRAME_LIMIT = 5;
+
+  /**
    * Line number used in a stack trace when it is unknown.
    */
-  public static final int LINE_NUMBER_UNKNOWN = -1;
+  private static final int LINE_NUMBER_UNKNOWN = -1;
 
   /**
    * Replacement for function names that cannot be extracted from a stack.
@@ -38,19 +45,36 @@ public class StackTraceCreator {
   private static final String ANONYMOUS = "anonymous";
 
   /**
-   * This class acts as a deferred-binding hook point to allow more optimal
-   * versions to be substituted. This base version simply crawls
-   * <code>arguments.callee.caller</code>.
+   * Replacement for class or file names that cannot be extracted from a stack.
    */
-  static class Collector {
-    public native JsArrayString collect() /*-{
+  private static final String UNKNOWN = "Unknown";
+
+  /**
+   * This class acts as a deferred-binding hook point to allow more optimal versions to be
+   * substituted.
+   */
+  abstract static class Collector {
+
+    public abstract JavaScriptObject collect();
+
+    public abstract StackTraceElement[] getStackTrace(JavaScriptObject stackInfo);
+  }
+
+  /**
+   * This legacy {@link Collector} simply crawls <code>arguments.callee.caller</code> for browsers
+   * that doesn't support {@code Error.stack} property.
+   */
+  static class CollectorLegacy extends Collector {
+
+    @Override
+    public native JavaScriptObject collect() /*-{
       var seen = {};
       var toReturn = [];
 
-      // Ignore the collect() and fillInStackTrace call
-      var callee = arguments.callee.caller.caller;
+      // Ignore the collect() call
+      var callee = arguments.callee.caller;
       while (callee) {
-        var name = this.@com.google.gwt.core.client.impl.StackTraceCreator.Collector::extractName(Ljava/lang/String;)(callee.toString());
+        var name = @StackTraceCreator::getFunctionName(*)(callee);
         toReturn.push(name);
 
         // Avoid infinite loop by associating names to function objects.  We
@@ -62,7 +86,7 @@ public class StackTraceCreator {
           var i, j;
           for (i = 0, j = withThisName.length; i < j; i++) {
             if (withThisName[i] === callee) {
-              return toReturn;
+              return { fnStack: toReturn };
             }
           }
         }
@@ -70,33 +94,106 @@ public class StackTraceCreator {
         (withThisName || (seen[keyName] = [])).push(callee);
         callee = callee.caller;
       }
-      return toReturn;
+      return { fnStack: toReturn };
     }-*/;
 
-    protected StackTraceElement[] getStackTrace(JsArrayString stack) {
+    @Override
+    public StackTraceElement[] getStackTrace(JavaScriptObject stackInfo) {
+      JsArrayString stack = getFnStack(stackInfo);
+      return fnStacktoSte(stack);
+    }
+  }
+
+  /**
+   * Collaborates with JsStackEmulator.
+   */
+  static final class CollectorEmulated extends Collector {
+
+    @Override
+    public native JavaScriptObject collect() /*-{
+      var toReturn = [];
+      for (var i = 0; i < $stackDepth; i++) {
+        var location = $location[i];
+        var fn = $stack[i];
+        var name = fn ? @StackTraceCreator::getFunctionName(*)(fn) : @StackTraceCreator::ANONYMOUS;
+
+        // Reverse the order
+        toReturn[$stackDepth - i - 1] = [name, location];
+      }
+      return { fnStack: toReturn };
+    }-*/;
+
+    @Override
+    public StackTraceElement[] getStackTrace(JavaScriptObject stackInfo) {
+      JsArray<JsArrayString> stack = getFnStack(stackInfo).cast();
+      if (stack.length() == 0) {
+        return null;
+      }
       StackTraceElement[] stackTrace = new StackTraceElement[stack.length()];
-      for (int i = 0, j = stackTrace.length; i < j; i++) {
-        stackTrace[i] = new StackTraceElement("Unknown", stack.get(i), null,
-            LINE_NUMBER_UNKNOWN);
+      for (int i = 0; i < stackTrace.length; i++) {
+        JsArrayString frame = stack.get(i);
+        String name = frame.get(0);
+        String location = frame.get(1);
+
+        String fileName = null;
+        int lineNumber = LINE_NUMBER_UNKNOWN;
+        if (location != null) {
+          int idx = location.indexOf(':');
+          if (idx != -1) {
+            fileName = location.substring(0, idx);
+            lineNumber = parseInt(location.substring(idx + 1));
+          } else {
+            lineNumber = parseInt(location);
+          }
+        }
+        stackTrace[i] = new StackTraceElement(UNKNOWN, name, fileName, lineNumber);
       }
       return stackTrace;
     }
+  }
+
+  /**
+   * Modern browsers provide a <code>stack</code> property in thrown objects.
+   */
+  abstract static class CollectorModern extends Collector {
+
+    @Override
+    public JavaScriptObject collect() {
+      return makeException();
+    }
 
     /**
-     * Attempt to infer the stack from an unknown JavaScriptObject that had been
-     * thrown. The default implementation just returns an empty array.
-     *
-     * @param e a JavaScriptObject
+     * Raise an exception and return it.
      */
-    public JsArrayString inferFrom(Object e) {
-      return JavaScriptObject.createArray().cast();
+    private static native JavaScriptObject makeException() /*-{
+      try {
+        null.a();
+      } catch (e) {
+        return e;
+      }
+    }-*/;
+  }
+
+  static class CollectorMoz extends CollectorModern {
+
+    @Override
+    public StackTraceElement[] getStackTrace(JavaScriptObject stackInfo) {
+      JsArrayString stack = inferFrom(stackInfo);
+      return fnStacktoSte(stack);
+    }
+
+    private JsArrayString inferFrom(JavaScriptObject e) {
+      JsArrayString stack = split(e);
+      for (int i = 0, j = stack.length(); i < j; i++) {
+        stack.set(i, extractName(stack.get(i)));
+      }
+      return stack;
     }
 
     /**
      * Extract the name of a function from it's toString() representation.
-     * Package-access for testing.
      */
-    protected String extractName(String fnToString) {
+    private String extractName(String fnToString) {
       String toReturn = "";
       fnToString = fnToString.trim();
       int index = fnToString.indexOf("(");
@@ -120,108 +217,6 @@ public class StackTraceCreator {
   }
 
   /**
-   * Collaborates with JsStackEmulator.
-   */
-  static class CollectorEmulated extends Collector {
-
-    @Override
-    public JsArrayString collect() {
-      JsArrayString toReturn = JsArrayString.createArray().cast();
-      JsArray<JavaScriptObject> stack = getStack();
-      for (int i = 0, j = getStackDepth(); i < j; i++) {
-        String name = stack.get(i) == null ? ANONYMOUS
-            : extractName(stack.get(i).toString());
-        // Reverse the order
-        toReturn.set(j - i - 1, name);
-      }
-
-      return toReturn;
-    }
-
-    @Override
-    protected StackTraceElement[] getStackTrace(JsArrayString stack) {
-      if (stack.length() == 0) {
-        return null;
-      }
-      JsArrayString locations = getLocation();
-      StackTraceElement[] stackTrace = new StackTraceElement[stack.length()];
-      for (int i = 0, j = stackTrace.length; i < j; i++) {
-        // Locations is also backwards
-        String location = locations.get(j - i - 1);
-        String fileName = null;
-        int lineNumber = LINE_NUMBER_UNKNOWN;
-        if (location != null) {
-          int idx = location.indexOf(':');
-          if (idx != -1) {
-            fileName = location.substring(0, idx);
-            lineNumber = Integer.parseInt(location.substring(idx + 1));
-          } else {
-            lineNumber = Integer.parseInt(location);
-          }
-        }
-        stackTrace[i] = new StackTraceElement("Unknown", stack.get(i),
-            fileName, lineNumber);
-      }
-      return stackTrace;
-    }
-
-    private native JsArrayString getLocation()/*-{
-      return $location;
-    }-*/;
-
-    private native JsArray<JavaScriptObject> getStack()/*-{
-      return $stack;
-    }-*/;
-
-    private native int getStackDepth() /*-{
-      return $stackDepth;
-    }-*/;
-  }
-
-  /**
-   * Mozilla provides a <code>stack</code> property in thrown objects.
-   */
-  static class CollectorMoz extends Collector {
-    /**
-     * This implementation doesn't suffer from the limitations of crawling
-     * <code>caller</code> since Mozilla provides proper activation records.
-     */
-    @Override
-    public JsArrayString collect() {
-      return splice(inferFrom(makeException()), toSplice());
-    }
-
-    /**
-     * Raise an exception and return it.
-     */
-    protected native JavaScriptObject makeException() /*-{
-      try {
-        null.a();
-      } catch (e) {
-        return e;
-      }
-    }-*/;
-
-    @Override
-    public JsArrayString inferFrom(Object e) {
-      JavaScriptObject jso = (e instanceof JavaScriptObject) ? (JavaScriptObject) e : null;
-      JsArrayString stack = getStack(jso);
-      for (int i = 0, j = stack.length(); i < j; i++) {
-        stack.set(i, extractName(stack.get(i)));
-      }
-      return stack;
-    }
-
-    private native JsArrayString getStack(JavaScriptObject e) /*-{
-      return (e && e.stack) ? e.stack.split('\n') : [];
-    }-*/;
-
-    protected int toSplice() {
-      return 2;
-    }
-  }
-
-  /**
    * Chrome uses a slightly different format to Mozilla.
    *
    * See http://code.google.com/p/v8/source/browse/branches/bleeding_edge/src/
@@ -236,7 +231,7 @@ public class StackTraceCreator {
    * at Type.functionName [as methodName] (file.js:1:2)
    * </pre>
    */
-  static class CollectorChrome extends CollectorMoz {
+  static class CollectorChrome extends CollectorModern {
 
     static {
       increaseChromeStackTraceLimit();
@@ -248,36 +243,20 @@ public class StackTraceCreator {
       Error.stackTraceLimit = 128;
     }-*/;
 
-    @Override
-    public JsArrayString collect() {
-      JsArrayString res = super.collect();
-      if (res.length() == 0) {
-        /*
-         * Ensure Safari falls back to default Collector implementation.
-         * Remember to remove this method call from the stack:
-         */
-        res = splice(new Collector().collect(), 1);
+    private JsArrayString inferFrom(JavaScriptObject stackInfo) {
+      JsArrayString stack = split(stackInfo);
+      for (int i = 0, j = stack.length(); i < j; i++) {
+        stack.set(i, extractName(stack.get(i)));
       }
-      return res;
-    }
 
-    @Override
-    public JsArrayString inferFrom(Object e) {
-      JsArrayString stack = super.inferFrom(e);
-      if (stack.length() == 0) {
-        // Safari should fall back to default Collector:
-        return new Collector().inferFrom(e);
-      } else {
+      if (stack.length() > 0 && stack.get(0).startsWith(ANONYMOUS + "@@")) {
         // Chrome contains the error itself as the first line of the stack (iOS doesn't).
-        if (stack.get(0).startsWith(ANONYMOUS + "@@")) {
-          stack = splice(stack, 1);
-        }
-        return stack;
+        stack = splice(stack, 1);
       }
+      return stack;
     }
 
-    @Override
-    protected String extractName(String fnToString) {
+    private String extractName(String fnToString) {
       String extractedName = ANONYMOUS;
       String location = "";
 
@@ -292,14 +271,9 @@ public class StackTraceCreator {
         toReturn = toReturn.substring(3);
       }
 
-      // Strip square bracketed items from the end:
-      int index = toReturn.indexOf("[");
-      if (index != -1) {
-        toReturn = toReturn.substring(0, index).trim() +
-            toReturn.substring(toReturn.indexOf("]", index) + 1).trim();
-      }
+      toReturn = stripSquareBrackets(toReturn);
 
-      index = toReturn.indexOf("(");
+      int index = toReturn.indexOf("(");
       if (index == -1) {
         // No bracketed items found, try '@' (used by iOS).
         index = toReturn.indexOf("@");
@@ -326,24 +300,29 @@ public class StackTraceCreator {
       return (toReturn.length() > 0 ? toReturn : ANONYMOUS) + "@@" + location;
     }
 
+    private native String stripSquareBrackets(String toReturn) /*-{
+      return toReturn.replace(/\[.*?\]/g,"")
+    }-*/;
+
     protected int replaceIfNoSourceMap(int line) {
          return line;
     }
 
     @Override
-    protected int toSplice() {
-      return 3;
-    }
+    public StackTraceElement[] getStackTrace(JavaScriptObject stackInfo) {
+      JsArrayString stack = inferFrom(stackInfo);
 
-    @Override
-    protected StackTraceElement[] getStackTrace(JsArrayString stack) {
-      StackTraceElement[] stackTrace = new StackTraceElement[stack.length()];
-      for (int i = 0, j = stackTrace.length; i < j; i++) {
+      int length = stack.length();
+      if (length == 0) {
+        return null;
+      }
+      StackTraceElement[] stackTrace = new StackTraceElement[length];
+      for (int i = 0; i < length; i++) {
         String stackElements[] = stack.get(i).split("@@");
 
         int line = LINE_NUMBER_UNKNOWN;
         int col = -1;
-        String fileName = "Unknown";
+        String fileName = UNKNOWN;
         if (stackElements.length == 2 && stackElements[1] != null) {
           String location = stackElements[1];
           // colon between line and column
@@ -357,8 +336,8 @@ public class StackTraceCreator {
               col = parseInt(location.substring(lastColon + 1));
           }
         }
-        stackTrace[i] = new StackTraceElement("Unknown", stackElements[0], fileName + "@" + col,
-            replaceIfNoSourceMap(line < 0 ? -1 : line));
+        stackTrace[i] = new StackTraceElement(UNKNOWN, stackElements[0], fileName + "@" + col,
+            replaceIfNoSourceMap(line < 0 ? LINE_NUMBER_UNKNOWN : line));
       }
       return stackTrace;
     }
@@ -369,13 +348,14 @@ public class StackTraceCreator {
    * disabled.
    */
   static class CollectorChromeNoSourceMap extends CollectorChrome {
+    @Override
     protected int replaceIfNoSourceMap(int line) {
-      return -1;
+      return LINE_NUMBER_UNKNOWN;
     }
   }
 
   private static native int parseInt(String number) /*-{
-    return parseInt(number) || -1;
+    return parseInt(number) || @StackTraceCreator::LINE_NUMBER_UNKNOWN;
   }-*/;
 
   /**
@@ -388,8 +368,8 @@ public class StackTraceCreator {
     }
 
     @Override
-    protected StackTraceElement[] getStackTrace(JsArrayString stack) {
-      return null;
+    public StackTraceElement[] getStackTrace(JavaScriptObject stackInfo) {
+      return new StackTraceElement[0];
     }
   }
 
@@ -398,17 +378,7 @@ public class StackTraceCreator {
    * only be called in Production Mode.
    */
   public static void createStackTrace(JavaScriptException e) {
-    if (!GWT.isScript()) {
-      throw new RuntimeException(
-          "StackTraceCreator should only be called in Production Mode");
-    }
-
-    Collector collector = GWT.<Collector> create(Collector.class);
-    JsArrayString stack = collector.inferFrom(e.getThrown());
-    StackTraceElement[] stackTrace = collector.getStackTrace(stack);
-    if (stackTrace != null) {
-      e.setStackTrace(stackTrace);
-    }
+    constructStackTrace(e, e.getThrown(), false);
   }
 
   /**
@@ -416,20 +386,78 @@ public class StackTraceCreator {
    * should only be called in Production Mode.
    */
   public static void fillInStackTrace(Throwable t) {
-    if (!GWT.isScript()) {
-      throw new RuntimeException(
-          "StackTraceCreator should only be called in Production Mode");
-    }
+    constructStackTrace(t, collector.collect(), true);
+  }
 
-    Collector collector = GWT.<Collector> create(Collector.class);
-    JsArrayString stack = collector.collect();
-    StackTraceElement[] stackTrace = collector.getStackTrace(stack);
+  private static void constructStackTrace(Throwable t, Object thrown, boolean strip) {
+    JavaScriptObject e = (thrown instanceof JavaScriptObject) ? (JavaScriptObject) thrown : null;
+    StackTraceElement[] stackTrace = collector.getStackTrace(e);
     if (stackTrace != null) {
+      if (strip) {
+        stackTrace = dropInternalFrames(stackTrace);
+      }
       t.setStackTrace(stackTrace);
     }
   }
 
-  private static native JsArrayString splice(JsArrayString arr, int length) /*-{
+  private static StackTraceElement[] dropInternalFrames(StackTraceElement[] stackTrace) {
+    final String dropFrameUntilFnName = Impl.getNameOf("@java.lang.Throwable::fillInStackTrace()");
+
+    int numberOfFrameToSearch = Math.min(stackTrace.length, DROP_FRAME_LIMIT);
+    for (int i = 0; i < numberOfFrameToSearch; i++) {
+      if (stackTrace[i].getMethodName().equals(dropFrameUntilFnName)) {
+        return splice(stackTrace, i + 1);
+      }
+    }
+
+    return stackTrace;
+  }
+
+  // Visible for testing
+  static final Collector collector;
+
+  static {
+    Collector c = GWT.create(Collector.class);
+    // Ensure old Safari falls back to default Collector implementation.
+    collector = (c instanceof CollectorChrome && !supportsErrorStack()) ? new CollectorLegacy() : c;
+  }
+
+  private static native boolean supportsErrorStack() /*-{
+    return "stack" in new Error; // Checked via 'in' to avoid execution of stack getter in Chrome
+  }-*/;
+
+  private static StackTraceElement[] fnStacktoSte(JsArrayString stack) {
+    int length = stack.length();
+    if (length == 0) {
+      return null;
+    }
+    StackTraceElement[] stackTrace = new StackTraceElement[length];
+    for (int i = 0; i < length; i++) {
+      stackTrace[i] = new StackTraceElement(UNKNOWN, stack.get(i), null, LINE_NUMBER_UNKNOWN);
+    }
+    return stackTrace;
+  }
+
+  private static native JsArrayString getFnStack(JavaScriptObject e) /*-{
+    return (e && e.fnStack && e.fnStack instanceof Array) ? e.fnStack : [];
+  }-*/;
+
+  private static native String getFunctionName(JavaScriptObject fn) /*-{
+    return fn.name || (fn.name = @StackTraceCreator::extractFunctionName(*)(fn.toString()));
+  }-*/;
+
+  // Visible for testing
+  static native String extractFunctionName(String fnName) /*-{
+    var fnRE = /function(?:\s+([\w$]+))?\s*\(/;
+    var match = fnRE.exec(fnName);
+    return (match && match[1]) || @StackTraceCreator::ANONYMOUS;
+  }-*/;
+
+  private static native JsArrayString split(JavaScriptObject e) /*-{
+    return (e && e.stack) ? e.stack.split('\n') : [];
+  }-*/;
+
+  private static native <T> T splice(T arr, int length) /*-{
     (arr.length >= length) && arr.splice(0, length);
     return arr;
   }-*/;

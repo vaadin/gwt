@@ -109,4 +109,23 @@
    -->
   <define-configuration-property name="js.identifier.blacklist.suffixes"
                                    is-multi-valued="true"/>
+
+  <!--
+    Specifies that @JsExport assignments are fully qualified expressions. This increases code
+    size, but allows closure compiler integration to work better by letting closure rename the
+    namespaces of exports to top level global variables.
+  -->
+  <define-configuration-property name="js.export.closurestyle.fullyqualified"
+                                   is-multi-valued="false"/>
+  <set-configuration-property name="js.export.closurestyle.fullyqualified"
+                                value="false" />
+
+  <!--
+    Specifies that a binding property should be included in the $permProps variable
+    in the generated JavaScript. This will allow Super Dev Mode to pick it up
+    regardless of how many permutations are generated.
+  -->
+  <define-configuration-property name="js.embedded.properties" is-multi-valued="true"/>
+  <set-configuration-property name="js.embedded.properties" value="locale"/>
+  <set-configuration-property name="js.embedded.properties" value="user.agent"/>
 </module>

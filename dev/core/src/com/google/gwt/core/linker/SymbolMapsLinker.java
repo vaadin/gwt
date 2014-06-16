@@ -15,7 +15,6 @@
  */
 package com.google.gwt.core.linker;
 
-import com.google.gwt.thirdparty.debugging.sourcemap.SourceMapGeneratorV3;
 import com.google.gwt.core.ext.LinkerContext;
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
@@ -34,6 +33,7 @@ import com.google.gwt.core.ext.linker.SymbolData;
 import com.google.gwt.core.ext.linker.SyntheticArtifact;
 import com.google.gwt.dev.util.Util;
 import com.google.gwt.dev.util.collect.HashMap;
+import com.google.gwt.thirdparty.debugging.sourcemap.SourceMapGeneratorV3;
 import com.google.gwt.thirdparty.debugging.sourcemap.SourceMapGeneratorV3.ExtensionMergeAction;
 
 import java.io.ByteArrayOutputStream;
@@ -174,11 +174,14 @@ public class SymbolMapsLinker extends AbstractLinker {
     private int fragment;
     private byte[] js;
 
-    public SourceMapArtifact(int permutationId, int fragment, byte[] js) {
+    private final String sourceRoot;
+
+    public SourceMapArtifact(int permutationId, int fragment, byte[] js, String sourceRoot) {
       super(SymbolMapsLinker.class, permutationId + '/' + sourceMapFilenameForFragment(fragment), js);
       this.permutationId = permutationId;
       this.fragment = fragment;
       this.js = js;
+      this.sourceRoot = sourceRoot;
     }
 
     public int getFragment() {
@@ -187,6 +190,14 @@ public class SymbolMapsLinker extends AbstractLinker {
 
     public int getPermutationId() {
       return permutationId;
+    }
+
+    /**
+     * The base URL for Java filenames in the sourcemap.
+     * (We need to reapply this after edits.)
+     */
+    public String getSourceRoot() {
+      return sourceRoot;
     }
 
     public static String sourceMapFilenameForFragment(int fragment) {
@@ -253,7 +264,7 @@ public class SymbolMapsLinker extends AbstractLinker {
 
       ByteArrayOutputStream out = new ByteArrayOutputStream();
       for (CompilationResult result : artifacts.find(CompilationResult.class)) {
-        
+
         boolean makeSymbolMaps = true;
 
         for (SoftPermutation perm : result.getSoftPermutations()) {
@@ -298,6 +309,12 @@ public class SymbolMapsLinker extends AbstractLinker {
           emArt = emitSourceMapString(logger, sourceMapString, partialPath);
         } else {
           SourceMapGeneratorV3 sourceMapGenerator = new SourceMapGeneratorV3();
+
+          if (se.getSourceRoot() != null) {
+            // Reapply source root since mergeMapSection() will not copy it.
+            sourceMapGenerator.setSourceRoot(se.getSourceRoot());
+          }
+
           try {
             int totalPrefixLines = 0;
             for (ScriptFragmentEditsArtifact.EditOperation op : editArtifact.editOperations) {

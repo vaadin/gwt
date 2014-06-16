@@ -15,7 +15,10 @@
  */
 package com.google.gwt.dev.jjs.impl;
 
+import com.google.gwt.core.client.impl.SpecializeMethod;
 import com.google.gwt.dev.javac.JSORestrictionsChecker;
+import com.google.gwt.dev.javac.JdtUtil;
+import com.google.gwt.dev.javac.JsInteropUtil;
 import com.google.gwt.dev.javac.JsniMethod;
 import com.google.gwt.dev.jdt.SafeASTVisitor;
 import com.google.gwt.dev.jjs.InternalCompilerException;
@@ -106,8 +109,8 @@ import com.google.gwt.dev.js.ast.JsParameter;
 import com.google.gwt.dev.util.StringInterner;
 import com.google.gwt.thirdparty.guava.common.base.Function;
 import com.google.gwt.thirdparty.guava.common.base.Preconditions;
-import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Interner;
+import com.google.gwt.thirdparty.guava.common.collect.Lists;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
@@ -189,6 +192,7 @@ import org.eclipse.jdt.internal.compiler.ast.UnaryExpression;
 import org.eclipse.jdt.internal.compiler.ast.UnionTypeReference;
 import org.eclipse.jdt.internal.compiler.ast.WhileStatement;
 import org.eclipse.jdt.internal.compiler.impl.Constant;
+import org.eclipse.jdt.internal.compiler.lookup.AnnotationBinding;
 import org.eclipse.jdt.internal.compiler.lookup.BaseTypeBinding;
 import org.eclipse.jdt.internal.compiler.lookup.Binding;
 import org.eclipse.jdt.internal.compiler.lookup.BlockScope;
@@ -210,6 +214,7 @@ import org.eclipse.jdt.internal.compiler.lookup.VariableBinding;
 import org.eclipse.jdt.internal.compiler.util.Util;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -240,55 +245,50 @@ public class GwtAstBuilder {
   class AstVisitor extends SafeASTVisitor {
 
     /**
-     * Resolves local references to function parameters, and JSNI references.
+     * Collects JSNI references from native method bodies and replaces the ones referring to
+     * compile time constants by their corresponding constant value.
      */
-    private class JsniResolver extends JsModVisitor {
+    private class JsniReferenceCollector extends JsModVisitor {
       private final GenerateJavaScriptLiterals generator = new GenerateJavaScriptLiterals();
       private final JsniMethodBody nativeMethodBody;
 
-      private JsniResolver(JsniMethodBody nativeMethodBody) {
+      private JsniReferenceCollector(JsniMethodBody nativeMethodBody) {
         this.nativeMethodBody = nativeMethodBody;
       }
 
       @Override
       public void endVisit(JsNameRef x, JsContext ctx) {
+        if (!x.isJsniReference()) {
+          return;
+        }
         String ident = x.getIdent();
-        if (ident.charAt(0) == '@') {
-          Binding binding = jsniRefs.get(ident);
-          SourceInfo info = x.getSourceInfo();
-          if (binding == null) {
-            assert ident.startsWith("@null::");
-            if ("@null::nullMethod()".equals(ident)) {
-              processMethod(x, info, JMethod.NULL_METHOD);
-            } else {
-              assert "@null::nullField".equals(ident);
-              processField(x, info, JField.NULL_FIELD, ctx);
-            }
-          } else if (binding instanceof TypeBinding) {
-            JType type = typeMap.get((TypeBinding) binding);
-            processClassLiteral(x, info, type, ctx);
-          } else if (binding instanceof FieldBinding) {
-            FieldBinding fieldBinding = (FieldBinding) binding;
-            /*
-             * We must replace any compile-time constants with the constant
-             * value of the field.
-             */
-            if (isCompileTimeConstant(fieldBinding)) {
-              assert !ctx.isLvalue();
-              JExpression constant = getConstant(info, fieldBinding.constant());
-              generator.accept(constant);
-              JsExpression result = generator.pop();
-              assert (result != null);
-              ctx.replaceMe(result);
-            } else {
-              // Normal: create a jsniRef.
-              JField field = typeMap.get(fieldBinding);
-              processField(x, info, field, ctx);
-            }
+        Binding binding = jsniRefs.get(ident);
+        SourceInfo info = x.getSourceInfo();
+        assert binding != null;
+        if (binding instanceof TypeBinding) {
+          JType type = typeMap.get((TypeBinding) binding);
+          processClassLiteral(x, info, type, ctx);
+        } else if (binding instanceof FieldBinding) {
+          FieldBinding fieldBinding = (FieldBinding) binding;
+          /*
+           * We must replace any compile-time constants with the constant
+           * value of the field.
+           */
+          if (isCompileTimeConstant(fieldBinding)) {
+            assert !ctx.isLvalue();
+            JExpression constant = getConstant(info, fieldBinding.constant());
+            generator.accept(constant);
+            JsExpression result = generator.pop();
+            assert (result != null);
+            ctx.replaceMe(result);
           } else {
-            JMethod method = typeMap.get((MethodBinding) binding);
-            processMethod(x, info, method);
+            // Normal: create a jsniRef.
+            JField field = typeMap.get(fieldBinding);
+            processField(x, info, field, ctx);
           }
+        } else {
+          JMethod method = typeMap.get((MethodBinding) binding);
+          processMethod(x, info, method);
         }
       }
 
@@ -663,7 +663,7 @@ public class GwtAstBuilder {
          */
         if (!hasExplicitThis) {
           ReferenceBinding declaringClass = (ReferenceBinding) x.binding.declaringClass.erasure();
-          if (isNested(declaringClass)) {
+          if (JdtUtil.isInnerClass(declaringClass)) {
             NestedTypeBinding nestedBinding = (NestedTypeBinding) declaringClass;
             if (nestedBinding.enclosingInstances != null) {
               for (SyntheticArgumentBinding arg : nestedBinding.enclosingInstances) {
@@ -777,7 +777,7 @@ public class GwtAstBuilder {
         if (x.isSuperAccess()) {
           JExpression qualifier = pop(x.qualification);
           ReferenceBinding superClass = x.binding.declaringClass;
-          boolean nestedSuper = isNested(superClass);
+          boolean nestedSuper = JdtUtil.isInnerClass(superClass);
           if (nestedSuper) {
             processSuperCallThisArgs(superClass, call, qualifier, x.qualification);
           }
@@ -788,7 +788,7 @@ public class GwtAstBuilder {
         } else {
           assert (x.qualification == null);
           ReferenceBinding declaringClass = x.binding.declaringClass;
-          boolean nested = isNested(declaringClass);
+          boolean nested = JdtUtil.isInnerClass(declaringClass);
           if (nested) {
             processThisCallThisArgs(declaringClass, call);
           }
@@ -1168,6 +1168,7 @@ public class GwtAstBuilder {
     @Override
     public void endVisit(MethodDeclaration x, ClassScope scope) {
       try {
+
         if (x.isNative()) {
           processNativeMethod(x);
         } else {
@@ -1711,7 +1712,7 @@ public class GwtAstBuilder {
 
         // Map synthetic arguments for outer this.
         ReferenceBinding declaringClass = (ReferenceBinding) x.binding.declaringClass.erasure();
-        boolean isNested = isNested(declaringClass);
+        boolean isNested = JdtUtil.isInnerClass(declaringClass);
         if (isNested) {
           NestedTypeBinding nestedBinding = (NestedTypeBinding) declaringClass;
           if (nestedBinding.enclosingInstances != null) {
@@ -2037,7 +2038,7 @@ public class GwtAstBuilder {
        * referenced until we analyze the code.
        */
       SourceTypeBinding binding = x.binding;
-      if (isNested(binding)) {
+      if (JdtUtil.isInnerClass(binding)) {
         // add synthetic fields for outer this and locals
         assert (type instanceof JClassType);
         NestedTypeBinding nestedBinding = (NestedTypeBinding) binding;
@@ -2504,8 +2505,8 @@ public class GwtAstBuilder {
       // Resolve locals, params, and JSNI.
       JsParameterResolver localResolver = new JsParameterResolver(jsFunction);
       localResolver.accept(jsFunction);
-      JsniResolver jsniResolver = new JsniResolver(body);
-      jsniResolver.accept(jsFunction);
+      JsniReferenceCollector jsniReferenceCollector = new JsniReferenceCollector(body);
+      jsniReferenceCollector.accept(jsFunction);
     }
 
     private void processSuperCallLocalArgs(ReferenceBinding superClass, JMethodCall call) {
@@ -2637,7 +2638,7 @@ public class GwtAstBuilder {
 
       // Synthetic args for inner classes
       ReferenceBinding targetBinding = (ReferenceBinding) b.declaringClass.erasure();
-      boolean isNested = isNested(targetBinding);
+      boolean isNested = JdtUtil.isInnerClass(targetBinding);
       if (isNested) {
         // Synthetic this args for inner classes
         if (targetBinding.syntheticEnclosingInstanceTypes() != null) {
@@ -2801,9 +2802,23 @@ public class GwtAstBuilder {
     }
 
     private JExpression unbox(JExpression original, int implicitConversion) {
-      int typeId = implicitConversion & TypeIds.COMPILE_TYPE_MASK;
+      int compileTypeId = implicitConversion & TypeIds.COMPILE_TYPE_MASK;
       ClassScope scope = curClass.scope;
-      BaseTypeBinding primitiveType = (BaseTypeBinding) TypeBinding.wellKnownType(scope, typeId);
+      TypeBinding targetBinding = TypeBinding.wellKnownType(scope, compileTypeId);
+      if (!(targetBinding instanceof BaseTypeBinding)) {
+        // Direct cast from non-boxed-type reference type to a primitive type,
+        // wrap with a cast operation of the (boxed) expected type.
+        int runtimeTypeId = (implicitConversion & TypeIds.IMPLICIT_CONVERSION_MASK) >> 4;
+        TypeBinding runtimeTypeBinding = TypeBinding.wellKnownType(scope, runtimeTypeId);
+        ReferenceBinding boxType = (ReferenceBinding) scope.boxing(runtimeTypeBinding);
+        original =
+            new JCastOperation(original.getSourceInfo(), typeMap.get(boxType), original);
+        targetBinding = runtimeTypeBinding;
+        assert (targetBinding instanceof BaseTypeBinding);
+      }
+
+      BaseTypeBinding primitiveType = (BaseTypeBinding) targetBinding;
+
       ReferenceBinding boxType = (ReferenceBinding) scope.boxing(primitiveType);
       char[] selector = CharOperation.concat(primitiveType.simpleName, VALUE);
       MethodBinding valueMethod =
@@ -2832,7 +2847,11 @@ public class GwtAstBuilder {
         newTypes.add(mapClass);
 
         MethodBinding[] createValueOfMapBindings = enumType.getMethods(CREATE_VALUE_OF_MAP);
-        assert createValueOfMapBindings.length == 1;
+        if (createValueOfMapBindings.length == 0) {
+          throw new RuntimeException(
+              "Unexpectedly unable to access Enum.createValueOfMap via reflection. "
+              + "Likely a dependency on the com.google.gwt.user.User module is missing.");
+        }
         MethodBinding createValueOfMapBinding = createValueOfMapBindings[0];
         mapType = createValueOfMapBinding.returnType;
 
@@ -2966,18 +2985,6 @@ public class GwtAstBuilder {
     return AST_VERSION;
   }
 
-  static String dotify(char[][] name) {
-    StringBuffer result = new StringBuffer();
-    for (int i = 0; i < name.length; ++i) {
-      if (i > 0) {
-        result.append('.');
-      }
-
-      result.append(name[i]);
-    }
-    return result.toString();
-  }
-
   static Disposition getFieldDisposition(FieldBinding binding) {
     Disposition disposition;
     if (isCompileTimeConstant(binding)) {
@@ -2998,10 +3005,6 @@ public class GwtAstBuilder {
 
   static String intern(String s) {
     return stringInterner.intern(s);
-  }
-
-  static boolean isNested(ReferenceBinding binding) {
-    return binding.isNestedType() && !binding.isStatic();
   }
 
   private static boolean isCompileTimeConstant(FieldBinding binding) {
@@ -3193,6 +3196,7 @@ public class GwtAstBuilder {
               getFieldDisposition(binding));
     }
     enclosingType.addField(field);
+    JsInteropUtil.maybeSetExportedField(x, field);
     typeMap.setField(binding, field);
   }
 
@@ -3285,9 +3289,12 @@ public class GwtAstBuilder {
     JDeclaredType enclosingType = (JDeclaredType) typeMap.get(declaringClass);
     assert !enclosingType.isExternal();
     JMethod method;
-    boolean isNested = isNested(declaringClass);
+    boolean isNested = JdtUtil.isInnerClass(declaringClass);
     if (x.isConstructor()) {
       method = new JConstructor(info, (JClassType) enclosingType);
+      if (x.isDefaultConstructor()) {
+        ((JConstructor) method).setDefaultConstructor();
+      }
       if (x.binding.declaringClass.isEnum()) {
         // Enums have hidden arguments for name and value
         method.addParam(new JParameter(info, "enum$name", typeMap.get(x.scope.getJavaLangString()),
@@ -3344,7 +3351,39 @@ public class GwtAstBuilder {
       method.setSynthetic();
     }
     enclosingType.addMethod(method);
+    JsInteropUtil.maybeSetJsinteropMethodProperties(x, method);
+    maybeAddMethodSpecialization(x, method);
     typeMap.setMethod(b, method);
+  }
+
+  private void maybeAddMethodSpecialization(AbstractMethodDeclaration x,
+      JMethod method) {
+    AnnotationBinding specializeAnnotation = JdtUtil
+        .getAnnotation(x.binding, SpecializeMethod.class.getName());
+    if (specializeAnnotation != null) {
+      TypeBinding[] params = JdtUtil
+          .getAnnotationParameterTypeBindingArray(
+              specializeAnnotation, "params");
+      TypeBinding returns = JdtUtil.getAnnotationParameterTypeBinding(
+          specializeAnnotation, "returns");
+      String targetMethod = JdtUtil.getAnnotationParameterString(
+          specializeAnnotation, "target");
+      List<JType> paramTypes = null;
+      if (params != null) {
+        paramTypes = new ArrayList<JType>();
+        for (TypeBinding pType : params) {
+          paramTypes.add(typeMap.get(pType));
+        }
+      }
+
+      JType returnsType = null;
+      if (returns != null) {
+        returnsType = typeMap.get(returns);
+      }
+
+      method.setSpecialization(paramTypes, returnsType,
+          targetMethod);
+    }
   }
 
   private void createParameter(SourceInfo info, LocalVariableBinding binding, JMethod method) {
@@ -3398,14 +3437,19 @@ public class GwtAstBuilder {
         char[] localName = binding.constantPoolName();
         name = new String(localName).replace('/', '.');
       } else {
-        name = dotify(binding.compoundName);
+        name = JdtUtil.asDottedString(binding.compoundName);
       }
       name = intern(name);
       JDeclaredType type;
       if (binding.isClass()) {
         type = new JClassType(info, name, binding.isAbstract(), binding.isFinal());
+        JsInteropUtil.maybeSetJsPrototypeFlag(x, (JClassType) type);
       } else if (binding.isInterface() || binding.isAnnotationType()) {
-        type = new JInterfaceType(info, name);
+        String jsPrototype = "";
+        JInterfaceType.JsInteropType interopType = JInterfaceType.JsInteropType.NONE;
+        jsPrototype = JsInteropUtil.maybeGetJsInterfacePrototype(x, jsPrototype);
+        interopType = JsInteropUtil.maybeGetJsInterfaceType(x, jsPrototype, interopType);
+        type = new JInterfaceType(info, name, interopType, jsPrototype);
       } else if (binding.isEnum()) {
         if (binding.isAnonymousType()) {
           // Don't model an enum subclass as a JEnumType.

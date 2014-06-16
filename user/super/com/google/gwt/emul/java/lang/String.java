@@ -84,7 +84,7 @@ public final class String implements Comparable<String>, CharSequence,
    * syntax by mapping it into equivalent JS patterns, or emulating them.
    *
    * IMPORTANT NOTE: if newer JREs add new interfaces to String, please update
-   * {@link JsoDevirtualizer} and {@link JavaResourceBase}
+   * {@link Devirtualizer} and {@link JavaResourceBase}
    */
 
   /**
@@ -678,7 +678,7 @@ public final class String implements Comparable<String>, CharSequence,
   }
 
   public native boolean endsWith(String suffix) /*-{
-    return (this.lastIndexOf(suffix) != -1) && (this.lastIndexOf(suffix) == (this.length - suffix.length));
+    return this.indexOf(suffix, this.length - suffix.length) !== -1;
   }-*/;
 
   @Override
@@ -954,11 +954,7 @@ public final class String implements Comparable<String>, CharSequence,
   }
 
   public boolean startsWith(String prefix, int toffset) {
-    if (toffset < 0 || toffset >= length()) {
-      return false;
-    } else {
-      return indexOf(prefix, toffset) == toffset;
-    }
+    return toffset >= 0 && indexOf(prefix, toffset) == toffset;
   }
 
   public CharSequence subSequence(int beginIndex, int endIndex) {

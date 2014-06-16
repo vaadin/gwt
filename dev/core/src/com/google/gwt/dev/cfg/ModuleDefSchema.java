@@ -45,6 +45,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 // CHECKSTYLE_NAMING_OFF
+
 /**
  * Configures a module definition object using XML.
  */
@@ -217,7 +218,7 @@ public class ModuleDefSchema extends Schema {
     protected Schema __add_linker_begin(LinkerName name)
         throws UnableToCompleteException {
       if (moduleDef.getLinker(name.name) == null) {
-        Messages.LINKER_NAME_INVALID.log(logger, name.name, null);
+        Messages.LINKER_NAME_INVALID.log(logger, getLineNumber(), name.name, null);
         throw new UnableToCompleteException();
       }
       moduleDef.addLinker(name.name);
@@ -499,6 +500,7 @@ public class ModuleDefSchema extends Schema {
     @SuppressWarnings("unused") // called reflectively
     protected Schema __inherits_begin(String name)
         throws UnableToCompleteException {
+      moduleDef.addDirectDependency(moduleName, name);
       loader.nestedLoad(logger, name, moduleDef);
       return null;
     }
@@ -630,20 +632,17 @@ public class ModuleDefSchema extends Schema {
         if (!propertySettings.containsKey(name.token)) {
           propertySettings.put(name.token, moduleName);
         }
-
-        logger.log(TreeLogger.WARN, "Setting configuration property named "
-            + name.token + " in " + moduleName
-            + " that has not been previously defined."
-            + "  This may be disallowed in the future.");
+        Messages.UNDEFINED_CONFIGURATION_PROPERTY.log(
+            logger, getLineNumber(), name.token, moduleName, null);
       } else if (!(existingProperty instanceof ConfigurationProperty)) {
         if (existingProperty instanceof BindingProperty) {
-          logger.log(TreeLogger.ERROR, "The property " + name.token
-              + " is already defined as a deferred-binding property");
+          Messages.CONFIGURATION_PROPERTY_REDEFINES_BINDING_PROPERTY.log(
+              logger, getLineNumber(), name.token, null);
         } else {
           // Future proofing if other subclasses are added.
-          logger.log(TreeLogger.ERROR, "May not replace property named "
-              + name.token + " of unknown type "
-              + existingProperty.getClass().getName());
+          Messages.CANNOT_REPLACE_PROPERTY.log(
+              logger, getLineNumber(), name.token, existingProperty.getName(),
+              existingProperty.getClass().getName(), null);
         }
         throw new UnableToCompleteException();
       }
@@ -667,8 +666,8 @@ public class ModuleDefSchema extends Schema {
       String[] stringValues = new String[value.length];
       for (int i = 0, len = stringValues.length; i < len; i++) {
         if (!prop.isDefinedValue(stringValues[i] = value[i].token)) {
-          logger.log(TreeLogger.ERROR, "The value " + stringValues[i]
-              + " was not previously defined.");
+          Messages.PROPERTY_VALUE_NOT_VALID.log(logger, getLineNumber(),
+              stringValues[i], prop.getName(), null);
           error = true;
         }
       }
@@ -902,7 +901,7 @@ public class ModuleDefSchema extends Schema {
         ClassLoader cl = Thread.currentThread().getContextClassLoader();
         return cl.loadClass(value);
       } catch (ClassNotFoundException e) {
-        Messages.UNABLE_TO_LOAD_CLASS.log(logger, value, e);
+        Messages.UNABLE_TO_LOAD_CLASS.log(logger, line, value, e);
         throw new UnableToCompleteException();
       }
     }
@@ -1022,7 +1021,7 @@ public class ModuleDefSchema extends Schema {
         String attr, String value) throws UnableToCompleteException {
       // Ensure the value is a valid Java identifier
       if (!Util.isValidJavaIdent(value)) {
-        Messages.LINKER_NAME_INVALID.log(logger, value, null);
+        Messages.LINKER_NAME_INVALID.log(logger, line, value, null);
         throw new UnableToCompleteException();
       }
 
@@ -1061,7 +1060,7 @@ public class ModuleDefSchema extends Schema {
       for (int i = 0; i < tokens.length - 1; i++) {
         String token = tokens[i];
         if (!Util.isValidJavaIdent(token)) {
-          Messages.NAME_INVALID.log(logger, value, null);
+          Messages.NAME_INVALID.log(logger, line, value, null);
           throw new UnableToCompleteException();
         }
       }
@@ -1102,7 +1101,7 @@ public class ModuleDefSchema extends Schema {
       } else {
         // Property not defined. This is a problem.
         //
-        Messages.PROPERTY_NOT_FOUND.log(logger, value, null);
+        Messages.PROPERTY_NOT_FOUND.log(logger, line, value, null);
       }
       throw new UnableToCompleteException();
     }
@@ -1199,7 +1198,7 @@ public class ModuleDefSchema extends Schema {
       for (int i = 0; i < tokens.length - 1; i++) {
         String token = tokens[i];
         if (!Util.isValidJavaIdent(token)) {
-          Messages.PROPERTY_NAME_INVALID.log(logger, value, null);
+          Messages.PROPERTY_NAME_INVALID.log(logger, line, value, null);
           throw new UnableToCompleteException();
         }
       }
@@ -1259,7 +1258,7 @@ public class ModuleDefSchema extends Schema {
       if (Util.isValidJavaIdent(token)) {
         return new PropertyValue(token);
       } else {
-        Messages.PROPERTY_VALUE_INVALID.log(logger, token, null);
+        Messages.PROPERTY_VALUE_INVALID.log(logger, line, token, null);
         throw new UnableToCompleteException();
       }
     }
@@ -1288,7 +1287,7 @@ public class ModuleDefSchema extends Schema {
       if (Util.isValidJavaIdent(token)) {
         return new PropertyFallbackValue(token);
       } else {
-        Messages.PROPERTY_VALUE_INVALID.log(logger, token, null);
+        Messages.PROPERTY_VALUE_INVALID.log(logger, line, token, null);
         throw new UnableToCompleteException();
       }
     }
@@ -1330,7 +1329,7 @@ public class ModuleDefSchema extends Schema {
           || Util.isValidJavaIdent(tokenNoStar)) {
         return new PropertyValueGlob(token);
       } else {
-        Messages.PROPERTY_VALUE_INVALID.log(logger, token, null);
+        Messages.PROPERTY_VALUE_INVALID.log(logger, line, token, null);
         throw new UnableToCompleteException();
       }
     }
@@ -1411,8 +1410,10 @@ public class ModuleDefSchema extends Schema {
   private final PropertyNameAttrCvt propNameAttrCvt = new PropertyNameAttrCvt();
   private final PropertyValueArrayAttrCvt propValueArrayAttrCvt = new PropertyValueArrayAttrCvt();
   private final PropertyValueAttrCvt propValueAttrCvt = new PropertyValueAttrCvt();
-  private final PropertyFallbackValueAttrCvt propFallbackValueAttrCvt = new PropertyFallbackValueAttrCvt();
-  private final PropertyValueGlobArrayAttrCvt propValueGlobArrayAttrCvt = new PropertyValueGlobArrayAttrCvt();
+  private final PropertyFallbackValueAttrCvt propFallbackValueAttrCvt =
+      new PropertyFallbackValueAttrCvt();
+  private final PropertyValueGlobArrayAttrCvt propValueGlobArrayAttrCvt =
+      new PropertyValueGlobArrayAttrCvt();
   private final PropertyValueGlobAttrCvt propValueGlobAttrCvt = new PropertyValueGlobAttrCvt();
 
   public ModuleDefSchema(TreeLogger logger, ModuleDefLoader loader,
@@ -1443,24 +1444,32 @@ public class ModuleDefSchema extends Schema {
   }
 
   @SuppressWarnings("unused")
-  protected Schema __module_begin(NullableName renameTo, String type) {
-    moduleDef.enterModule(ModuleType.valueOf(type.toUpperCase(Locale.ENGLISH)), moduleName);
+  protected Schema __module_begin(NullableName renameTo, String type)
+      throws UnableToCompleteException {
+    ModuleType moduleType = ModuleType.valueOf(type.toUpperCase(Locale.ENGLISH));
+    moduleDef.enterModule(moduleType, moduleName);
+
+    // All modules implicitly depend on com.google.gwt.core.Core. Processing of this dependency
+    // needs to occur early so that subsequent processing has the opportunity to override property
+    // values.
+    bodySchema.__inherits_begin("com.google.gwt.core.Core");
+
     return bodySchema;
   }
 
   protected void __module_end(NullableName renameTo, String type) {
-    if (!loader.enforceStrictResources()) {
-      // If we're not being strict about resources and no dependencies have been added, go ahead and
-      // implicitly add "client" and "public" resource dependencies.
-      if (!foundExplicitSourceOrSuperSource) {
-        bodySchema.addSourcePackage(modulePackageAsPath, "client", Empty.STRINGS,
-            Empty.STRINGS, Empty.STRINGS, true, true, false);
-      }
+    // If we're not being strict about source resources and no source paths have been added, go
+    // ahead and implicitly add the "client" directory.
+    if (!loader.enforceStrictSourceResources() && !foundExplicitSourceOrSuperSource) {
+      bodySchema.addSourcePackage(modulePackageAsPath, "client", Empty.STRINGS,
+          Empty.STRINGS, Empty.STRINGS, true, true, false);
+    }
 
-      if (!foundAnyPublic) {
-        bodySchema.addPublicPackage(modulePackageAsPath, "public", Empty.STRINGS,
-            Empty.STRINGS, Empty.STRINGS, true, true);
-      }
+    // If we're not being strict about public resources and no public paths have been added, go
+    // ahead and implicitly add the "public" directory.
+    if (!loader.enforceStrictPublicResources() && !foundAnyPublic) {
+      bodySchema.addPublicPackage(modulePackageAsPath, "public", Empty.STRINGS,
+          Empty.STRINGS, Empty.STRINGS, true, true);
     }
 
     // We do this in __module_end so this value is never inherited

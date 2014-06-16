@@ -18,6 +18,7 @@ package com.google.gwt.dev.codeserver;
 
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.dev.CompilerOptions;
+import com.google.gwt.dev.cfg.Properties;
 import com.google.gwt.dev.jjs.JsOutputOption;
 import com.google.gwt.dev.js.JsNamespaceOption;
 import com.google.gwt.dev.util.arg.SourceLevel;
@@ -94,12 +95,22 @@ abstract class UnmodifiableCompilerOptions implements CompilerOptions {
   }
 
   @Override
-  public final void setEnforceStrictResources(boolean strictResources) {
+  public void setEnforceStrictPublicResources(boolean strictPublicResources) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public void setEnforceStrictSourceResources(boolean strictSourceResources) {
     throw new UnsupportedOperationException();
   }
 
   @Override
   public final void setExtraDir(File extraDir) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public final void setFinalProperties(Properties finalProperties) {
     throw new UnsupportedOperationException();
   }
 
@@ -150,6 +161,11 @@ abstract class UnmodifiableCompilerOptions implements CompilerOptions {
 
   @Override
   public final void setMaxPermsPerPrecompile(int maxPerms) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public final void setMissingDepsFile(File file) {
     throw new UnsupportedOperationException();
   }
 
@@ -219,6 +235,11 @@ abstract class UnmodifiableCompilerOptions implements CompilerOptions {
   }
 
   @Override
+  public void setSourceMapFilePrefix(String path) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public final void setSoycEnabled(boolean enabled) {
     throw new UnsupportedOperationException();
   }
@@ -245,6 +266,16 @@ abstract class UnmodifiableCompilerOptions implements CompilerOptions {
 
   @Override
   public final void setWarDir(File dir) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public final void setWarnOverlappingSource(boolean warnOverlappingSource) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public final void setWarnMissingDeps(boolean warnMissingDeps) {
     throw new UnsupportedOperationException();
   }
 

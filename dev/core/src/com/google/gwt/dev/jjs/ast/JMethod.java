@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -35,6 +35,96 @@ import java.util.Set;
  */
 public class JMethod extends JNode implements HasEnclosingType, HasName, HasType, CanBeAbstract,
     CanBeSetFinal, CanBeNative, CanBeStatic {
+
+  private String exportName;
+  private boolean jsProperty;
+  private Specialization specialization;
+
+  public void setExportName(String exportName) {
+    this.exportName = exportName;
+  }
+
+  public String getExportName() {
+    return exportName;
+  }
+
+  public void setJsProperty(boolean jsProperty) {
+    this.jsProperty = jsProperty;
+  }
+
+  public boolean isJsProperty() {
+    return jsProperty;
+  }
+
+  public void setSpecialization(List<JType> paramTypes, JType returnsType,
+      String targetMethod) {
+    this.specialization = new Specialization(paramTypes, returnsType,
+        targetMethod);
+  }
+
+  public Specialization getSpecialization() {
+    return specialization;
+  }
+
+  public void removeSpecialization() {
+    specialization = null;
+  }
+
+  /**
+   * AST representation of @SpecializeMethod.
+   */
+  public static class Specialization implements Serializable {
+    private List<JType> params;
+    private JType returns;
+    private String target;
+    private JMethod targetMethod;
+
+    public Specialization(List<JType> params,
+        JType returns, String target) {
+      this.params = params;
+      this.returns = returns;
+      this.target = target;
+    }
+
+    public List<JType> getParams() {
+      return params;
+    }
+
+    public JType getReturns() {
+      return returns;
+    }
+
+    public String getTarget() {
+      return target;
+    }
+
+    public JMethod getTargetMethod() {
+      return targetMethod;
+    }
+
+    public String getParameterSignature(JType origReturnValue) {
+      String paramSig = null;
+      if (paramSig == null) {
+        StringBuilder sb = new StringBuilder();
+        getParamSignature(sb, params,
+            returns != null ? returns : origReturnValue, false);
+        paramSig = sb.toString();
+      }
+      return paramSig;
+    }
+
+    public void resolve(List<JType> resolvedParams, JType resolvedReturn,
+        JMethod targetMethod) {
+      this.params = resolvedParams;
+      this.returns = resolvedReturn;
+      this.targetMethod = targetMethod;
+    }
+
+    public String getTargetSignature(JMethod instanceMethod) {
+      return getTarget() + getParameterSignature(instanceMethod
+          .getOriginalReturnType());
+    }
+  }
 
   private static class ExternalSerializedForm implements Serializable {
 
@@ -115,7 +205,7 @@ public class JMethod extends JNode implements HasEnclosingType, HasName, HasType
    * EXHAUSTIVE list, that is, if C overrides B overrides A, then C's overrides
    * list will contain both A and B.
    */
-  private List<JMethod> overrides = Collections.emptyList();
+  private List<JMethod> overriddenMethods = Collections.emptyList();
 
   private List<JParameter> params = Collections.emptyList();
   private JType returnType;
@@ -171,17 +261,9 @@ public class JMethod extends JNode implements HasEnclosingType, HasName, HasType
   /**
    * Add a method that this method overrides.
    */
-  public void addOverride(JMethod toAdd) {
+  public void addOverriddenMethod(JMethod toAdd) {
     assert canBePolymorphic();
-    overrides = Lists.add(overrides, toAdd);
-  }
-
-  /**
-   * Add methods that this method overrides.
-   */
-  public void addOverrides(List<JMethod> toAdd) {
-    assert canBePolymorphic();
-    overrides = Lists.addAll(overrides, toAdd);
+    overriddenMethods = Lists.add(overriddenMethods, toAdd);
   }
 
   /**
@@ -216,6 +298,27 @@ public class JMethod extends JNode implements HasEnclosingType, HasName, HasType
     setOriginalTypes(returnType, paramTypes);
   }
 
+  /**
+   * Returns true if this method overrides a package private method and increases its
+   * visibility.
+   */
+  public boolean exposesOverriddenPackagePrivateMethod() {
+    if (isPrivate() || isDefault()) {
+      return false;
+    }
+
+    for (JMethod overriddenMethod : overriddenMethods) {
+      if (overriddenMethod.getEnclosingType() instanceof JInterfaceType) {
+        continue;
+      }
+      if (overriddenMethod.isDefault()) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   public AccessModifier getAccess() {
     return AccessModifier.values()[access];
   }
@@ -246,8 +349,8 @@ public class JMethod extends JNode implements HasEnclosingType, HasName, HasType
   /**
    * Returns the transitive closure of all the methods this method overrides.
    */
-  public List<JMethod> getOverrides() {
-    return overrides;
+  public List<JMethod> getOverriddenMethods() {
+    return overriddenMethods;
   }
 
   /**
@@ -261,19 +364,25 @@ public class JMethod extends JNode implements HasEnclosingType, HasName, HasType
     if (signature == null) {
       StringBuilder sb = new StringBuilder();
       sb.append(getName());
-      sb.append('(');
-      for (JType type : getOriginalParamTypes()) {
-        sb.append(type.getJsniSignatureName());
-      }
-      sb.append(')');
-      if (!isConstructor()) {
-        sb.append(getOriginalReturnType().getJsniSignatureName());
-      } else {
-        sb.append(" <init>");
-      }
+      getParamSignature(sb, getOriginalParamTypes(), getOriginalReturnType(),
+          isConstructor());
       signature = sb.toString();
     }
     return signature;
+  }
+
+  private static void getParamSignature(StringBuilder sb,
+      List<JType> params, JType returnType, boolean isCtor) {
+    sb.append('(');
+    for (JType type : params) {
+      sb.append(type.getJsniSignatureName());
+    }
+    sb.append(')');
+    if (!isCtor) {
+      sb.append(returnType.getJsniSignatureName());
+    } else {
+      sb.append(" <init>");
+    }
   }
 
   public List<JClassType> getThrownExceptions() {
@@ -471,7 +580,7 @@ public class JMethod extends JNode implements HasEnclosingType, HasName, HasType
 
   /**
    * See {@link #writeBody(ObjectOutputStream)}.
-   * 
+   *
    * @see #writeBody(ObjectOutputStream)
    */
   void readBody(ObjectInputStream stream) throws IOException, ClassNotFoundException {
@@ -489,7 +598,7 @@ public class JMethod extends JNode implements HasEnclosingType, HasName, HasType
   /**
    * After all types, fields, and methods are written to the stream, this method
    * writes method bodies to the stream.
-   * 
+   *
    * @see JProgram#writeObject(ObjectOutputStream)
    */
   void writeBody(ObjectOutputStream stream) throws IOException {

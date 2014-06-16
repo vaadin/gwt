@@ -1,12 +1,12 @@
 /*
  * Copyright 2009 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -20,15 +20,15 @@ import com.google.gwt.dev.jjs.InternalCompilerException;
 import com.google.gwt.dev.jjs.ast.JMethod;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JRunAsync;
-import com.google.gwt.dev.jjs.impl.codesplitter.MultipleDependencyGraphRecorder;
 import com.google.gwt.dev.jjs.impl.ControlFlowAnalyzer;
+import com.google.gwt.dev.jjs.impl.codesplitter.MultipleDependencyGraphRecorder;
 import com.google.gwt.util.tools.Utility;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
-import java.util.ArrayList;
+import java.util.List;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -76,7 +76,7 @@ public class DependencyRecorder implements MultipleDependencyGraphRecorder {
    * Used to record the dependencies of a specific method.
    */
   @Override
-  public void methodIsLiveBecause(JMethod liveMethod, ArrayList<JMethod> dependencyChain) {
+  public void methodIsLiveBecause(JMethod liveMethod, List<JMethod> dependencyChain) {
     printMethodDependency(dependencyChain);
   }
 
@@ -157,7 +157,7 @@ public class DependencyRecorder implements MultipleDependencyGraphRecorder {
    * recovered by code that reads the entire dependencies file, because it can
    * do repeated lookups into the dependencies table to follow the chain.
    */
-  private void printMethodDependency(ArrayList<JMethod> dependencyChain) {
+  private void printMethodDependency(List<JMethod> dependencyChain) {
     int size = dependencyChain.size();
     if (size < 2) {
       return;

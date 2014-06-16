@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -16,11 +16,11 @@
 package com.google.gwt.dev.jjs.test;
 
 import com.google.gwt.dev.jjs.test.StaticObject.InstanceObject;
+import com.google.gwt.dev.jjs.test.StaticObject.InstanceObject.NestedInstanceObject;
 import com.google.gwt.dev.jjs.test.StaticObject.NoArgObject;
 import com.google.gwt.dev.jjs.test.StaticObject.NoInitObject;
 import com.google.gwt.dev.jjs.test.StaticObject.StaticInnerObject;
 import com.google.gwt.dev.jjs.test.StaticObject.StaticObjectException;
-import com.google.gwt.dev.jjs.test.StaticObject.InstanceObject.NestedInstanceObject;
 import com.google.gwt.junit.client.GWTTestCase;
 
 /**
@@ -106,7 +106,6 @@ public class JsniConstructorTest extends GWTTestCase {
 
   public native void testInheritedMethodRef() /*-{
     @com.google.gwt.dev.jjs.test.JsniConstructorTest.C1::s1()();
-    @com.google.gwt.dev.jjs.test.JsniConstructorTest.C2::s1()();
     @com.google.gwt.dev.jjs.test.JsniConstructorTest.C2::s2()();
 
     var o = @com.google.gwt.dev.jjs.test.JsniConstructorTest.C2::new()();
@@ -130,6 +129,37 @@ public class JsniConstructorTest extends GWTTestCase {
     o.@java.lang.Object::toString()();
     o.@com.google.gwt.dev.jjs.test.JsniConstructorTest.C1::toString()();
     o.@com.google.gwt.dev.jjs.test.JsniConstructorTest.C2::toString()();
+  }-*/;
+
+  public native void testJsniResolution() /*-{
+    @JsniConstructorTest.C1::s1()();
+    @JsniConstructorTest.C2::s2()();
+
+    var o = @JsniConstructorTest.C2::new()();
+    o.@JsniConstructorTest.A1::a1()();
+    o.@JsniConstructorTest.A2::a1()();
+    o.@JsniConstructorTest.C1::a1()();
+    o.@JsniConstructorTest.C2::a1()();
+
+    o.@JsniConstructorTest.A2::a2()();
+    o.@JsniConstructorTest.C1::a2()();
+    o.@JsniConstructorTest.C2::a2()();
+
+    o.@JsniConstructorTest.A3::a3()();
+    o.@JsniConstructorTest.C2::a3()();
+
+    o.@JsniConstructorTest.C1::c1()();
+    o.@JsniConstructorTest.C2::c1()();
+
+    o.@JsniConstructorTest.C2::c2()();
+
+    o.@java.lang.Object::toString()();
+    o.@JsniConstructorTest.C1::toString()();
+    o.@JsniConstructorTest.C2::toString()();
+
+    this.@InstanceObject::foo(*);
+    this.@StaticObject.InstanceObject::foo(*);
+    this.@StaticObject::foo(*);
   }-*/;
 
   public void testJsniConstructors() {

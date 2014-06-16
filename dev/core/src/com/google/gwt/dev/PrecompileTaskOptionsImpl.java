@@ -34,8 +34,12 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   private File genDir;
   private final JJSOptionsImpl jjsOptions = new JJSOptionsImpl();
   private int maxPermsPerPrecompile;
+  private File missingDepsFile;
   private boolean saveSource;
+  private String sourceMapFilePrefix;
   private boolean validateOnly;
+  private boolean warnOverlappingSource;
+  private boolean warnMissingDeps;
 
   public PrecompileTaskOptionsImpl() {
   }
@@ -64,14 +68,23 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
     setDisableUpdateCheck(other.isUpdateCheckDisabled());
     setGenDir(other.getGenDir());
     setSaveSource(other.shouldSaveSource());
+    setSourceMapFilePrefix(other.getSourceMapFilePrefix());
     setMaxPermsPerPrecompile(other.getMaxPermsPerPrecompile());
+    setWarnOverlappingSource(other.warnOverlappingSource());
+    setWarnMissingDeps(other.warnMissingDeps());
+    setMissingDepsFile(other.getMissingDepsFile());
     setValidateOnly(other.isValidateOnly());
     setEnabledGeneratingOnShards(other.isEnabledGeneratingOnShards());
   }
 
   @Override
-  public boolean enforceStrictResources() {
-    return jjsOptions.enforceStrictResources();
+  public boolean enforceStrictPublicResources() {
+    return jjsOptions.enforceStrictPublicResources();
+  }
+
+  @Override
+  public boolean enforceStrictSourceResources() {
+    return jjsOptions.enforceStrictSourceResources();
   }
 
   @Override
@@ -95,6 +108,11 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   }
 
   @Override
+  public File getMissingDepsFile() {
+    return missingDepsFile;
+  }
+
+  @Override
   public JsNamespaceOption getNamespace() {
     return jjsOptions.getNamespace();
   }
@@ -110,14 +128,14 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   }
 
   @Override
-  public boolean shouldSaveSource() {
-    return saveSource;
-  }
-
-  @Override
   public SourceLevel getSourceLevel()
   {
     return jjsOptions.getSourceLevel();
+  }
+
+  @Override
+  public String getSourceMapFilePrefix() {
+    return sourceMapFilePrefix;
   }
 
   @Override
@@ -257,8 +275,13 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   }
 
   @Override
-  public void setEnforceStrictResources(boolean strictResources) {
-    jjsOptions.setEnforceStrictResources(strictResources);
+  public void setEnforceStrictPublicResources(boolean strictPublicResources) {
+    jjsOptions.setEnforceStrictPublicResources(strictPublicResources);
+  }
+
+  @Override
+  public void setEnforceStrictSourceResources(boolean strictSourceResources) {
+    jjsOptions.setEnforceStrictSourceResources(strictSourceResources);
   }
 
   @Override
@@ -289,6 +312,11 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   @Override
   public void setMaxPermsPerPrecompile(int maxPermsPerPrecompile) {
     this.maxPermsPerPrecompile = maxPermsPerPrecompile;
+  }
+
+  @Override
+  public void setMissingDepsFile(File missingDepsFile) {
+    this.missingDepsFile = missingDepsFile;
   }
 
   @Override
@@ -342,6 +370,11 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   }
 
   @Override
+  public void setSourceMapFilePrefix(String path) {
+    sourceMapFilePrefix = path;
+  }
+
+  @Override
   public void setSoycEnabled(boolean enabled) {
     jjsOptions.setSoycEnabled(enabled);
   }
@@ -364,6 +397,16 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   @Override
   public void setValidateOnly(boolean validateOnly) {
     this.validateOnly = validateOnly;
+  }
+
+  @Override
+  public void setWarnOverlappingSource(boolean warnOverlappingSource) {
+    this.warnOverlappingSource = warnOverlappingSource;
+  }
+
+  @Override
+  public void setWarnMissingDeps(boolean showMissingDepsWarnings) {
+    this.warnMissingDeps = showMissingDepsWarnings;
   }
 
   @Override
@@ -394,5 +437,20 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   @Override
   public boolean shouldRemoveDuplicateFunctions() {
     return jjsOptions.shouldRemoveDuplicateFunctions();
+  }
+
+  @Override
+  public boolean shouldSaveSource() {
+    return saveSource;
+  }
+
+  @Override
+  public boolean warnOverlappingSource() {
+    return warnOverlappingSource;
+  }
+
+  @Override
+  public boolean warnMissingDeps() {
+    return warnMissingDeps;
   }
 }

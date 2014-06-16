@@ -16,7 +16,9 @@
 package com.google.gwt.dev.resource.impl;
 
 import com.google.gwt.core.ext.TreeLogger;
+import com.google.gwt.dev.cfg.ResourceLoaders;
 import com.google.gwt.dev.resource.Resource;
+import com.google.gwt.dev.util.UnitTestTreeLogger;
 import com.google.gwt.dev.util.Util;
 import com.google.gwt.util.tools.Utility;
 
@@ -197,20 +199,20 @@ public class ResourceOracleImplTest extends AbstractResourceOrientedTestBase {
     // test basic caching
     PathPrefixSet pps1 = new PathPrefixSet();
     pps1.add(new PathPrefix("com/google/gwt/", null, false));
-    Map<AbstractResource, PathPrefix> resourceMap1 = cpe1jar.findApplicableResources(
-        logger, pps1);
+    Map<AbstractResource, ResourceResolution> resourceMap1 =
+        cpe1jar.findApplicableResources(logger, pps1);
     assertSame(resourceMap1, cpe1jar.findApplicableResources(logger, pps1));
 
     // test that cache is invalidated if PathPrefixSet is modified.
     pps1.add(new PathPrefix("com/google/gwt/user/", null, false));
-    Map<AbstractResource, PathPrefix> resourceMap2 = cpe1jar.findApplicableResources(
-        logger, pps1);
+    Map<AbstractResource, ResourceResolution> resourceMap2 =
+        cpe1jar.findApplicableResources(logger, pps1);
     assertNotSame(resourceMap1, resourceMap2);
 
     PathPrefixSet pps2 = new PathPrefixSet();
     pps2.add(new PathPrefix("org/example/bar/", null, false));
-    Map<AbstractResource, PathPrefix> resourceMap3 = cpe1jar.findApplicableResources(
-        logger, pps2);
+    Map<AbstractResource, ResourceResolution> resourceMap3 =
+        cpe1jar.findApplicableResources(logger, pps2);
     // check that the entry did go in the cache
     assertSame(resourceMap3, cpe1jar.findApplicableResources(logger, pps2));
 
@@ -478,6 +480,45 @@ public class ResourceOracleImplTest extends AbstractResourceOrientedTestBase {
             "org/example/bar/", null, false));
   }
 
+  public void testOverlappingIncludeWarning() {
+    DefaultFilters defaultFilters = new DefaultFilters();
+
+    UnitTestTreeLogger.Builder loggerBuilder = new UnitTestTreeLogger.Builder();
+    loggerBuilder.setLowestLogLevel(TreeLogger.WARN);
+    loggerBuilder.expectWarn(
+        "Resource com/google/gwt/dev/resource/impl/testdata/outer/inner/"
+        + "empty.txt is included by multiple modules (InnerDirModule, "
+        + "InnerFileModule, OuterDirModule).", null);
+    UnitTestTreeLogger logger = loggerBuilder.createLogger();
+    ResourceOracleImpl resourceOracleImpl = new ResourceOracleImpl(logger,
+        ResourceLoaders.wrap(Thread.currentThread().getContextClassLoader()));
+
+    PathPrefixSet pathPrefixSet = new PathPrefixSet(false);
+    // Include from an outer directory.
+    pathPrefixSet.add(new PathPrefix("OuterDirModule",
+        "com/google/gwt/dev/resource/impl/testdata/outer/",
+        defaultFilters.customResourceFilter(new String[0], new String[0],
+            new String[0], true, true), false, new String[0]));
+    // Include on the inner directory.
+    pathPrefixSet.add(
+        new PathPrefix("InnerDirModule",
+            "com/google/gwt/dev/resource/impl/testdata/outer/inner/",
+            defaultFilters.customResourceFilter(new String[0], new String[0],
+                new String[0], true, true), false, new String[0]));
+    // Include a specific file in the inner directory.
+    pathPrefixSet.add(new PathPrefix("InnerFileModule",
+        "com/google/gwt/dev/resource/impl/testdata/",
+        defaultFilters.customResourceFilter(new String[] {
+            "com/google/gwt/dev/resource/impl/testdata/outer/inner/empty.txt"},
+            new String[0], new String[0], true, true), false, new String[0]));
+
+    resourceOracleImpl.setPathPrefixes(pathPrefixSet);
+    resourceOracleImpl.scanResources(logger);
+    resourceOracleImpl.printOverlappingModuleIncludeWarnings(logger);
+
+    logger.assertCorrectLogEntries();
+  }
+
   /**
    * Ensure refresh is stable when multiple classpaths + multiple path prefixes
    * all include the same resource.
@@ -566,7 +607,13 @@ public class ResourceOracleImplTest extends AbstractResourceOrientedTestBase {
         InputStream is = res.openContents();
         assertNotNull(is);
         rdr = new BufferedReader(new InputStreamReader(is));
-        assertTrue(rdr.readLine().indexOf(
+
+        // Skip lines until package line is found.
+        String line = rdr.readLine();
+        while (line != null && !line.startsWith("package")) {
+          line = rdr.readLine();
+        }
+        assertTrue(line != null && line.indexOf(
             "package com.google.gwt.dev.resource.impl.testdata.cpe1.com.google.gwt.user.client;") >= 0);
       } finally {
         Utility.close(rdr);
@@ -583,7 +630,12 @@ public class ResourceOracleImplTest extends AbstractResourceOrientedTestBase {
         InputStream is = res.openContents();
         assertNotNull(is);
         rdr = new BufferedReader(new InputStreamReader(is));
-        assertTrue(rdr.readLine().indexOf(
+        // Skip lines until package line is found.
+        String line = rdr.readLine();
+        while (line != null && !line.startsWith("package")) {
+          line = rdr.readLine();
+        }
+        assertTrue(line != null && line.indexOf(
             "package com.google.gwt.dev.resource.impl.testdata.cpe2.com.google.gwt.i18n.client;") >= 0);
       } finally {
         Utility.close(rdr);

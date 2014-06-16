@@ -16,6 +16,7 @@
 package java.util;
 
 import com.google.gwt.core.client.JavaScriptObject;
+import com.google.gwt.core.client.impl.SpecializeMethod;
 
 /**
  * Implementation of Map interface based on a hash table. <a
@@ -210,8 +211,6 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
     clearImpl();
   }
 
-  public abstract Object clone();
-
   @Override
   public boolean containsKey(Object key) {
     return (key == null) ? nullSlotLive : (!(key instanceof String)
@@ -235,12 +234,16 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
     return new EntrySet();
   }
 
+  @SpecializeMethod(params = {String.class},
+    target = "getStringValue")
   @Override
   public V get(Object key) {
     return (key == null) ? nullSlot : (!(key instanceof String) ? getHashValue(
         key, getHashCode(key)) : getStringValue((String) key));
   }
 
+  @SpecializeMethod(params = {String.class, Object.class},
+                    target = "putStringValue")
   @Override
   public V put(K key, V value) {
     return (key == null) ? putNullSlot(value) : (!(key instanceof String)
@@ -248,6 +251,7 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
             (String) key, value));
   }
 
+  @SpecializeMethod(params = {String.class}, target = "removeStringValue")
   @Override
   public V remove(Object key) {
     return (key == null) ? removeNullSlot() : (!(key instanceof String)
@@ -264,13 +268,13 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
    * Subclasses must override to return a whether or not two keys or values are
    * equal.
    */
-  protected abstract boolean equals(Object value1, Object value2);
+  abstract boolean equals(Object value1, Object value2);
 
   /**
    * Subclasses must override to return a hash code for a given key. The key is
    * guaranteed to be non-null and not a String.
    */
-  protected abstract int getHashCode(Object key);
+  abstract int getHashCode(Object key);
 
   private native void addAllHashEntries(Collection<?> dest) /*-{
     var hashCodeMap = this.@java.util.AbstractHashMap::hashCodeMap;
@@ -380,7 +384,10 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
    * Returns the value for the given key in the stringMap. Returns
    * <code>null</code> if the specified key does not exist.
    */
-  private native V getStringValue(String key) /*-{
+  protected native V getStringValue(String key) /*-{
+    if (key == null) {
+      return this.@java.util.AbstractHashMap::nullSlot;
+    }
     return this.@java.util.AbstractHashMap::stringMap[':' + key];
   }-*/;
 
@@ -420,18 +427,16 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
     if (array) {
       for ( var i = 0, c = array.length; i < c; ++i) {
         var entry = array[i];
-        var entryKey = entry.@java.util.Map$Entry::getKey()();
+        var entryKey = entry.@java.util.Map.Entry::getKey()();
         if (this.@java.util.AbstractHashMap::equalsBridge(Ljava/lang/Object;Ljava/lang/Object;)(key, entryKey)) {
           // Found an exact match, just update the existing entry
-          var previous = entry.@java.util.Map$Entry::getValue()();
-          entry.@java.util.Map$Entry::setValue(Ljava/lang/Object;)(value);
-          return previous;
+          return entry.@java.util.Map.Entry::setValue(Ljava/lang/Object;)(value);
         }
       }
     } else {
       array = this.@java.util.AbstractHashMap::hashCodeMap[hashCode] = [];
     }
-    var entry = @java.util.MapEntryImpl::new(Ljava/lang/Object;Ljava/lang/Object;)(key, value);
+    var entry = @java.util.AbstractMap.SimpleEntry::new(Ljava/lang/Object;Ljava/lang/Object;)(key, value);
     array.push(entry);
     ++this.@java.util.AbstractHashMap::size;
     return null;
@@ -452,7 +457,10 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
    * value previously at that key. Returns <code>null</code> if the specified
    * key did not exist.
    */
-  private native V putStringValue(String key, V value) /*-{
+  protected native V putStringValue(String key, V value) /*-{
+    if (key == null) {
+      return this.@java.util.AbstractHashMap::putNullSlot(Ljava/lang/Object;)(value);
+    }
     var result, stringMap = this.@java.util.AbstractHashMap::stringMap;
     key = ':' + key;
     if (key in stringMap) {
@@ -507,7 +515,11 @@ abstract class AbstractHashMap<K, V> extends AbstractMap<K, V> {
    * previously there. Returns <code>null</code> if the specified key does not
    * exist.
    */
-  private native V removeStringValue(String key) /*-{
+  protected native V removeStringValue(String key) /*-{
+    if (key == null) {
+      return this.@java.util.AbstractHashMap::removeNullSlot()();
+    }
+
     var result, stringMap = this.@java.util.AbstractHashMap::stringMap;
     key = ':' + key;
     if (key in stringMap) {

@@ -13,8 +13,6 @@
  */
 package com.google.gwt.dev.jjs;
 
-import com.google.gwt.core.ext.PropertyOracle;
-import com.google.gwt.core.ext.PropertyOracles;
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.core.ext.linker.PrecompilationMetricsArtifact;
@@ -24,43 +22,45 @@ import com.google.gwt.core.ext.soyc.impl.DependencyRecorder;
 import com.google.gwt.core.linker.SoycReportLinker;
 import com.google.gwt.dev.CompilerContext;
 import com.google.gwt.dev.Permutation;
+import com.google.gwt.dev.cfg.ConfigProps;
+import com.google.gwt.dev.cfg.PermProps;
 import com.google.gwt.dev.jdt.RebindPermutationOracle;
-import com.google.gwt.dev.jjs.ast.JBlock;
-import com.google.gwt.dev.jjs.ast.JClassType;
-import com.google.gwt.dev.jjs.ast.JDeclaredType;
-import com.google.gwt.dev.jjs.ast.JExpression;
-import com.google.gwt.dev.jjs.ast.JGwtCreate;
-import com.google.gwt.dev.jjs.ast.JMethod;
-import com.google.gwt.dev.jjs.ast.JMethodCall;
+import com.google.gwt.dev.jjs.ast.JLiteral;
 import com.google.gwt.dev.jjs.ast.JProgram;
-import com.google.gwt.dev.jjs.ast.JReboundEntryPoint;
+import com.google.gwt.dev.jjs.ast.JType;
+import com.google.gwt.dev.jjs.impl.ArrayNormalizer;
+import com.google.gwt.dev.jjs.impl.CatchBlockNormalizer;
+import com.google.gwt.dev.jjs.impl.ComputeCastabilityInformation;
+import com.google.gwt.dev.jjs.impl.ComputeInstantiatedJsoInterfaces;
 import com.google.gwt.dev.jjs.impl.ControlFlowAnalyzer;
-import com.google.gwt.dev.jjs.impl.DeadCodeElimination;
-import com.google.gwt.dev.jjs.impl.Finalizer;
+import com.google.gwt.dev.jjs.impl.Devirtualizer;
+import com.google.gwt.dev.jjs.impl.EqualityNormalizer;
 import com.google.gwt.dev.jjs.impl.HandleCrossFragmentReferences;
+import com.google.gwt.dev.jjs.impl.ImplementCastsAndTypeChecks;
 import com.google.gwt.dev.jjs.impl.JavaToJavaScriptMap;
-import com.google.gwt.dev.jjs.impl.MakeCallsStatic;
+import com.google.gwt.dev.jjs.impl.LongCastNormalizer;
+import com.google.gwt.dev.jjs.impl.LongEmulationNormalizer;
+import com.google.gwt.dev.jjs.impl.PostOptimizationCompoundAssignmentNormalizer;
 import com.google.gwt.dev.jjs.impl.Pruner;
 import com.google.gwt.dev.jjs.impl.RemoveEmptySuperCalls;
+import com.google.gwt.dev.jjs.impl.RemoveSpecializations;
 import com.google.gwt.dev.jjs.impl.ReplaceGetClassOverrides;
+import com.google.gwt.dev.jjs.impl.ResolveRuntimeTypeReferences;
+import com.google.gwt.dev.jjs.impl.TypeCoercionNormalizer;
 import com.google.gwt.dev.jjs.impl.codesplitter.CodeSplitter;
 import com.google.gwt.dev.jjs.impl.codesplitter.CodeSplitters;
 import com.google.gwt.dev.jjs.impl.codesplitter.MultipleDependencyGraphRecorder;
+import com.google.gwt.dev.js.JsDuplicateCaseFolder;
 import com.google.gwt.dev.js.JsLiteralInterner;
 import com.google.gwt.dev.js.JsVerboseNamer;
 import com.google.gwt.dev.js.ast.JsLiteral;
 import com.google.gwt.dev.js.ast.JsName;
+import com.google.gwt.dev.js.ast.JsNode;
 import com.google.gwt.dev.util.Pair;
 import com.google.gwt.dev.util.arg.OptionOptimize;
-import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
-import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
-import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -82,33 +82,56 @@ public class MonolithicJavaToJavaScriptCompiler extends JavaToJavaScriptCompiler
     }
 
     @Override
+    protected Map<JType, JLiteral> normalizeSemantics() {
+      Devirtualizer.exec(jprogram);
+      CatchBlockNormalizer.exec(jprogram);
+      PostOptimizationCompoundAssignmentNormalizer.exec(jprogram);
+      LongCastNormalizer.exec(jprogram);
+      LongEmulationNormalizer.exec(jprogram);
+      TypeCoercionNormalizer.exec(jprogram);
+      ComputeCastabilityInformation.exec(jprogram, options.isCastCheckingDisabled());
+      ComputeInstantiatedJsoInterfaces.exec(jprogram);
+      ImplementCastsAndTypeChecks.exec(jprogram, options.isCastCheckingDisabled());
+      ArrayNormalizer.exec(jprogram, options.isCastCheckingDisabled());
+      EqualityNormalizer.exec(jprogram);
+      return ResolveRuntimeTypeReferences.IntoIntLiterals.exec(jprogram);
+    }
+
+    @Override
     protected void optimizeJava() throws InterruptedException {
-      if (options.getOptimizationLevel() == OptionOptimize.OPTIMIZE_LEVEL_DRAFT) {
-        optimizeJavaForDraft();
-      } else {
+      if (options.getOptimizationLevel() > OptionOptimize.OPTIMIZE_LEVEL_DRAFT) {
         optimizeJavaToFixedPoint();
       }
       RemoveEmptySuperCalls.exec(jprogram);
     }
 
     @Override
+    protected void optimizeJs(Set<JsNode> inlinableJsFunctions) throws InterruptedException {
+      if (options.getOptimizationLevel() > OptionOptimize.OPTIMIZE_LEVEL_DRAFT) {
+        optimizeJsLoop(inlinableJsFunctions);
+        JsDuplicateCaseFolder.exec(jsProgram);
+      }
+    }
+
+    @Override
     protected void postNormalizationOptimizeJava() {
+      RemoveSpecializations.exec(jprogram);
       Pruner.exec(jprogram, false);
       ReplaceGetClassOverrides.exec(jprogram);
     }
 
     @Override
-    protected Map<JsName, JsLiteral> runDetailedNamer(PropertyOracle[] propertyOracles) {
+    protected Map<JsName, JsLiteral> runDetailedNamer(ConfigProps config) {
       Map<JsName, JsLiteral> internedTextByVariableName =
           JsLiteralInterner.exec(jprogram, jsProgram, JsLiteralInterner.INTERN_ALL);
-      JsVerboseNamer.exec(jsProgram, propertyOracles);
+      JsVerboseNamer.exec(jsProgram, config);
       return internedTextByVariableName;
     }
 
     @Override
     protected Pair<SyntheticArtifact, MultipleDependencyGraphRecorder> splitJsIntoFragments(
-        PropertyOracle[] propertyOracles, int permutationId, JavaToJavaScriptMap jjsmap) {
-      Pair<SyntheticArtifact, MultipleDependencyGraphRecorder> dependenciesAndRecorder = null;
+        PermProps props, int permutationId, JavaToJavaScriptMap jjsmap) {
+      Pair<SyntheticArtifact, MultipleDependencyGraphRecorder> dependenciesAndRecorder;
       MultipleDependencyGraphRecorder dependencyRecorder = null;
       SyntheticArtifact dependencies = null;
       if (options.isRunAsyncEnabled()) {
@@ -127,8 +150,7 @@ public class MonolithicJavaToJavaScriptCompiler extends JavaToJavaScriptCompiler
           }
         }
 
-        int minFragmentSize = PropertyOracles.findIntegerConfigurationProperty(
-            propertyOracles, CodeSplitters.MIN_FRAGMENT_SIZE, 0);
+        int minFragmentSize = props.getConfigProps().getInteger(CodeSplitters.MIN_FRAGMENT_SIZE, 0);
 
         dependencyRecorder = chooseDependencyRecorder(baos);
         CodeSplitter.exec(logger, jprogram, jsProgram, jjsmap, expectedFragmentCount,
@@ -150,7 +172,7 @@ public class MonolithicJavaToJavaScriptCompiler extends JavaToJavaScriptCompiler
 
       // No new JsNames or references to JSNames can be introduced after this
       // point.
-      HandleCrossFragmentReferences.exec(logger, jsProgram, propertyOracles);
+      HandleCrossFragmentReferences.exec(jsProgram, props);
 
       return dependenciesAndRecorder;
     }
@@ -166,21 +188,6 @@ public class MonolithicJavaToJavaScriptCompiler extends JavaToJavaScriptCompiler
         dependencyRecorder = new DependencyGraphRecorder(out, jprogram);
       }
       return dependencyRecorder;
-    }
-
-    /**
-     * Perform the minimal amount of optimization to make sure the compile succeeds.
-     */
-    private void optimizeJavaForDraft() {
-      Event draftOptimizeEvent = SpeedTracerLogger.start(CompilerEventType.DRAFT_OPTIMIZE);
-      Finalizer.exec(jprogram);
-      MakeCallsStatic.exec(options, jprogram);
-      jprogram.typeOracle.recomputeAfterOptimizations();
-      // needed for certain libraries that depend on dead stripping to work
-      DeadCodeElimination.exec(jprogram);
-      Pruner.exec(jprogram, true);
-      jprogram.typeOracle.recomputeAfterOptimizations();
-      draftOptimizeEvent.end();
     }
 
     /**
@@ -213,16 +220,17 @@ public class MonolithicJavaToJavaScriptCompiler extends JavaToJavaScriptCompiler
 
   private class MonolithicPrecompiler extends Precompiler {
 
-    public MonolithicPrecompiler(RebindPermutationOracle rpo) {
-      super(rpo);
+    public MonolithicPrecompiler(RebindPermutationOracle rpo, String[] entryPointTypeNames) {
+      super(rpo, entryPointTypeNames);
     }
 
     @Override
-    protected void beforeUnifyAst(Set<String> allRootTypes) throws UnableToCompleteException {
+    protected void beforeUnifyAst(Set<String> allRootTypes)
+        throws UnableToCompleteException {
     }
 
     @Override
-    protected void checkEntryPoints(String[] entryPointTypeNames, String[] additionalRootTypes) {
+    protected void checkEntryPoints(String[] additionalRootTypes) {
       if (entryPointTypeNames.length + additionalRootTypes.length == 0) {
         throw new IllegalArgumentException("entry point(s) required");
       }
@@ -231,101 +239,6 @@ public class MonolithicJavaToJavaScriptCompiler extends JavaToJavaScriptCompiler
     @Override
     protected void createJProgram() {
       jprogram = new JProgram();
-    }
-
-    @Override
-    protected JMethodCall createReboundModuleLoad(SourceInfo info, JDeclaredType reboundEntryType,
-        String originalMainClassName, JDeclaredType enclosingType)
-        throws UnableToCompleteException {
-      if (!(reboundEntryType instanceof JClassType)) {
-        logger.log(TreeLogger.ERROR,
-            "Module entry point class '" + originalMainClassName + "' must be a class", null);
-        throw new UnableToCompleteException();
-      }
-
-      JClassType entryClass = (JClassType) reboundEntryType;
-      if (entryClass.isAbstract()) {
-        logger.log(TreeLogger.ERROR,
-            "Module entry point class '" + originalMainClassName + "' must not be abstract", null);
-        throw new UnableToCompleteException();
-      }
-
-      JMethod entryMethod = findMainMethodRecurse(entryClass);
-      if (entryMethod == null) {
-        logger.log(TreeLogger.ERROR,
-            "Could not find entry method 'onModuleLoad()' method in entry point class '"
-            + originalMainClassName + "'", null);
-        throw new UnableToCompleteException();
-      }
-
-      if (entryMethod.isAbstract()) {
-        logger.log(TreeLogger.ERROR, "Entry method 'onModuleLoad' in entry point class '"
-            + originalMainClassName + "' must not be abstract", null);
-        throw new UnableToCompleteException();
-      }
-
-      JExpression qualifier = null;
-      if (!entryMethod.isStatic()) {
-        qualifier = JGwtCreate.createInstantiationExpression(info, entryClass, enclosingType);
-
-        if (qualifier == null) {
-          logger.log(TreeLogger.ERROR,
-              "No default (zero argument) constructor could be found in entry point class '"
-              + originalMainClassName
-              + "' to qualify a call to non-static entry method 'onModuleLoad'", null);
-          throw new UnableToCompleteException();
-        }
-      }
-      return new JMethodCall(info, qualifier, entryMethod);
-    }
-
-    @Override
-    protected void populateEntryPointRootTypes(
-        String[] entryPointTypeNames, Set<String> allRootTypes) throws UnableToCompleteException {
-      // Find all the possible rebinds for declared entry point types.
-      for (String element : entryPointTypeNames) {
-        String[] all = rpo.getAllPossibleRebindAnswers(logger, element);
-        Collections.addAll(allRootTypes, all);
-      }
-      rpo.getGeneratorContext().finish(logger);
-    }
-
-    @Override
-    protected void rebindEntryPoint(SourceInfo info, JMethod bootStrapMethod, JBlock block,
-        String mainClassName, JDeclaredType mainType) throws UnableToCompleteException {
-      String[] resultTypeNames = rpo.getAllPossibleRebindAnswers(logger, mainClassName);
-      List<JClassType> resultTypes = new ArrayList<JClassType>();
-      List<JExpression> entryCalls = new ArrayList<JExpression>();
-      for (String resultTypeName : resultTypeNames) {
-        JDeclaredType resultType = jprogram.getFromTypeMap(resultTypeName);
-        if (resultType == null) {
-          logger.log(TreeLogger.ERROR, "Could not find module entry point class '" + resultTypeName
-              + "' after rebinding from '" + mainClassName + "'", null);
-          throw new UnableToCompleteException();
-        }
-
-        JMethodCall onModuleLoadCall = createReboundModuleLoad(
-            info, resultType, mainClassName, bootStrapMethod.getEnclosingType());
-        resultTypes.add((JClassType) resultType);
-        entryCalls.add(onModuleLoadCall);
-      }
-      if (resultTypes.size() == 1) {
-        block.addStmt(entryCalls.get(0).makeStatement());
-      } else {
-        JReboundEntryPoint reboundEntryPoint =
-            new JReboundEntryPoint(info, mainType, resultTypes, entryCalls);
-        block.addStmt(reboundEntryPoint);
-      }
-    }
-
-    private JMethod findMainMethodRecurse(JDeclaredType declaredType) {
-      for (JDeclaredType it = declaredType; it != null; it = it.getSuperClass()) {
-        JMethod result = findMainMethod(it);
-        if (result != null) {
-          return result;
-        }
-      }
-      return null;
     }
   }
 
@@ -346,7 +259,7 @@ public class MonolithicJavaToJavaScriptCompiler extends JavaToJavaScriptCompiler
   public UnifiedAst precompile(RebindPermutationOracle rpo, String[] entryPointTypeNames,
       String[] additionalRootTypes, boolean singlePermutation,
       PrecompilationMetricsArtifact precompilationMetrics) throws UnableToCompleteException {
-    return new MonolithicPrecompiler(rpo).precompile(
-        entryPointTypeNames, additionalRootTypes, singlePermutation, precompilationMetrics);
+    return new MonolithicPrecompiler(rpo, entryPointTypeNames).precompile(additionalRootTypes,
+        singlePermutation, precompilationMetrics);
   }
 }

@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -17,8 +17,9 @@ package com.google.gwt.resources.rebind.context;
 
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.ext.BadPropertyValueException;
-import com.google.gwt.core.ext.CachedPropertyInformation;
 import com.google.gwt.core.ext.CachedGeneratorResult;
+import com.google.gwt.core.ext.CachedPropertyInformation;
+import com.google.gwt.core.ext.Generator.RunsLocal;
 import com.google.gwt.core.ext.GeneratorContext;
 import com.google.gwt.core.ext.IncrementalGenerator;
 import com.google.gwt.core.ext.PropertyOracle;
@@ -68,7 +69,7 @@ import java.util.Set;
  * The base class for creating new ClientBundle implementations.
  * <p>
  * The general structure of the generated class is as follows:
- * 
+ *
  * <pre>
  * private void resourceInitializer() {
  *   resource = new Resource();
@@ -114,6 +115,7 @@ import java.util.Set;
  * of an instance of the ClientBundle type so that resources can refer to one
  * another by simply emitting a call to <code>resource()</code>.
  */
+@RunsLocal(requiresProperties = RunsLocal.ALL)
 public abstract class AbstractClientBundleGenerator extends IncrementalGenerator {
   private static final String CACHED_PROPERTY_INFORMATION = "cached-property-info";
   private static final String CACHED_RESOURCE_INFORMATION = "cached-resource-info";
@@ -181,7 +183,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
     /**
      * This can be called to reset the initializer expression on an
      * already-defined field.
-     * 
+     *
      * @param ident an identifier previously returned by {@link #define}
      * @param initializer a Java expression that will be used to initialize the
      *          field
@@ -219,10 +221,10 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
     public RequirementsImpl(PropertyOracle propertyOracle, boolean canBeCacheable) {
       this.propertyOracle = propertyOracle;
       this.canBeCacheable = canBeCacheable;
-      
+
       // always need to track permuationAxes
       axes = new HashSet<String>();
-      
+
       // only need to track these if generator caching is a possibility
       if (canBeCacheable) {
         configProps = new HashSet<String>();
@@ -236,9 +238,9 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
     }
 
     @Override
-    public void addConfigurationProperty(String propertyName) 
+    public void addConfigurationProperty(String propertyName)
         throws BadPropertyValueException {
-      
+
       if (!canBeCacheable) {
         return;
       }
@@ -333,7 +335,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
   }
 
   @Override
-  public RebindResult generateIncrementally(TreeLogger logger, GeneratorContext generatorContext, 
+  public RebindResult generateIncrementally(TreeLogger logger, GeneratorContext generatorContext,
         String typeName) throws UnableToCompleteException {
 
     /*
@@ -346,8 +348,8 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
         && checkCachedDependentResources(logger, generatorContext)) {
       useCache = true;
     }
-    
-    if (logger.isLoggable(TreeLogger.TRACE)) { 
+
+    if (logger.isLoggable(TreeLogger.TRACE)) {
       if (generatorContext.isGeneratorResultCachingEnabled()) {
         String msg;
         if (useCache) {
@@ -358,11 +360,11 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
         logger.log(TreeLogger.TRACE, msg);
       }
     }
-      
+
     if (useCache) {
       return new RebindResult(RebindMode.USE_ALL_CACHED, typeName);
     }
-      
+
     // The TypeOracle knows about all types in the type system
     TypeOracle typeOracle = generatorContext.getTypeOracle();
 
@@ -485,9 +487,9 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
 
     if (canBeCacheable) {
       // remember the current set of required properties, and their values
-      CachedPropertyInformation cpi = new CachedPropertyInformation(logger, 
-          generatorContext.getPropertyOracle(), 
-          requirements.getPermutationAxes(), 
+      CachedPropertyInformation cpi = new CachedPropertyInformation(logger,
+          generatorContext.getPropertyOracle(),
+          requirements.getPermutationAxes(),
           requirements.getConfigurationPropertyNames());
 
       // remember the last modified times for required source types
@@ -529,12 +531,12 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
   /**
    * Provides a hook for subtypes to add additional fields or requirements to
    * the bundle.
-   * 
+   *
    * @param logger a TreeLogger
    * @param context the GeneratorContext
    * @param fields ClentBundle fields
    * @param requirements ClientBundleRequirements
-   * 
+   *
    * @throws UnableToCompleteException if an error occurs.
    */
   protected void doAddFieldsAndRequirements(TreeLogger logger,
@@ -545,12 +547,12 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
   /**
    * This method is called after the ClientBundleRequirements have been
    * evaluated and a new ClientBundle implementation is being created.
-   * 
+   *
    * @param logger a TreeLogger
    * @param generatorContext the GeneratoContext
    * @param fields ClientBundle fields
    * @param generatedSimpleSourceName a String
-   * 
+   *
    * @throws UnableToCompleteException if an error occurs.
    */
   protected void doCreateBundleForPermutation(TreeLogger logger,
@@ -560,9 +562,9 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
 
   /**
    * Provides a hook for finalizing generated resources.
-   * 
+   *
    * @param logger a TreeLogger
-   * 
+   *
    * @throws UnableToCompleteException if an error occurs.
    */
   protected void doFinish(TreeLogger logger) throws UnableToCompleteException {
@@ -576,7 +578,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
 
     CachedGeneratorResult lastRebindResult = genContext.getCachedGeneratorResult();
 
-    if (lastRebindResult == null 
+    if (lastRebindResult == null
         || !genContext.isGeneratorResultCachingEnabled()) {
       return false;
     }
@@ -586,11 +588,11 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
     @SuppressWarnings("unchecked")
     Map<String, URL> cachedResolvedResources = (Map<String, URL>)
       lastRebindResult.getClientData(CACHED_RESOURCE_INFORMATION);
-    
+
     if (cachedResolvedResources == null) {
       return false;
     }
-    
+
     for (Entry<String, URL> entry : cachedResolvedResources.entrySet()) {
       String resourceName = entry.getKey();
       URL resolvedUrl = entry.getValue();
@@ -610,7 +612,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
             "Found dependent resource that has moved or no longer exists: " + resourceName);
         return false;
       }
-      
+
       // Check whether the resource referenced by the provided URL is up to date
       long modifiedTime = Util.getResourceModifiedTime(resolvedUrl);
       if (modifiedTime == 0L || modifiedTime > lastTimeGenerated) {
@@ -629,7 +631,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
 
     CachedGeneratorResult lastRebindResult = genContext.getCachedGeneratorResult();
 
-    if (lastRebindResult == null 
+    if (lastRebindResult == null
         || !genContext.isGeneratorResultCachingEnabled()) {
       return false;
     }
@@ -638,10 +640,10 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
      * Do a check of deferred-binding and configuration properties, comparing
      * the cached values saved previously with the current properties.
      */
-    CachedPropertyInformation cpi = (CachedPropertyInformation) 
+    CachedPropertyInformation cpi = (CachedPropertyInformation)
         lastRebindResult.getClientData(CACHED_PROPERTY_INFORMATION);
-      
-    return cpi != null && cpi.checkPropertiesWithPropertyOracle(logger, 
+
+    return cpi != null && cpi.checkPropertiesWithPropertyOracle(logger,
         genContext.getPropertyOracle());
   }
 
@@ -652,7 +654,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
 
     CachedGeneratorResult lastRebindResult = genContext.getCachedGeneratorResult();
 
-    if (lastRebindResult == null 
+    if (lastRebindResult == null
         || !genContext.isGeneratorResultCachingEnabled()) {
       return false;
     }
@@ -666,7 +668,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
     Map<String, Long> cachedTypeLastModifiedTimes = (Map<String, Long>)
       lastRebindResult.getClientData(CACHED_TYPE_INFORMATION);
 
-    return cachedTypeLastModifiedTimes != null 
+    return cachedTypeLastModifiedTimes != null
       && checkCachedTypeLastModifiedTimes(logger, genContext, cachedTypeLastModifiedTimes);
   }
 
@@ -676,25 +678,25 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
    */
   private boolean checkCachedTypeLastModifiedTimes(TreeLogger logger,
       GeneratorContext generatorContext, Map<String, Long> typeLastModifiedTimes) {
-    
+
     TypeOracle oracle = generatorContext.getTypeOracle();
-    
+
     for (String sourceTypeName : typeLastModifiedTimes.keySet()) {
       JClassType sourceType = oracle.findType(sourceTypeName);
       if (sourceType == null) {
-        logger.log(TreeLogger.TRACE, 
+        logger.log(TreeLogger.TRACE,
             "Found previously dependent type that's no longer present: " + sourceTypeName);
         return false;
       }
       assert sourceType instanceof JRealClassType;
       JRealClassType sourceRealType = (JRealClassType) sourceType;
-      
+
       if (sourceRealType.getLastModifiedTime() != typeLastModifiedTimes.get(sourceTypeName)) {
         logger.log(TreeLogger.TRACE, "Found dependent type that has changed: " + sourceTypeName);
         return false;
       }
     }
-    
+
     return true;
   }
 
@@ -703,7 +705,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
    */
   private boolean checkResourceGeneratorCacheability(GeneratorContext genContext,
       Map<Class<? extends ResourceGenerator>, List<JMethod>> taskList) {
-    
+
     if (!genContext.isGeneratorResultCachingEnabled()) {
       return false;
     }
@@ -716,7 +718,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
       if (!SupportsGeneratorResultCaching.class.isAssignableFrom(rgClass)) {
         return false;
       }
-    } 
+    }
     return true;
   }
 
@@ -768,7 +770,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
       sw.println("private void " + initializerName + "() {");
       sw.indentln(ident + " = " + rhs + ";");
       sw.println("}");
-      
+
       /*
        * Create a static Initializer class to lazily initialize the field on
        * first access. The compiler can efficiently optimize this static class
@@ -789,7 +791,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
 
       sw.outdent();
       sw.println("}");
-      
+
       // Strip off all but the access modifiers
       sw.print(m.getReadableDeclaration(false, true, true, true, true));
       sw.println(" {");
@@ -957,7 +959,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
     try {
       // no further additions to the permutation axes allowed after this point
       requirements.lockPermutationAxes();
-      
+
       PropertyOracle oracle = context.getGeneratorContext().getPropertyOracle();
       for (String property : requirements.getPermutationAxes()) {
         SelectionProperty prop = oracle.getSelectionProperty(logger, property);
@@ -1066,7 +1068,7 @@ public abstract class AbstractClientBundleGenerator extends IncrementalGenerator
 
   /**
    * Emits getResources() and getResourceMap() implementations.
-   * 
+   *
    * @param sw the output writer
    * @param taskList the list of methods to map by name
    * @param resourceMapField field containing the Java String to Resource map

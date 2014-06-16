@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -24,6 +24,7 @@ import com.google.gwt.dev.jjs.ast.JConstructor;
 import com.google.gwt.dev.jjs.ast.JDeclaredType;
 import com.google.gwt.dev.jjs.ast.JExpression;
 import com.google.gwt.dev.jjs.ast.JMethod;
+import com.google.gwt.dev.jjs.ast.JMethod.Specialization;
 import com.google.gwt.dev.jjs.ast.JMethodBody;
 import com.google.gwt.dev.jjs.ast.JMethodCall;
 import com.google.gwt.dev.jjs.ast.JModVisitor;
@@ -236,40 +237,60 @@ public class MakeCallsStatic {
     public void endVisit(JMethodCall x, Context ctx) {
       JMethod method = x.getTarget();
 
+      if (shouldBeMadeStatic(x, method)) {
+        // Let's do it!
+        toBeMadeStatic.add(method);
+        if (method.getSpecialization() != null &&
+            shouldBeMadeStatic(x,
+                method.getSpecialization().getTargetMethod())) {
+          toBeMadeStatic.add(method.getSpecialization().getTargetMethod());
+        }
+      }
+    }
+
+    private boolean shouldBeMadeStatic(JMethodCall x, JMethod method) {
       if (method.isExternal()) {
         // Staticifying a method requires modifying the type, which we can't
         // do for external types. Theoretically we could put the static method
         // in some generated code, but what does that really buy us?
-        return;
+        return false;
+      }
+
+      if (!program.isDevitualizationAllowed(method)) {
+        // Method has been specifically excluded from statification.
+        return false;
       }
 
       // Did we already do this one?
       if (program.getStaticImpl(method) != null || toBeMadeStatic.contains(method)) {
-        return;
+        return false;
       }
 
       // Must be instance and final
       if (x.canBePolymorphic()) {
-        return;
+        return false;
       }
       if (!method.needsVtable()) {
-        return;
+        return false;
       }
       if (method.isAbstract()) {
-        return;
+        return false;
       }
       if (method == program.getNullMethod()) {
         // Special case: we don't make calls to this method static.
-        return;
+        return false;
       }
 
       if (!method.getEnclosingType().getMethods().contains(method)) {
         // The target method was already pruned (TypeTightener will fix this).
-        return;
+        return false;
       }
-  
-      // Let's do it!
-      toBeMadeStatic.add(method);
+
+      if (program.typeOracle.isJsInterfaceMethod(method)) {
+        return false;
+      }
+
+      return true;
     }
   }
 
@@ -291,8 +312,8 @@ public class MakeCallsStatic {
     public void endVisit(JMethodCall x, Context ctx) {
       JMethod oldMethod = x.getTarget();
       JMethod newMethod = program.getStaticImpl(oldMethod);
-      
-      if (newMethod == null || x.canBePolymorphic()) {        
+
+      if (newMethod == null || x.canBePolymorphic()) {
         return;
       }
 
@@ -300,7 +321,7 @@ public class MakeCallsStatic {
           && !initiallyLive.getLiveFieldsAndMethods().contains(x.getTarget())) {
         /*
          * Don't devirtualize calls from initial code to non-initial code.
-         * 
+         *
          * TODO(spoon): similar prevention when the callee is exclusive to some
          * split point and the caller is not.
          */
@@ -426,6 +447,20 @@ public class MakeCallsStatic {
     CreateStaticImplsVisitor creator = new CreateStaticImplsVisitor(program);
     for (JMethod method : toBeMadeStatic) {
       creator.accept(method);
+    }
+    for (JMethod method : toBeMadeStatic) {
+      // if method has specialization, add it to the static method
+      Specialization specialization = method.getSpecialization();
+      if (specialization != null) {
+        JMethod staticMethod = program.getStaticImpl(method);
+        List<JType> params = new ArrayList<JType>(specialization.getParams());
+        params.add(0, staticMethod.getParams().get(0).getType());
+        staticMethod.setSpecialization(params, specialization.getReturns(),
+            staticMethod.getName());
+        staticMethod.getSpecialization().resolve(params,
+            specialization.getReturns(), program.getStaticImpl(specialization
+                .getTargetMethod()));
+      }
     }
 
     /*

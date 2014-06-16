@@ -15,16 +15,14 @@
  */
 package com.google.gwt.dev.js;
 
-import com.google.gwt.core.ext.BadPropertyValueException;
-import com.google.gwt.core.ext.PropertyOracle;
-import com.google.gwt.core.ext.SelectionProperty;
-import com.google.gwt.core.ext.TreeLogger;
+import com.google.gwt.dev.cfg.ConfigProps;
+import com.google.gwt.dev.cfg.PermProps;
 import com.google.gwt.dev.jjs.HasSourceInfo;
-import com.google.gwt.dev.jjs.InternalCompilerException;
 import com.google.gwt.dev.jjs.SourceInfo;
 import com.google.gwt.dev.jjs.ast.JMethod;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.impl.JavaToJavaScriptMap;
+import com.google.gwt.dev.js.ast.HasArguments;
 import com.google.gwt.dev.js.ast.JsArrayAccess;
 import com.google.gwt.dev.js.ast.JsArrayLiteral;
 import com.google.gwt.dev.js.ast.JsBinaryOperation;
@@ -78,8 +76,6 @@ import java.util.Set;
  * @see com.google.gwt.core.client.impl.StackTraceCreator
  */
 public class JsStackEmulator {
-
-  private static final String PROPERTY_NAME = "compiler.stackMode";
 
   /**
    * Resets the global stack depth to the local stack index and top stack frame
@@ -618,7 +614,7 @@ public class JsStackEmulator {
 
     public LocationVisitor(JsFunction function) {
       super(function);
-      resetPosition();
+      clearLocation();
     }
 
     @Override
@@ -643,7 +639,33 @@ public class JsStackEmulator {
     @Override
     public void endVisit(JsInvocation x, JsContext ctx) {
       nodesInRefContext.remove(x.getQualifier());
-      record(x, ctx);
+
+      // Record the location as close as possible to calling the function.
+
+      List<JsExpression> args = x.getArguments();
+      if (!args.isEmpty()) {
+        recordAfterLastArg(x);
+        return;
+      }
+
+      JsNameRef qualifier = getPossibleMethod(x);
+      if (qualifier == null) {
+        record(x, ctx);
+        return;
+      }
+
+      // This is a call using a qualified name like foo.bar()
+      // Record the location after evaluating foo.
+      // (Doing it after evaluating .bar causes lots of tests to fail.)
+
+      SourceInfo locationToRecord = x.getSourceInfo();
+      if (sameAsLastLocation(locationToRecord)) {
+        return;
+      }
+
+      qualifier.setQualifier(recordAfter(qualifier.getQualifier(), locationToRecord));
+      setLastLocation(locationToRecord);
+      didChange = true;
     }
 
     @Override
@@ -653,7 +675,15 @@ public class JsStackEmulator {
 
     @Override
     public void endVisit(JsNew x, JsContext ctx) {
-      record(x, ctx);
+      nodesInRefContext.remove(x.getConstructorExpression());
+
+      // Record the location as close as possible to calling the constructor.
+
+      if (!x.getArguments().isEmpty()) {
+        recordAfterLastArg(x);
+      } else {
+        record(x, ctx);
+      }
     }
 
     @Override
@@ -682,12 +712,12 @@ public class JsStackEmulator {
       }
 
       if (x.getCondition() != null) {
-        resetPosition();
+        clearLocation();
         x.setCondition(accept(x.getCondition()));
       }
 
       if (x.getIncrExpr() != null) {
-        resetPosition();
+        clearLocation();
         x.setIncrExpr(accept(x.getIncrExpr()));
       }
 
@@ -698,6 +728,12 @@ public class JsStackEmulator {
     @Override
     public boolean visit(JsInvocation x, JsContext ctx) {
       nodesInRefContext.add(x.getQualifier());
+      return true;
+    }
+
+    @Override
+    public boolean visit(JsNew x, JsContext ctx) {
+      nodesInRefContext.add(x.getConstructorExpression());
       return true;
     }
 
@@ -716,10 +752,25 @@ public class JsStackEmulator {
      */
     @Override
     public boolean visit(JsWhile x, JsContext ctx) {
-      resetPosition();
+      clearLocation();
       x.setCondition(accept(x.getCondition()));
       accept(x.getBody());
       return false;
+    }
+
+    /**
+     * If the invocation might be a method call, return its NameRef.
+     * Otherwise, return null.
+     */
+    private JsNameRef getPossibleMethod(JsInvocation x) {
+      if (!(x.getQualifier() instanceof JsNameRef)) {
+        return null;
+      }
+      JsNameRef ref = (JsNameRef) x.getQualifier();
+      if (ref.getQualifier() == null) {
+        return null;
+      }
+      return ref;
     }
 
     /**
@@ -739,47 +790,116 @@ public class JsStackEmulator {
       }
     }
 
+    /**
+     * Given an expression and its context, record the location before
+     * evaluating the expression, under the following conditions:
+     *
+     * - We are in a context where this is allowed.
+     * - we have not previously called record() with the same location.
+     *
+     * Note that record() must be called in the same order that the expressions
+     * will be evaluated at runtime. When this isn't true, {@link #clearLocation}
+     * must be called first.
+     *
+     * Side-effect: updates lastLine and possibly lastFile.
+     */
     private void record(JsExpression x, JsContext ctx) {
+
       if (ctx.isLvalue()) {
         // Assignments to comma expressions aren't legal
         return;
       } else if (nodesInRefContext.contains(x)) {
         // Don't modify references into non-references
         return;
-      } else if (x.getSourceInfo().getStartLine() == lastLine
-          && (!recordFileNames || x.getSourceInfo().getFileName().equals(
-              lastFile))) {
-        // Same location; ignore
-        return;
       }
 
-      SourceInfo info = x.getSourceInfo();
+      SourceInfo locationToRecord = x.getSourceInfo();
+      if (sameAsLastLocation(locationToRecord)) {
+        return; // no change
+      }
 
-      // ($locations[stackIndex] = fileName + lineNumber, x)
-      JsExpression location = new JsStringLiteral(info,
-          String.valueOf(lastLine = info.getStartLine()));
+      JsBinaryOperation comma = new JsBinaryOperation(locationToRecord, JsBinaryOperator.COMMA,
+          assignLocation(locationToRecord), x);
+      ctx.replaceMe(comma);
+
+      setLastLocation(locationToRecord);
+    }
+
+    /**
+     * Records the position after evaluating the last argument.
+     * This must be called after visiting the arguments.
+     *
+     * Side-effect: updates lastLine and possibly lastFile.
+     */
+    private <T extends JsExpression & HasArguments> void recordAfterLastArg(T x) {
+      SourceInfo locationToRecord = x.getSourceInfo();
+      if (sameAsLastLocation(locationToRecord)) {
+        return; // no change
+      }
+      List<JsExpression> args = x.getArguments();
+      JsExpression last = args.get(args.size() - 1);
+      args.set(args.size() - 1, recordAfter(last, locationToRecord));
+      setLastLocation(locationToRecord);
+      didChange = true;
+    }
+
+    /**
+     * Sets the last location recorded. (Used to avoid repeating the same location
+     * in the next call to {@link #record}.)
+     */
+    private void setLastLocation(SourceInfo recordedLocation) {
+      lastLine = recordedLocation.getStartLine();
+      if (recordFileNames) {
+        lastFile = recordedLocation.getFileName();
+      }
+    }
+
+    /**
+     * Ensures that the next call to record() will record the location.
+     */
+    private void clearLocation() {
+      lastFile = "";
+      lastLine = -1;
+    }
+
+    private boolean sameAsLastLocation(SourceInfo info) {
+      return info.getStartLine() == lastLine
+          && (!recordFileNames || info.getFileName().equals(lastFile));
+    }
+
+    /**
+     * Wrap an expression so that we record a location after evaluating it.
+     * (Requires a temporary variable.)
+     */
+    private JsExpression recordAfter(JsExpression x, SourceInfo locationToRecord) {
+      // ($tmp = x, $locations[stackIndex] = "{fileName}:" + "{lineNumber}", $tmp)
+      SourceInfo info = x.getSourceInfo();
+      JsExpression setTmp = new JsBinaryOperation(info, JsBinaryOperator.ASG, tmp.makeRef(info), x);
+      return new JsBinaryOperation(info, JsBinaryOperator.COMMA,
+          new JsBinaryOperation(info, JsBinaryOperator.COMMA, setTmp,
+              assignLocation(locationToRecord)),
+          tmp.makeRef(info));
+    }
+
+    /**
+     * Returns an expression that assigns the location.
+     */
+    private JsExpression assignLocation(SourceInfo info) {
+      // If filenames are on:
+      //   $locations[stackIndex] = "{fileName}:" + "{lineNumber}";
+      // Otherwise:
+      //   $locations[stackIndex] = "{lineNumber}";
+
+      JsExpression location = new JsStringLiteral(info, String.valueOf(info.getStartLine()));
       if (recordFileNames) {
         // 'fileName:' + lineNumber
-        JsStringLiteral stringLit = new JsStringLiteral(info,
-            baseName(lastFile = info.getFileName()) + ":");
-        location = new JsBinaryOperation(info, JsBinaryOperator.ADD, stringLit,
-            location);
+        JsStringLiteral stringLit = new JsStringLiteral(info, baseName(info.getFileName()) + ":");
+        location = new JsBinaryOperation(info, JsBinaryOperator.ADD, stringLit, location);
       }
 
       JsArrayAccess access = new JsArrayAccess(info, lineNumbers.makeRef(info),
           stackIndexRef(info));
-      JsBinaryOperation asg = new JsBinaryOperation(info, JsBinaryOperator.ASG,
-          access, location);
-
-      JsBinaryOperation comma = new JsBinaryOperation(info,
-          JsBinaryOperator.COMMA, asg, x);
-
-      ctx.replaceMe(comma);
-    }
-
-    private void resetPosition() {
-      lastFile = "";
-      lastLine = -1;
+      return new JsBinaryOperation(info, JsBinaryOperator.ASG, access, location);
     }
   }
 
@@ -821,44 +941,19 @@ public class JsStackEmulator {
    * module.
    */
   public enum StackMode {
-    STRIP, NATIVE, EMULATED;
+    STRIP, NATIVE, EMULATED
   }
 
-  public static void exec(JProgram jprogram, JsProgram jsProgram,
-      PropertyOracle[] propertyOracles,
+  public static void exec(JProgram jprogram, JsProgram jsProgram, PermProps props,
       JavaToJavaScriptMap jjsmap) {
-    if (getStackMode(propertyOracles) == StackMode.EMULATED) {
-      (new JsStackEmulator(jprogram, jsProgram, propertyOracles, jjsmap)).execImpl();
+    if (getStackMode(props) == StackMode.EMULATED) {
+      (new JsStackEmulator(jprogram, jsProgram, jjsmap, props.getConfigProps())).execImpl();
     }
   }
 
-  public static StackMode getStackMode(PropertyOracle[] propertyOracles) {
-    SelectionProperty property;
-    try {
-      property = propertyOracles[0].getSelectionProperty(TreeLogger.NULL,
-          PROPERTY_NAME);
-    } catch (BadPropertyValueException e) {
-      // Should be inherited via Core.gwt.xml
-      throw new InternalCompilerException("Expected property " + PROPERTY_NAME
-          + " not defined", e);
-    }
-
-    String value = property.getCurrentValue();
-    assert value != null : property.getName() + " did not have a value";
-    StackMode stackMode = StackMode.valueOf(value.toUpperCase(Locale.ENGLISH));
-    // Check for multiply defined properties
-    if (propertyOracles.length > 1) {
-      for (int i = 1; i < propertyOracles.length; ++i) {
-        try {
-          property = propertyOracles[i].getSelectionProperty(TreeLogger.NULL,
-              PROPERTY_NAME);
-        } catch (BadPropertyValueException e) {
-          // OK!
-        }
-        assert value.equals(property.getCurrentValue()) : "compiler.stackMode property has multiple values.";
-      }
-    }
-    return stackMode;
+  public static StackMode getStackMode(PermProps props) {
+    String value = props.mustGetString("compiler.stackMode");
+    return StackMode.valueOf(value.toUpperCase(Locale.ENGLISH));
   }
 
   private JsFunction wrapFunction;
@@ -866,32 +961,21 @@ public class JsStackEmulator {
   private JProgram jprogram;
   private final JsProgram jsProgram;
   private JavaToJavaScriptMap jjsmap;
-  private boolean recordFileNames;
-  private boolean recordLineNumbers;
+  private final boolean recordFileNames;
+  private final boolean recordLineNumbers;
   private JsName stack;
   private JsName stackDepth;
+  private JsName tmp;
 
   private JsStackEmulator(JProgram jprogram, JsProgram jsProgram,
-      PropertyOracle[] propertyOracles,
-      JavaToJavaScriptMap jjsmap) {
+      JavaToJavaScriptMap jjsmap, ConfigProps config) {
     this.jprogram = jprogram;
     this.jsProgram = jsProgram;
     this.jjsmap = jjsmap;
 
-    assert propertyOracles.length > 0;
-    PropertyOracle oracle = propertyOracles[0];
-    try {
-      List<String> values = oracle.getConfigurationProperty(
-          "compiler.emulatedStack.recordFileNames").getValues();
-      recordFileNames = Boolean.valueOf(values.get(0));
-
-      values = oracle.getConfigurationProperty(
-          "compiler.emulatedStack.recordLineNumbers").getValues();
-      recordLineNumbers = recordFileNames || Boolean.valueOf(values.get(0));
-    } catch (BadPropertyValueException e) {
-      // TODO Auto-generated catch block
-      e.printStackTrace();
-    }
+    recordFileNames = config.getBoolean("compiler.emulatedStack.recordFileNames", false);
+    recordLineNumbers = recordFileNames ||
+        config.getBoolean("compiler.emulatedStack.recordLineNumbers", false);
   }
 
   private void execImpl() {
@@ -912,6 +996,7 @@ public class JsStackEmulator {
         "$stackDepth");
     lineNumbers = jsProgram.getScope().declareName("$JsStackEmulator_location",
         "$location");
+    tmp = jsProgram.getScope().declareName("$JsStackEmulator_tmp", "$tmp");
   }
 
   private void makeVars() {

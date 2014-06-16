@@ -26,9 +26,9 @@ import com.google.gwt.dev.util.collect.Lists;
 import com.google.gwt.dev.util.log.speedtracer.CompilerEventType;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger;
 import com.google.gwt.dev.util.log.speedtracer.SpeedTracerLogger.Event;
-import com.google.gwt.thirdparty.guava.common.base.Joiner;
-import com.google.gwt.thirdparty.guava.common.base.Strings;
+import com.google.gwt.thirdparty.guava.common.collect.ArrayListMultimap;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableMap;
+import com.google.gwt.thirdparty.guava.common.collect.ListMultimap;
 import com.google.gwt.util.tools.Utility;
 
 import org.eclipse.jdt.core.compiler.CharOperation;
@@ -45,6 +45,7 @@ import org.eclipse.jdt.internal.compiler.ast.CompilationUnitDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.ConstructorDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.Expression;
 import org.eclipse.jdt.internal.compiler.ast.FieldDeclaration;
+import org.eclipse.jdt.internal.compiler.ast.ImportReference;
 import org.eclipse.jdt.internal.compiler.ast.Initializer;
 import org.eclipse.jdt.internal.compiler.ast.MethodDeclaration;
 import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration;
@@ -76,6 +77,7 @@ import java.io.InputStream;
 import java.net.JarURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -134,7 +136,7 @@ public class JdtCompiler {
 
     @Override
     public void process(CompilationUnitBuilder builder, CompilationUnitDeclaration cud,
-        List<CompiledClass> compiledClasses) {
+        List<ImportReference> cudOriginaImports, List<CompiledClass> compiledClasses) {
       builder.setClasses(compiledClasses).setTypes(Collections.<JDeclaredType> emptyList())
           .setDependencies(new Dependencies()).setJsniMethods(Collections.<JsniMethod> emptyList())
           .setMethodArgs(new MethodArgNamesLookup())
@@ -191,7 +193,7 @@ public class JdtCompiler {
    */
   public interface UnitProcessor {
     void process(CompilationUnitBuilder builder, CompilationUnitDeclaration cud,
-        List<CompiledClass> compiledClasses);
+        List<ImportReference> cudOriginalImports, List<CompiledClass> compiledClasses);
   }
 
   /**
@@ -246,6 +248,12 @@ public class JdtCompiler {
    * annotated with a *.GwtIncompatible annotation.
    */
   private static class ParserImpl extends Parser {
+
+    // A place to stash imports before removal. These are needed to correctly check the
+    // references in Jsni.
+    // TODO(rluble): find a more modular way for this fix.
+    public final ListMultimap<CompilationUnitDeclaration, ImportReference> originalImportsByCud =
+        ArrayListMultimap.create();
     public ParserImpl(ProblemReporter problemReporter, boolean optimizeStringLiterals) {
       super(problemReporter, optimizeStringLiterals);
     }
@@ -265,7 +273,20 @@ public class JdtCompiler {
       this.diet = saveDiet;
       if (removeGwtIncompatible) {
         // Remove @GwtIncompatible classes and members.
+        // It is safe to remove @GwtIncompatible types, fields and methods on incomplete ASTs due
+        // to parsing errors.
         GwtIncompatiblePreprocessor.preproccess(decl);
+      }
+      if (decl.imports != null) {
+        originalImportsByCud.putAll(decl, Arrays.asList(decl.imports));
+      }
+      if (decl.hasErrors()) {
+        // The unit has parsing errors; its JDT AST might not be complete. In this case do not
+        // remove unused imports as it is not safe to do so. UnusedImportsRemover would remove
+        // imports for types only referred from parts of the AST that was not constructed.
+        // Later the error reporting logic would complain about missing types for these references
+        // potentially burying the real error among many spurious errors.
+        return decl;
       }
       if (removeUnusedImports) {
         // Lastly remove any unused imports
@@ -349,7 +370,15 @@ public class JdtCompiler {
       ICompilationUnit icu = cud.compilationResult().compilationUnit;
       Adapter adapter = (Adapter) icu;
       CompilationUnitBuilder builder = adapter.getBuilder();
-      processor.process(builder, cud, compiledClasses);
+
+      // TODO(rluble): jsni method parsing should probably be done right after Java parsing, at
+      // that moment the original list of imports is still present and this hack would not be
+      // needed.
+      assert parser instanceof ParserImpl;
+      // Retrieve the original list of imports and dispose.
+      List<ImportReference> cudOriginalImports =
+          ((ParserImpl) parser).originalImportsByCud.removeAll(cud);
+      processor.process(builder, cud, cudOriginalImports, compiledClasses);
     }
 
     /**
@@ -368,7 +397,7 @@ public class JdtCompiler {
         assert enclosingClass != null;
       }
       String internalName = CharOperation.charToString(classFile.fileName());
-      String sourceName = getSourceName(classFile.referenceBinding);
+      String sourceName = JdtUtil.getSourceName(classFile.referenceBinding);
       CompiledClass result = new CompiledClass(classFile.getBytes(), enclosingClass,
           isLocalType(classFile), internalName, sourceName);
       results.put(classFile, result);
@@ -405,40 +434,101 @@ public class JdtCompiler {
     public NameEnvironmentAnswer findType(char[][] compoundTypeName) {
       char[] internalNameChars = CharOperation.concatWith(compoundTypeName, '/');
       String internalName = String.valueOf(internalNameChars);
-      CompiledClass compiledClass = internalTypes.get(internalName);
-      try {
-        if (compiledClass != null) {
-          return compiledClass.getNameEnvironmentAnswer();
-        }
-      } catch (ClassFormatException ex) {
-        // fall back to binary class
-      }
+
       if (isPackage(internalName)) {
         return null;
       }
-      if (additionalTypeProviderDelegate != null) {
-        GeneratedUnit unit = additionalTypeProviderDelegate.doFindAdditionalType(internalName);
-        if (unit != null) {
-          CompilationUnitBuilder b = CompilationUnitBuilder.create(unit);
-          Adapter a = new Adapter(b);
-          return new NameEnvironmentAnswer(a, null);
-        }
+
+      NameEnvironmentAnswer cachedAnswer = findTypeInCache(internalName);
+      if (cachedAnswer != null) {
+        return cachedAnswer;
       }
-      try {
-        URL resource = getClassLoader().getResource(internalName + ".class");
-        if (resource != null) {
-          InputStream openStream = resource.openStream();
-          try {
-            ClassFileReader cfr = ClassFileReader.read(openStream, resource.toExternalForm(), true);
-            return new NameEnvironmentAnswer(cfr, null);
-          } finally {
-            Utility.close(openStream);
-          }
-        }
-      } catch (ClassFormatException e) {
-      } catch (IOException e) {
+
+      NameEnvironmentAnswer additionalProviderAnswer = findTypeInAdditionalProvider(internalName);
+      if (additionalProviderAnswer != null) {
+        return additionalProviderAnswer;
       }
+
+      NameEnvironmentAnswer libraryGroupAnswer = findTypeInLibraryGroup(internalName);
+      if (libraryGroupAnswer != null) {
+        return libraryGroupAnswer;
+      }
+
+      // TODO(stalcup): Add verification that all classpath bytecode is for Annotations.
+      NameEnvironmentAnswer classPathAnswer = findTypeInClassPath(internalName);
+      if (classPathAnswer != null) {
+        return classPathAnswer;
+      }
+
       return null;
+    }
+
+    private NameEnvironmentAnswer findTypeInCache(String internalName) {
+      if (!internalTypes.containsKey(internalName)) {
+        return null;
+      }
+
+      try {
+        return internalTypes.get(internalName).getNameEnvironmentAnswer();
+      } catch (ClassFormatException ex) {
+        return null;
+      }
+    }
+
+    private NameEnvironmentAnswer findTypeInAdditionalProvider(String internalName) {
+      if (additionalTypeProviderDelegate == null) {
+        return null;
+      }
+
+      GeneratedUnit unit = additionalTypeProviderDelegate.doFindAdditionalType(internalName);
+      if (unit == null) {
+        return null;
+      }
+
+      return new NameEnvironmentAnswer(new Adapter(CompilationUnitBuilder.create(unit)), null);
+    }
+
+    private NameEnvironmentAnswer findTypeInLibraryGroup(String internalName) {
+      InputStream classFileStream =
+          compilerContext.getLibraryGroup().getClassFileStream(internalName);
+      if (classFileStream == null) {
+        return null;
+      }
+
+      try {
+        ClassFileReader classFileReader =
+            ClassFileReader.read(classFileStream, internalName + ".class", true);
+        return new NameEnvironmentAnswer(classFileReader, null);
+      } catch (IOException e) {
+        return null;
+      } catch (ClassFormatException e) {
+        return null;
+      } finally {
+        Utility.close(classFileStream);
+      }
+    }
+
+    private NameEnvironmentAnswer findTypeInClassPath(String internalName) {
+      URL resource = getClassLoader().getResource(internalName + ".class");
+      if (resource == null) {
+        return null;
+      }
+
+      InputStream openStream = null;
+      try {
+        openStream = resource.openStream();
+        ClassFileReader classFileReader =
+            ClassFileReader.read(openStream, resource.toExternalForm(), true);
+        return new NameEnvironmentAnswer(classFileReader, null);
+      } catch (IOException e) {
+        return null;
+      } catch (ClassFormatException e) {
+        return null;
+      } finally {
+        if (openStream != null) {
+          Utility.close(openStream);
+        }
+      }
     }
 
     @Override
@@ -792,7 +882,7 @@ public class JdtCompiler {
       }
 
       private void addReference(ReferenceBinding referencedType) {
-        apiRefs.add(getSourceName(referencedType));
+        apiRefs.add(JdtUtil.getSourceName(referencedType));
       }
 
       /**
@@ -945,11 +1035,5 @@ public class JdtCompiler {
         break;
       }
     }
-  }
-
-  private static String getSourceName(ReferenceBinding classBinding) {
-    return Joiner.on(".").skipNulls().join(new String[] {
-        Strings.emptyToNull(CharOperation.charToString(classBinding.qualifiedPackageName())),
-        CharOperation.charToString(classBinding.qualifiedSourceName())});
   }
 }

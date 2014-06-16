@@ -23,11 +23,13 @@ import com.google.gwt.core.linker.IFrameLinker;
 import com.google.gwt.dev.Compiler;
 import com.google.gwt.dev.CompilerContext;
 import com.google.gwt.dev.CompilerOptions;
+import com.google.gwt.dev.IncrementalBuilder;
+import com.google.gwt.dev.IncrementalBuilder.BuildResultStatus;
 import com.google.gwt.dev.cfg.BindingProperty;
+import com.google.gwt.dev.cfg.ConfigProps;
 import com.google.gwt.dev.cfg.ConfigurationProperty;
 import com.google.gwt.dev.cfg.ModuleDef;
 import com.google.gwt.dev.cfg.ModuleDefLoader;
-import com.google.gwt.dev.cfg.Property;
 import com.google.gwt.dev.cfg.ResourceLoader;
 import com.google.gwt.dev.cfg.ResourceLoaders;
 import com.google.gwt.dev.javac.UnitCacheSingleton;
@@ -35,7 +37,7 @@ import com.google.gwt.dev.resource.impl.ResourceOracleImpl;
 import com.google.gwt.dev.resource.impl.ZipFileClassPathEntry;
 import com.google.gwt.dev.util.log.CompositeTreeLogger;
 import com.google.gwt.dev.util.log.PrintWriterTreeLogger;
-import com.google.gwt.thirdparty.guava.common.collect.Lists;
+import com.google.gwt.thirdparty.guava.common.base.Joiner;
 
 import java.io.File;
 import java.io.IOException;
@@ -47,8 +49,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * Recompiles a GWT module on demand.
  */
 class Recompiler {
+
   private final AppSpace appSpace;
   private final String originalModuleName;
+  private IncrementalBuilder incrementalBuilder;
   private final TreeLogger logger;
   private String serverPrefix;
   private int compilesDone = 0;
@@ -57,6 +61,7 @@ class Recompiler {
   private AtomicReference<String> moduleName = new AtomicReference<String>(null);
 
   private final AtomicReference<CompileDir> lastBuild = new AtomicReference<CompileDir>();
+  private CompileDir publishedCompileDir;
   private final AtomicReference<ResourceLoader> resourceLoader =
       new AtomicReference<ResourceLoader>();
   private final CompilerContext.Builder compilerContextBuilder = new CompilerContext.Builder();
@@ -99,25 +104,14 @@ class Recompiler {
 
     boolean success = false;
     try {
-      CompilerOptions compilerOptions = new CompilerOptionsImpl(
-          compileDir, options.getModuleNames(), options.getSourceLevel(),
-          options.enforceStrictResources(), options.getLogLevel());
-      compilerContext = compilerContextBuilder.options(compilerOptions).build();
-      ModuleDef module = loadModule(compileLogger, bindingProperties);
-
-      // Propagates module rename.
-      String newModuleName = module.getName();
-      moduleName.set(newModuleName);
-      compilerOptions = new CompilerOptionsImpl(
-          compileDir, Lists.newArrayList(newModuleName), options.getSourceLevel(),
-          options.enforceStrictResources(), options.getLogLevel());
-      compilerContext = compilerContextBuilder.options(compilerOptions).build();
-
-      success = new Compiler(compilerOptions).run(compileLogger, module);
-      lastBuild.set(compileDir); // makes compile log available over HTTP
+      if (options.shouldCompileIncremental()) {
+        success = compileIncremental(compileLogger, compileDir);
+      } else {
+        success = compileMonolithic(compileLogger, bindingProperties, compileDir);
+      }
     } finally {
       try {
-        options.getRecompileListener().finishedCompile(originalModuleName, compileId, success);
+        options.getRecompileListener().finishedCompile(originalModuleName, compilesDone, success);
       } catch (Exception e) {
         compileLogger.log(TreeLogger.Type.WARN, "listener threw exception", e);
         listenerFailed = true;
@@ -130,13 +124,14 @@ class Recompiler {
     }
 
     long elapsedTime = System.currentTimeMillis() - startTime;
-    compileLogger.log(TreeLogger.Type.INFO, "Compile completed in " + elapsedTime + " ms");
+    compileLogger.log(TreeLogger.Type.INFO,
+        String.format("%.3fs total -- Compile completed", elapsedTime / 1000d));
 
     if (options.isCompileTest() && listenerFailed) {
       throw new UnableToCompleteException();
     }
 
-    return compileDir;
+    return publishedCompileDir;
   }
 
   synchronized CompileDir noCompile() throws UnableToCompleteException {
@@ -155,7 +150,9 @@ class Recompiler {
       File outputDir = new File(
           compileDir.getWarDir().getCanonicalPath() + "/" + getModuleName());
       if (!outputDir.exists()) {
-        outputDir.mkdir();
+        if (!outputDir.mkdir()) {
+          compileLogger.log(TreeLogger.Type.WARN, "cannot create directory: " + outputDir);
+        }
       }
 
       // Creates a "module_name.nocache.js" that just forces a recompile.
@@ -170,6 +167,62 @@ class Recompiler {
     long elapsedTime = System.currentTimeMillis() - startTime;
     compileLogger.log(TreeLogger.Type.INFO, "Module setup completed in " + elapsedTime + " ms");
     return compileDir;
+  }
+
+  private boolean compileIncremental(TreeLogger compileLogger, CompileDir compileDir) {
+    BuildResultStatus buildResultStatus;
+    // Perform a compile.
+    if (incrementalBuilder == null) {
+      // If it's the first compile.
+      ResourceLoader resources = ResourceLoaders.forClassLoader(Thread.currentThread());
+      resources = ResourceLoaders.forPathAndFallback(options.getSourcePath(), resources);
+      this.resourceLoader.set(resources);
+
+      incrementalBuilder = new IncrementalBuilder(originalModuleName,
+          compileDir.getWarDir().getPath(), compileDir.getWorkDir().getPath(),
+          compileDir.getGenDir().getPath(), resourceLoader.get());
+      buildResultStatus = incrementalBuilder.build(compileLogger);
+    } else {
+      // If it's a rebuild.
+      incrementalBuilder.setWarDir(compileDir.getWarDir().getPath());
+      buildResultStatus = incrementalBuilder.rebuild(compileLogger);
+    }
+
+    if (incrementalBuilder.isRootModuleKnown()) {
+      moduleName.set(incrementalBuilder.getRootModuleName());
+    }
+    // Unlike a monolithic compile, the incremental builder can successfully build but have no new
+    // output (for example when no files have changed). So it's important to only publish the new
+    // compileDir if it actually contains output.
+    if (buildResultStatus.isSuccess() && buildResultStatus.outputChanged()) {
+      publishedCompileDir = compileDir;
+    }
+    lastBuild.set(compileDir); // makes compile log available over HTTP
+
+    return buildResultStatus.isSuccess();
+  }
+
+  private boolean compileMonolithic(TreeLogger compileLogger, Map<String, String> bindingProperties,
+      CompileDir compileDir) throws UnableToCompleteException {
+
+    CompilerOptions loadOptions = new CompilerOptionsImpl(compileDir, originalModuleName, options);
+    compilerContext = compilerContextBuilder.options(loadOptions).build();
+    ModuleDef module = loadModule(compileLogger, bindingProperties);
+
+    // Propagates module rename.
+    String newModuleName = module.getName();
+    moduleName.set(newModuleName);
+
+    CompilerOptions runOptions = new CompilerOptionsImpl(compileDir, newModuleName, options);
+    compilerContext = compilerContextBuilder.options(runOptions).build();
+
+    boolean success = new Compiler(runOptions).run(compileLogger, module);
+    if (success) {
+      publishedCompileDir = compileDir;
+    }
+    lastBuild.set(compileDir); // makes compile log available over HTTP
+
+    return success;
   }
 
   /**
@@ -192,7 +245,7 @@ class Recompiler {
     try {
       PrintWriterTreeLogger fileLogger =
           new PrintWriterTreeLogger(compileDir.getLogFile());
-      fileLogger.setMaxDetail(TreeLogger.Type.INFO);
+      fileLogger.setMaxDetail(options.getLogLevel());
       return new CompositeTreeLogger(logger, fileLogger);
     } catch (IOException e) {
       logger.log(TreeLogger.ERROR, "unable to open log file: " + compileDir.getLogFile(), e);
@@ -216,6 +269,9 @@ class Recompiler {
         logger, compilerContext, originalModuleName, resources, true);
     compilerContext = compilerContextBuilder.module(moduleDef).build();
 
+    // A snapshot of the module's configuration before we modified it.
+    ConfigProps config = new ConfigProps(moduleDef);
+
     // We need a cross-site linker. Automatically replace the default linker.
     if (IFrameLinker.class.isAssignableFrom(moduleDef.getActivePrimaryLinker())) {
       moduleDef.addLinker("xsiframe");
@@ -223,14 +279,14 @@ class Recompiler {
 
     // Check that we have a compatible linker.
     Class<? extends Linker> linker = moduleDef.getActivePrimaryLinker();
-    if (! CrossSiteIframeLinker.class.isAssignableFrom(linker)) {
+    if (!CrossSiteIframeLinker.class.isAssignableFrom(linker)) {
       logger.log(TreeLogger.ERROR,
           "linkers other than CrossSiteIFrameLinker aren't supported. Found: " + linker.getName());
       throw new UnableToCompleteException();
     }
 
     // Print a nice error if the superdevmode hook isn't present
-    if (moduleDef.getProperties().find("devModeRedirectEnabled") == null) {
+    if (config.getStrings("devModeRedirectEnabled").isEmpty()) {
       throw new RuntimeException("devModeRedirectEnabled isn't set for module: " +
           moduleDef.getName());
     }
@@ -239,13 +295,14 @@ class Recompiler {
     // (There is another check in the JavaScript, but just in case.)
     overrideConfig(moduleDef, "devModeRedirectEnabled", "false");
 
-    // Normally the GWT bootstrap script installs GWT code by calling eval() with a string of
-    // JavaScript, so that it can control the scope that the code runs in. Sourcemaps don't seem
-    // to be working in Chrome when we do this, so turn it off for now.
-    // TODO(cromwellian) remove when Chrome is fixed.
-    overrideConfig(moduleDef, "installScriptJs",
-        "com/google/gwt/core/ext/linker/impl/installScriptDirect.js");
-    overrideConfig(moduleDef, "installCode", "false");
+    // Turn off "installCode" if it's on because it makes debugging harder.
+    // (If it's already off, don't change anything.)
+    if (config.getBoolean("installCode", true)) {
+      overrideConfig(moduleDef, "installCode", "false");
+      // Make sure installScriptJs is set to the default for compiling without installCode.
+      overrideConfig(moduleDef, "installScriptJs",
+          "com/google/gwt/core/ext/linker/impl/installScriptDirect.js");
+    }
 
     // override computeScriptBase.js to enable the "Compile" button
     overrideConfig(moduleDef, "computeScriptBaseJs",
@@ -266,8 +323,7 @@ class Recompiler {
     for (Map.Entry<String, String> entry : bindingProperties.entrySet()) {
       String propName = entry.getKey();
       String propValue = entry.getValue();
-      logger.log(TreeLogger.Type.INFO, "binding: " + propName + "=" + propValue);
-      maybeSetBinding(moduleDef, propName, propValue);
+      maybeSetBinding(logger, moduleDef, propName, propValue);
     }
 
     overrideBinding(moduleDef, "compiler.useSourceMaps", "true");
@@ -276,34 +332,72 @@ class Recompiler {
   }
 
   /**
-   * Sets a binding unless it's hard-coded in the GWT application.
+   * Attempts to set a binding property to the given value.
+   * If the value is not allowed, see if we can find a value that will work.
+   * There is a special case for "locale".
    */
-  private static void maybeSetBinding(ModuleDef module, String propName, String newValue) {
-    Property prop = module.getProperties().find(propName);
-    if (prop instanceof BindingProperty) {
-      BindingProperty binding = (BindingProperty) prop;
+  private static void maybeSetBinding(TreeLogger logger, ModuleDef module, String propName,
+      String newValue) {
 
-      if (binding.isAllowedValue(newValue)) {
-        binding.setAllowedValues(binding.getRootCondition(), newValue);
+    logger = logger.branch(TreeLogger.Type.INFO, "binding: " + propName + "=" + newValue);
+
+    BindingProperty binding = module.getProperties().findBindingProp(propName);
+    if (binding == null) {
+      logger.log(TreeLogger.Type.WARN, "undefined property: '" + propName + "'");
+      return;
+    }
+
+    if (!binding.isAllowedValue(newValue)) {
+
+      String[] allowedValues = binding.getAllowedValues(binding.getRootCondition());
+      logger.log(TreeLogger.Type.WARN, "property '" + propName +
+          "' cannot be set to '" + newValue + "'");
+      logger.log(TreeLogger.Type.INFO, "allowed values: " +
+          Joiner.on(", ").join(allowedValues));
+
+      // See if we can fall back on a reasonable default.
+      if (allowedValues.length == 1) {
+        // There is only one possibility, so use it.
+        newValue = allowedValues[0];
+      } else if (binding.getName().equals("locale")) {
+        // TODO: come up with a more general solution. Perhaps fail
+        // the compile and give the user a way to override the property?
+        newValue = chooseDefault(binding, "default", "en", "en_US");
+      } else {
+        // There is more than one. Continue and possibly compile multiple permutations.
+        logger.log(TreeLogger.Type.INFO, "continuing without " + propName +
+            ". Sourcemaps may not work.");
+        return;
+      }
+
+      logger.log(TreeLogger.Type.INFO, "recovered with " + propName + "=" + newValue);
+    }
+
+    binding.setAllowedValues(binding.getRootCondition(), newValue);
+  }
+
+  private static String chooseDefault(BindingProperty property, String... candidates) {
+    for (String candidate : candidates) {
+      if (property.isAllowedValue(candidate)) {
+        return candidate;
       }
     }
+    return property.getFirstLegalValue();
   }
 
   /**
    * Sets a binding even if it's set to a different value in the GWT application.
    */
   private static void overrideBinding(ModuleDef module, String propName, String newValue) {
-    Property prop = module.getProperties().find(propName);
-    if (prop instanceof BindingProperty) {
-      BindingProperty binding = (BindingProperty) prop;
+    BindingProperty binding = module.getProperties().findBindingProp(propName);
+    if (binding != null) {
       binding.setAllowedValues(binding.getRootCondition(), newValue);
     }
   }
 
   private static boolean maybeOverrideConfig(ModuleDef module, String propName, String newValue) {
-    Property prop = module.getProperties().find(propName);
-    if (prop instanceof ConfigurationProperty) {
-      ConfigurationProperty config = (ConfigurationProperty) prop;
+    ConfigurationProperty config = module.getProperties().findConfigProp(propName);
+    if (config != null) {
       config.setValue(newValue);
       return true;
     }

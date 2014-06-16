@@ -24,7 +24,6 @@ import com.google.gwt.dev.util.Util;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -33,13 +32,13 @@ import java.util.Set;
 
 /**
  * In-memory representation of a SourceMap.
- *
- * @author skybrian@google.com (Brian Slesinsky)
  */
 class SourceMap {
   private final JsonObject json;
 
-  /** @see #load */
+  /**
+   *@see #load
+   */
   private SourceMap(JsonObject json) {
     this.json = json;
   }
@@ -60,19 +59,6 @@ class SourceMap {
   }
 
   /**
-   * Adds the given prefix to each source filename in the source map.
-   */
-  void addPrefixToEachSourceFile(String serverPrefix) {
-    JsonArray sources = (JsonArray) json.get("sources");
-    JsonArray newSources = new JsonArray();
-    for (int i = 0; i < sources.getLength(); i++) {
-      String filename = sources.get(i).asString().getString();
-      newSources.add(serverPrefix + filename);
-    }
-    json.put("sources", newSources);
-  }
-
-  /**
    * Returns a sorted list of all the directories containing at least one filename
    * in the source map.
    */
@@ -81,7 +67,8 @@ class SourceMap {
     Set<String> directories = new HashSet<String>();
     for (int i = 0; i < sources.getLength(); i++) {
       String filename = sources.get(i).asString().getString();
-      directories.add(new File(filename).getParent());
+      int lastSlashPos = filename.lastIndexOf('/');
+      directories.add(lastSlashPos < 0 ? "" : filename.substring(0, lastSlashPos));
     }
 
     List<String> result = new ArrayList<String>();
@@ -102,22 +89,16 @@ class SourceMap {
 
     List<String> result = new ArrayList<String>();
     for (int i = 0; i < sources.getLength(); i++) {
-      File candidate = new File(sources.get(i).asString().getString());
-      if (parent.equals(candidate.getParent() + "/")) {
-        result.add(candidate.getName());
+      String candidate = sources.get(i).asString().getString();
+      if (!candidate.startsWith(parent)) {
+        continue;
+      }
+      int nameStart = candidate.lastIndexOf('/') + 1;
+      if (nameStart == parent.length()) {
+        result.add(candidate.substring(nameStart));
       }
     }
 
     return result;
-  }
-
-  String serialize() {
-    StringWriter buffer = new StringWriter();
-    try {
-      json.write(buffer);
-    } catch (IOException e) {
-      throw new RuntimeException("can't convert sourcemap to json");
-    }
-    return buffer.toString();
   }
 }

@@ -1,3 +1,18 @@
+/*
+ * Copyright 2010 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
 package com.google.gwt.dev.jjs.impl.gflow.cfg;
 
 import com.google.gwt.core.ext.UnableToCompleteException;
@@ -39,7 +54,7 @@ public class CfgBuilderTest extends JJSTestBase {
     addSnippetClassDecl("static int[] jj;");
 
     addSnippetClassDecl("static void throwCheckedException() " +
-    		"throws CheckedException {}");
+        "throws CheckedException {}");
     addSnippetClassDecl("static void throwUncheckedException() {}");
     addSnippetClassDecl("static void throwSeveralExceptions() " +
         "throws CheckedException, UncheckedException1 {}");
@@ -115,7 +130,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "READWRITE(i, null) -> [*]",
         "END");
   }
-  
+
   public void testPreIncrement() throws Exception {
     assertCfg("void", "++i;").is(
         "BLOCK -> [*]",
@@ -135,7 +150,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "2: WRITE(i, EntryPoint.b1 ? EntryPoint.j : EntryPoint.k) -> [*]",
         "END");
   }
-  
+
   public void testAnd() throws Exception {
     assertCfg("void", "b3 = b1 && b2;").is(
         "BLOCK -> [*]",
@@ -146,7 +161,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "1: WRITE(b3, EntryPoint.b1 && EntryPoint.b2) -> [*]",
         "END");
   }
-  
+
   public void testOr() throws Exception {
     assertCfg("void", "b3 = b1 || b2;").is(
         "BLOCK -> [*]",
@@ -159,9 +174,9 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testMultipleExpressionStatements() throws Exception {
-    assertCfg("void", 
-        "i = 1;", 
-        "j = 2;", 
+    assertCfg("void",
+        "i = 1;",
+        "j = 2;",
         "m = k = j;").is(
             "BLOCK -> [*]",
             "STMT -> [*]",
@@ -176,7 +191,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testIfStatement1() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "if (i == 1) {",
         "  j = 2;",
         "}",
@@ -195,7 +210,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testIfStatement2() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "if ((i = 1) == 2) {",
         "  j = 2;",
         "} else {",
@@ -214,7 +229,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "WRITE(k, EntryPoint.j) -> [*]",
             "2: END");
   }
-  
+
   public void testIfStatement3() throws Exception {
     assertCfg("void", "if (b1 || b2) {j = 2;}").is(
         "BLOCK -> [*]",
@@ -243,7 +258,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "WRITE(k, EntryPoint.j) -> [*]",
         "END");
   }
-  
+
   public void testDoStatement() throws Exception {
     assertCfg("void", "do { j = 2; } while (i == 1);").is(
         "BLOCK -> [*]",
@@ -255,7 +270,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "COND (EntryPoint.i == 1) -> [THEN=1, ELSE=*]",
         "END");
   }
-  
+
   public void testDoStatementBreakNoLabel() throws Exception {
     assertCfg("void", "do { if (b1) { break; } else { do { j = 2; } while (b2); } } while (i == 1);").is(
         "BLOCK -> [*]",
@@ -278,7 +293,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "COND (EntryPoint.i == 1) -> [THEN=1, ELSE=*]",
         "4: END");
   }
-  
+
   public void testDoStatementContinueNoLabel() throws Exception {
     assertCfg("void", "do { if (b1) { continue; } else { do { j = 2; } while (b2); } } while (i == 1);").is(
         "BLOCK -> [*]",
@@ -309,7 +324,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "GOTO -> [*]",
         "END");
   }
-  
+
   public void testReturn2() throws Exception {
     assertCfg("boolean", "i = 1; return i == 2;").is(
         "BLOCK -> [*]",
@@ -322,8 +337,8 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testReturn3() throws Exception {
-    assertCfg("boolean", 
-        "i = 1;", 
+    assertCfg("boolean",
+        "i = 1;",
         "if (i == 1) {",
         "  i = 2;",
         "  return true;",
@@ -351,7 +366,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testForStatement() throws Exception {
-    assertCfg("int", 
+    assertCfg("int",
         "int j = 0;",
         "for (int i = 0; i < 10; ++i) { j++; }",
         "return j;").is(
@@ -372,9 +387,9 @@ public class CfgBuilderTest extends JJSTestBase {
             "GOTO -> [*]",
             "END");
   }
-  
+
   public void testEmptyForStatement() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "for (;;) { j++; }").is(
             "BLOCK -> [*]",
             "STMT -> [*]",
@@ -383,7 +398,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(j, null) -> [1]",
             "END");
   }
-  
+
   public void testThrowWithoutCatch1() throws Exception {
     assertCfg("void", "throw runtimeException;").is(
         "BLOCK -> [*]",
@@ -392,7 +407,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "THROW -> [*]",
         "END");
   }
-  
+
   public void testThrowWithoutCatch2() throws Exception {
     assertCfg("void", "if (b1) { throw runtimeException; } b1 = true;").is(
         "BLOCK -> [*]",
@@ -428,7 +443,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testWhileContinueWithLabel1() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "nextLoop: while(b3)",
         "  while (b1) {",
         "    if (b2) { continue; }",
@@ -455,11 +470,11 @@ public class CfgBuilderTest extends JJSTestBase {
 
 
   public void testWhileContinueWithLabel2() throws Exception {
-    assertCfg("void", 
-        "nextLoop: while(b3)", 
-        "  while (b1) {", 
+    assertCfg("void",
+        "nextLoop: while(b3)",
+        "  while (b1) {",
         "    if (b2) { continue nextLoop; }",
-        "    i++;", 
+        "    i++;",
         "  }").is(
             "BLOCK -> [*]",
             "STMT -> [*]",
@@ -481,9 +496,9 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testWhileContinueWithLabel3() throws Exception {
-    assertCfg("void", 
-        "nextLoop: while (b1) {", 
-        "  if (b2) { continue; }", 
+    assertCfg("void",
+        "nextLoop: while (b1) {",
+        "  if (b2) { continue; }",
         "  i++;",
         "}").is(
             "BLOCK -> [*]",
@@ -544,11 +559,11 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testWhileBreakWithLabel1() throws Exception {
-    assertCfg("void", 
-        "nextLoop: while(b3)", 
-        "  while (b1) {", 
-        "    if (b2) { break; }", 
-        "    i++;", 
+    assertCfg("void",
+        "nextLoop: while(b3)",
+        "  while (b1) {",
+        "    if (b2) { break; }",
+        "    i++;",
         "  }").is(
             "BLOCK -> [*]",
             "STMT -> [*]",
@@ -570,10 +585,10 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testWhileBreakWithLabel2() throws Exception {
-    assertCfg("void", 
-        "nextLoop: while(b3)", 
-        "  while (b1) {", 
-        "    if (b2) { break nextLoop; }", 
+    assertCfg("void",
+        "nextLoop: while(b3)",
+        "  while (b1) {",
+        "    if (b2) { break nextLoop; }",
         "    i++;",
         "  }").is(
             "BLOCK -> [*]",
@@ -594,9 +609,9 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(i, null) -> [2]",
             "4: END");
   }
-  
+
   public void testWhileBreakWithLabel3() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "nextLoop: while (b1) { if (b2) { break; } i++; }").is(
             "BLOCK -> [*]",
             "STMT -> [*]",
@@ -613,9 +628,9 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(i, null) -> [1]",
             "3: END");
   }
-  
+
   public void testForBreakNoLabel() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "for(int i = 0; i < 10; i++) { if (b2) { break; } i++; }").is(
             "BLOCK -> [*]",
             "STMT -> [*]",
@@ -635,9 +650,9 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(i, null) -> [1]",
             "3: END");
   }
-  
+
   public void testForContinueNoLabel() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "for(int i = 0; i < 10; i++) { if (b2) { continue; } i++; }").is(
             "BLOCK -> [*]",
             "STMT -> [*]",
@@ -721,7 +736,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testCatchThrowException1() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throw checkedException;",
         "  k++;",
@@ -745,7 +760,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(i, null) -> [*]",
             "3: STMT -> [*]",
             "READWRITE(j, null) -> [*]",
-            "END"        
+            "END"
         );
   }
 
@@ -787,7 +802,7 @@ public class CfgBuilderTest extends JJSTestBase {
 
 
   public void testCatchThrowUncaughtException() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throw uncheckedException2;",
         "  k++;",
@@ -811,12 +826,12 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(i, null) -> [*]",
             "2: STMT -> [*]",
             "READWRITE(j, null) -> [*]",
-            "3: END"        
+            "3: END"
         );
   }
 
   public void testCatchThrowSupertype() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throw runtimeException;",
         "  k++;",
@@ -840,12 +855,12 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(i, null) -> [*]",
             "3: STMT -> [*]",
             "READWRITE(j, null) -> [*]",
-            "4: END"        
+            "4: END"
         );
   }
 
   public void testCatchSupertype() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throw uncheckedException1;",
         "  k++;",
@@ -869,12 +884,12 @@ public class CfgBuilderTest extends JJSTestBase {
             "READWRITE(i, null) -> [*]",
             "3: STMT -> [*]",
             "READWRITE(j, null) -> [*]",
-            "END"        
+            "END"
         );
   }
 
   public void testCatchReturn() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try { try {",
         "  if (b) return;",
         "  k++;",
@@ -899,12 +914,12 @@ public class CfgBuilderTest extends JJSTestBase {
             "BLOCK -> [*]",
             "STMT -> [*]",
             "READWRITE(j, null) -> [*]",
-            "2: END"        
+            "2: END"
         );
   }
 
   public void testRethrow() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throw uncheckedException1;",
         "  k++;",
@@ -932,12 +947,12 @@ public class CfgBuilderTest extends JJSTestBase {
             "THROW -> [4]",
             "3: STMT -> [*]",
             "READWRITE(j, null) -> [*]",
-            "4: END"        
+            "4: END"
         );
   }
 
   public void testCatchMethodCall1() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throwCheckedException();",
         "  k++;",
@@ -966,7 +981,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testCatchMethodCall2() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throwCheckedException();",
         "  k++;",
@@ -1000,7 +1015,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testCatchMethodCallUnchecked() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) throwUncheckedException();",
         "  k++;",
@@ -1034,7 +1049,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testFinallyReturn1() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  if (b) return;",
         "  j++;",
@@ -1050,7 +1065,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "STMT -> [*]",
             "GOTO -> [2]",
             "1: STMT -> [*]",
-            "READWRITE(j, null) -> [*]", 
+            "READWRITE(j, null) -> [*]",
             "2: BLOCK -> [*]",
             "STMT -> [*]",
             "READWRITE(i, null) -> [*, *]",
@@ -1059,7 +1074,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testThrowFromFinally() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  return;",
         "} finally {",
@@ -1079,7 +1094,7 @@ public class CfgBuilderTest extends JJSTestBase {
   }
 
   public void testFinallyReturn2() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "try {",
         "  return;",
         "} finally {",
@@ -1128,13 +1143,13 @@ public class CfgBuilderTest extends JJSTestBase {
             "3: BLOCK -> [*]",
             "STMT -> [*]",
             "READWRITE(j, null) -> [*, *]",
-            "END"            
+            "END"
         );
   }
 
 
   public void testFinallyContinue() throws Exception {
-    assertCfg("void", 
+    assertCfg("void",
         "while (b) {",
         "try {",
         "  if (b) continue;",
@@ -1348,7 +1363,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "WRITE(j, 3) -> [*]",
             "5: END");
   }
-  
+
   public void testSwitch_FirstDefault() throws Exception {
     assertCfg("void",
         "switch(i) {",
@@ -1374,7 +1389,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "3: END"
     );
   }
-  
+
   public void testSwitch_Empty() throws Exception {
     assertCfg("void",
         "switch(i) {",
@@ -1493,7 +1508,7 @@ public class CfgBuilderTest extends JJSTestBase {
         "9: END"
     );
   }
-  
+
   public void testSwitchWithLoopAndBreak() throws Exception {
     assertCfg("void",
         "switch(i) {",
@@ -1530,7 +1545,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "3: END"
     );
   }
-  
+
   public void testBreakStatement1() throws Exception {
     assertCfg("void",
         "lbl: {",
@@ -1612,7 +1627,7 @@ public class CfgBuilderTest extends JJSTestBase {
             "WRITE(i, 2) -> [*]",
             "3: END");
   }
-  
+
   public void testBreakLoopAndSwitch() throws Exception {
     assertCfg("void",
         "loop: while (b) {",
@@ -1696,7 +1711,7 @@ public class CfgBuilderTest extends JJSTestBase {
             assertNull(start);
             continue;
           }
-          assertNotNull("No start in edge " + e.getRole() + " to " + node, 
+          assertNotNull("No start in edge " + e.getRole() + " to " + node,
               start);
           assertTrue(start + " doesn't have outgoing edge to " + node,
               cfg.getOutEdges(start).contains(e));

@@ -1,12 +1,12 @@
 /*
  * Copyright 2010 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -49,6 +49,19 @@ public class JConstructor extends JMethod {
    */
   private boolean isEmpty = false;
 
+  private boolean defaultConstructor;
+
+  public void setDefaultConstructor() {
+    defaultConstructor = true;
+  }
+
+  /**
+   * True if the constructor is default, auto-synthesized.
+   */
+  public boolean isDefaultConstructor() {
+    return defaultConstructor;
+  }
+
   public JConstructor(SourceInfo info, JClassType enclosingType) {
     // Access only matters for virtual methods, just use public.
     super(info, enclosingType.getShortName(), enclosingType, JPrimitiveType.VOID, false, false,
@@ -81,11 +94,11 @@ public class JConstructor extends JMethod {
 
   /**
    * Returns <code>true</code> if this constructor does no real work.
-   * 
+   *
    * NOTE: this method does NOT account for any clinits that would be triggered
    * if this constructor is the target of a new instance operation from an
    * external class.
-   * 
+   *
    * TODO(scottb): make this method less expensive by computing in an external
    * visitor.
    */
@@ -140,5 +153,4 @@ public class JConstructor extends JMethod {
       return this;
     }
   }
-
 }

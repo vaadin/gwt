@@ -52,19 +52,19 @@ public class Libraries {
   public static final String EXTENSION_CLASS_FILE = ".class";
   public static final String EXTENSION_COMPILATION_UNITS = ".compilationUnit";
   public static final String GENERATED_ARTIFACT_NAMES_ENTRY_NAME = "generatedArtifactNames.txt";
-  public static final String KEY_VALUE_SEPARATOR = "->";
+  public static final char ENCODE_PREFIX = '%';
+  public static final char KEY_VALUE_SEPARATOR = ':';
   public static final String LIBRARY_NAME_ENTRY_NAME = "libraryName.txt";
-  public static final String LINE_SEPARATOR = "\n";
-  public static final String NESTED_NAMES_BY_ENCLOSING_NAME_ENTRY_NAME =
-      "nestedNamesByEnclosingName.txt";
-  public static final String NEW_BINDING_PROPERTY_VALUES_BY_NAME_ENTRY_NAME =
-      "newBindingPropertyValuesByName.txt";
-  public static final String NEW_CONFIGURATION_PROPERTY_VALUES_BY_NAME_ENTRY_NAME =
-      "newConfigurationPropertyValuesByName.txt";
+  public static final char LINE_SEPARATOR = '\n';
+  public static final String NESTED_BINARY_NAMES_BY_ENCLOSING_NAME_ENTRY_NAME =
+      "nestedBinaryNamesByEnclosingName.txt";
+  public static final String NESTED_SOURCE_NAMES_BY_ENCLOSING_NAME_ENTRY_NAME =
+      "nestedSourceNamesByEnclosingName.txt";
   public static final String PERMUTATION_RESULT_ENTRY_NAME = "permutationResult.ser";
   public static final String PUBLIC_RESOURCE_PATHS_ENTRY_NAME = "publicResourcePaths.txt";
-  public static final String RAN_GENERATOR_NAMES_ENTRY_NAME = "ranGeneratorNames.txt";
   public static final String REBOUND_TYPE_SOURCE_NAMES_ENTRY_NAME = "reboundTypeSourceNames.txt";
+  public static final String PROCESSED_REBOUND_TYPE_SOURCE_NAMES_ENTRY_NAME =
+      "processedReboundTypeSourceNames.txt";
   public static final String REGULAR_CLASS_FILE_PATHS_ENTRY_NAME = "regularClassFilePaths.txt";
   public static final String REGULAR_COMPILATION_UNIT_TYPE_SOURCE_NAMES_ENTRY_NAME =
       "regularCompilationUnitTypeSourceNames.txt";
@@ -72,7 +72,7 @@ public class Libraries {
       "superSourceClassFilePaths.txt";
   public static final String SUPER_SOURCE_COMPILATION_UNIT_TYPE_SOURCE_NAMES_ENTRY_NAME =
       "superSourceCompilationUnitTypeSourceNames.txt";
-  public static final String VALUE_SEPARATOR = ",";
+  public static final char VALUE_SEPARATOR = ',';
   public static final String VERSION_NUMBER_ENTRY_NAME = "versionNumber.txt";
 
   /**

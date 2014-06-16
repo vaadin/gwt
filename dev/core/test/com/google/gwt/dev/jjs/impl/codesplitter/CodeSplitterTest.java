@@ -15,53 +15,34 @@
  */
 package com.google.gwt.dev.jjs.impl.codesplitter;
 
-import com.google.gwt.core.ext.PropertyOracle;
 import com.google.gwt.core.ext.UnableToCompleteException;
-import com.google.gwt.core.ext.linker.SymbolData;
-import com.google.gwt.core.ext.linker.impl.StandardSymbolData;
 import com.google.gwt.dev.CompilerContext;
+import com.google.gwt.dev.PrecompileTaskOptions;
+import com.google.gwt.dev.PrecompileTaskOptionsImpl;
 import com.google.gwt.dev.cfg.BindingProperty;
 import com.google.gwt.dev.cfg.ConditionNone;
 import com.google.gwt.dev.cfg.ConfigurationProperty;
-import com.google.gwt.dev.cfg.Properties;
-import com.google.gwt.dev.cfg.StaticPropertyOracle;
-import com.google.gwt.dev.javac.CompilationState;
-import com.google.gwt.dev.javac.CompilationStateBuilder;
-import com.google.gwt.dev.javac.testing.impl.MockJavaResource;
-import com.google.gwt.dev.jjs.JavaAstConstructor;
 import com.google.gwt.dev.jjs.JsOutputOption;
-import com.google.gwt.dev.jjs.ast.JLiteral;
 import com.google.gwt.dev.jjs.ast.JMethod;
-import com.google.gwt.dev.jjs.ast.JProgram;
-import com.google.gwt.dev.jjs.ast.JRunAsync;
-import com.google.gwt.dev.jjs.ast.JType;
-import com.google.gwt.dev.jjs.impl.ArrayNormalizer;
-import com.google.gwt.dev.jjs.impl.ComputeCastabilityInformation;
-import com.google.gwt.dev.jjs.impl.ImplementCastsAndTypeChecks;
-import com.google.gwt.dev.jjs.impl.ControlFlowAnalyzer;
-import com.google.gwt.dev.jjs.impl.GenerateJavaScriptAST;
-import com.google.gwt.dev.jjs.impl.JJSTestBase;
+import com.google.gwt.dev.jjs.impl.FullCompileTestBase;
 import com.google.gwt.dev.jjs.impl.JavaToJavaScriptMap;
-import com.google.gwt.dev.jjs.impl.MethodCallTightener;
-import com.google.gwt.dev.jjs.impl.ResolveRuntimeTypeReferences;
-import com.google.gwt.dev.jjs.impl.TypeTightener;
 import com.google.gwt.dev.js.ast.JsBlock;
 import com.google.gwt.dev.js.ast.JsContext;
 import com.google.gwt.dev.js.ast.JsFunction;
 import com.google.gwt.dev.js.ast.JsName;
+import com.google.gwt.dev.js.ast.JsNode;
 import com.google.gwt.dev.js.ast.JsProgram;
 import com.google.gwt.dev.js.ast.JsVisitor;
-import com.google.gwt.thirdparty.guava.common.collect.Lists;
+import com.google.gwt.dev.util.Pair;
+import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.Set;
 
 /**
  * Unit test for {@link com.google.gwt.dev.jjs.impl.codesplitter.CodeSplitter}.
  */
-public class CodeSplitterTest extends JJSTestBase {
+public class CodeSplitterTest extends FullCompileTestBase {
 
   /**
    * A {@link MultipleDependencyGraphRecorder} that does nothing.
@@ -77,7 +58,7 @@ public class CodeSplitterTest extends JJSTestBase {
         }
 
         @Override
-        public void methodIsLiveBecause(JMethod liveMethod, ArrayList<JMethod> dependencyChain) {
+        public void methodIsLiveBecause(JMethod liveMethod, List<JMethod> dependencyChain) {
         }
 
         @Override
@@ -98,27 +79,20 @@ public class CodeSplitterTest extends JJSTestBase {
   private final String initialA = "public static void initialA() {}";
   private final String initialB = "public static void initialB() {}";
 
-  // Compilation Configuration Properties.
-  private BindingProperty stackMode = new BindingProperty("compiler.stackMode");
-  private BindingProperty[] orderedProps = {stackMode};
-  private String[] orderedPropValues = {"STRIP" };
+  public int leftOverMergeSize = 0;
+  public int expectedFragmentCount = 0;
 
   private ConfigurationProperty initialSequenceProp =
       new ConfigurationProperty(CodeSplitters.PROP_INITIAL_SEQUENCE, true);
-  private ConfigurationProperty[] configProps = { initialSequenceProp };
-
-
-  private JProgram jProgram = null;
-  private JsProgram jsProgram = null;
-
-  public int leftOverMergeSize = 0;
-  public int expectedFragmentCount = 0;
-  public List<JRunAsync> initialAsyncSequence = Lists.newArrayList();
 
   @Override
   public void setUp() throws Exception {
-    super.setUp();
+    // Compilation Configuration Properties.
+    BindingProperty stackMode = new BindingProperty("compiler.stackMode");
     stackMode.addDefinedValue(new ConditionNone(), "STRIP");
+    setProperties(new BindingProperty[]{stackMode}, new String[]{"STRIP"},
+        new ConfigurationProperty[]{initialSequenceProp});
+    super.setUp();
     jsProgram = new JsProgram();
   }
 
@@ -129,7 +103,7 @@ public class CodeSplitterTest extends JJSTestBase {
     code.append("import com.google.gwt.core.client.RunAsyncCallback;\n");
     code.append("public class EntryPoint {\n");
     code.append("static {");
-    //code.append("  functionC();");
+    // code.append("  functionC();");
     code.append("}");
     code.append(functionA);
     code.append(functionB);
@@ -350,18 +324,6 @@ public class CodeSplitterTest extends JJSTestBase {
   }
 
   /**
-   * Tests that everything in the magic Array class is considered initially
-   * live.
-   */
-  public void testArrayIsInitial() throws UnableToCompleteException {
-    JProgram program = compileSnippet("void", "");
-    ControlFlowAnalyzer cfa = CodeSplitter.computeInitiallyLive(program);
-
-    assertTrue(cfa.getInstantiatedTypes().contains(findType(program, "com.google.gwt.lang.Array")));
-  }
-
-
-  /**
    * Test that the conversion from -XfragmentCount expectCount into number of exclusive fragments
    * is correct.
    */
@@ -372,8 +334,8 @@ public class CodeSplitterTest extends JJSTestBase {
 
     // This is a non negative number always
     assertEquals(0, CodeSplitters.getNumberOfExclusiveFragmentFromExpectedFragmentCount(2, 1));
-
   }
+
   public void testDontMergeLeftOvers() throws UnableToCompleteException {
     StringBuffer code = new StringBuffer();
     code.append("package test;\n");
@@ -469,13 +431,21 @@ public class CodeSplitterTest extends JJSTestBase {
   }
 
   private void assertInFragment(String functionName, int fragmentNum) {
-    JsBlock fragment = jsProgram.getFragmentBlock(fragmentNum);
-    assertTrue(findFunctionIn(functionName, fragment));
+    Set<Integer> fragments = Sets.newHashSet();
+    for (int i = 0; i < jsProgram.getFragmentCount(); i++) {
+      JsBlock fragment = jsProgram.getFragmentBlock(fragmentNum);
+      if (findFunctionIn(functionName, fragment)) {
+        fragments.add(fragmentNum);
+      }
+    }
+    assertTrue("function " + functionName + " should be in fragments " + fragmentNum +
+        " but is in " + fragments, fragments.equals(Sets.newHashSet(fragmentNum)));
   }
 
   private void assertNotInFragment(String functionName, int fragmentNum) {
     JsBlock fragment = jsProgram.getFragmentBlock(fragmentNum);
-    assertFalse(findFunctionIn(functionName, fragment));
+    assertFalse("function " + functionName + " should not be in fragment " + fragmentNum,
+        findFunctionIn(functionName, fragment));
   }
 
   /**
@@ -496,51 +466,30 @@ public class CodeSplitterTest extends JJSTestBase {
     visitor.accept(fragment);
     return found[0];
   }
+  @Override
+  protected void optimizeJava() {
+  }
 
-  /**
-   * Compiles a Java class <code>test.EntryPoint</code> and use the code splitter on it.
-   */
-  protected void compileSnippet(final String code) throws UnableToCompleteException {
-    // By default expects 4 fragments and don't merge leftovers.
-    addMockIntrinsic();
-    sourceOracle.addOrReplace(new MockJavaResource("test.EntryPoint") {
-      @Override
-      public CharSequence getContent() {
-        return code;
-      }
-    });
-    addBuiltinClasses(sourceOracle);
-    CompilerContext compilerContext = new CompilerContext();
-    CompilationState state =
-        CompilationStateBuilder.buildFrom(logger, compilerContext,
-            sourceOracle.getResources(), getAdditionalTypeProviderDelegate());
+  @Override
+  protected CompilerContext provideCompilerContext() {
+    PrecompileTaskOptions options = new PrecompileTaskOptionsImpl();
+    options.setOutput(JsOutputOption.PRETTY);
+    options.setRunAsyncEnabled(true);
+    return new CompilerContext.Builder().options(options).build();
+  }
 
-    Properties properties = createPropertiesObject(configProps);
-    jProgram =
-        JavaAstConstructor.construct(logger, state, properties, "test.EntryPoint",
-            "com.google.gwt.lang.Exceptions");
-    jProgram.addEntryMethod(findMethod(jProgram, "onModuleLoad"));
-
-    ComputeCastabilityInformation.exec(jProgram, false);
-    ImplementCastsAndTypeChecks.exec(jProgram, false);
-    ArrayNormalizer.exec(jProgram, false);
-    TypeTightener.exec(jProgram);
-    MethodCallTightener.exec(jProgram);
-    Map<JType, JLiteral> typeIdsByType =
-        ResolveRuntimeTypeReferences.IntoIntLiterals.exec(jProgram);
-
-    Map<StandardSymbolData, JsName> symbolTable =
-        new TreeMap<StandardSymbolData, JsName>(new SymbolData.ClassIdentComparator());
-    JavaToJavaScriptMap map = GenerateJavaScriptAST.exec(
-        jProgram, jsProgram, JsOutputOption.PRETTY, typeIdsByType, symbolTable, new PropertyOracle[]{
-        new StaticPropertyOracle(orderedProps, orderedPropValues, configProps)}).getLeft();
+  @Override
+  protected Pair<JavaToJavaScriptMap, Set<JsNode>> compileSnippet(final String code)
+      throws UnableToCompleteException {
+    JavaToJavaScriptMap map = super.compileSnippet(code).getLeft();
     CodeSplitter.exec(logger, jProgram, jsProgram, map, expectedFragmentCount, leftOverMergeSize,
-        NULL_RECORDER);
+       NULL_RECORDER);
+    return null;
   }
 
   private static String createRunAsync(String cast, String body) {
     StringBuffer code = new StringBuffer();
-    code.append("GWT.runAsync(" + cast + "new "+ "RunAsyncCallback() {\n");
+    code.append("GWT.runAsync(" + cast + "new " + "RunAsyncCallback() {\n");
     code.append("  public void onFailure(Throwable reason) {}\n");
     code.append("  public void onSuccess() {\n");
     code.append("    " + body);
@@ -562,71 +511,5 @@ public class CodeSplitterTest extends JJSTestBase {
 
   private static String createRunAsync(String body) {
     return createRunAsync("", body);
-  }
-
-  private static Properties createPropertiesObject(ConfigurationProperty[] propertyArray) {
-    Properties properties = new Properties();
-    for (ConfigurationProperty configurationPropertyFromArray : propertyArray) {
-      ConfigurationProperty configurationProperty =
-          properties.createConfiguration(configurationPropertyFromArray.getName(),
-          configurationPropertyFromArray.allowsMultipleValues());
-      for (String value : configurationPropertyFromArray.getValues()) {
-        configurationProperty.addValue(value);
-      }
-    }
-    return properties;
-  }
-
-  /**
-   * Add some of the compiler intrinsic
-   */
-  private void addMockIntrinsic() {
-    // TODO(rluble): Unify all compiler intrinsic into either JavaResourceBase or
-    // JavaASTConstructor.
-    sourceOracle.addOrReplace(new MockJavaResource("com.google.gwt.lang.Array") {
-      @Override
-      public CharSequence getContent() {
-        return "package com.google.gwt.lang; public class Array {" +
-               " public static int length = 0;" +
-               " public static void setCheck(Array array, int index, Object value) { }" +
-               " static void initDim() { }" +
-               " static void initDims() { }" +
-               " static void initValues() { }" +
-               "}";
-      }
-    });
-    sourceOracle.addOrReplace(new MockJavaResource("com.google.gwt.lang.JavaClassHierarchySetupUtil") {
-      @Override
-      public CharSequence getContent() {
-        return "package com.google.gwt.lang; public class JavaClassHierarchySetupUtil {" +
-               "public static Object defineClass(int typeId, int superTypeId, Object map)" +
-               "{return null;}}";
-      }
-    });
-
-    sourceOracle.addOrReplace(new MockJavaResource("com.google.gwt.core.client.impl.Impl") {
-      @Override
-      public CharSequence getContent() {
-        return "package com.google.gwt.core.client.impl; public class Impl {"+
-               "public static Object registerEntry(){return null;}}";
-      }
-    });
-
-    sourceOracle.addOrReplace(new MockJavaResource("com.google.gwt.lang.CollapsedPropertyHolder") {
-      @Override
-      public CharSequence getContent() {
-        return "package com.google.gwt.lang; public class CollapsedPropertyHolder {" +
-               "public static int permutationId = -1;}";
-      }
-    });
-
-    sourceOracle.addOrReplace(new MockJavaResource("com.google.gwt.core.client.GWT") {
-      @Override
-      public CharSequence getContent() {
-        return "package com.google.gwt.core.client; public class GWT {" +
-            "public static void runAsync(RunAsyncCallback cb){}"+
-            "public static void runAsync(Class<?> clazz, RunAsyncCallback cb){}}";
-      }
-    });
   }
 }

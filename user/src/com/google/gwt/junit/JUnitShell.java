@@ -55,6 +55,7 @@ import com.google.gwt.dev.util.arg.ArgHandlerGenDir;
 import com.google.gwt.dev.util.arg.ArgHandlerLocalWorkers;
 import com.google.gwt.dev.util.arg.ArgHandlerLogLevel;
 import com.google.gwt.dev.util.arg.ArgHandlerMaxPermsPerPrecompile;
+import com.google.gwt.dev.util.arg.ArgHandlerNamespace;
 import com.google.gwt.dev.util.arg.ArgHandlerOptimize;
 import com.google.gwt.dev.util.arg.ArgHandlerScriptStyle;
 import com.google.gwt.dev.util.arg.ArgHandlerSourceLevel;
@@ -317,6 +318,7 @@ public class JUnitShell extends DevMode {
       registerHandler(new ArgHandlerDraftCompile(options));
       registerHandler(new ArgHandlerMaxPermsPerPrecompile(options));
       registerHandler(new ArgHandlerLocalWorkers(options));
+      registerHandler(new ArgHandlerNamespace(options));
       registerHandler(new ArgHandlerOptimize(options));
 
       /*
@@ -551,7 +553,7 @@ public class JUnitShell extends DevMode {
         @Override
         public String getPurpose() {
           return "Specify the user agents to reduce the number of permutations for remote browser tests;"
-              + " e.g. ie6,ie8,safari,gecko1_8,opera";
+              + " e.g. ie8,safari,gecko1_8";
         }
 
         @Override
@@ -1330,10 +1332,16 @@ public class JUnitShell extends DevMode {
 
     // Get the module definition for the current test.
     if (!sameTest) {
-      currentModule = compileStrategy.maybeCompileModule(moduleName,
-          syntheticModuleName, strategy, batchingStrategy, getTopLogger());
-      compilerContext = compilerContextBuilder.module(currentModule).build();
-      currentCompilationState = currentModule.getCompilationState(getTopLogger(), compilerContext);
+      try {
+        currentModule = compileStrategy.maybeCompileModule(moduleName,
+            syntheticModuleName, strategy, batchingStrategy, getTopLogger());
+        compilerContext = compilerContextBuilder.module(currentModule).build();
+        currentCompilationState = currentModule.getCompilationState(getTopLogger(),
+            compilerContext);
+      } catch (UnableToCompleteException e) {
+        lastLaunchFailed = true;
+        throw e;
+      }
     }
     assert (currentModule != null);
 

@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -27,18 +27,18 @@ import java.util.List;
 
 /**
  * An implementation for DefaultExcludesFilterTest.
- * 
+ *
  * Tests:
- * 
+ *
  * 1. The filter conversion from ant to Java regex. Which cases can we handle,
  * and confirm that we perform correctly in all cases.
- * 
+ *
  * 2. checking the 4 defaultFilters, one for each combination of defaultExcludes
  * and isJava.
- * 
+ *
  * 3. Checking whether customFilter work correctly, both in presence and absence
  * of Ant.
- * 
+ *
  * TODO (amitmanjhi): clean up this test code.
  */
 public class DefaultFiltersTest extends TestCase {
@@ -59,7 +59,7 @@ public class DefaultFiltersTest extends TestCase {
           "testing", false).toArray(EMPTY_ARRAY),
           getMiscPaths("a/bc/de", false).toArray(EMPTY_ARRAY))) {
         assertEquals(path + suffix, expected, actual);
-      }      
+      }
     }
 
     void testAdvancedPathAnt(ResourceFilterString expected,
@@ -75,7 +75,7 @@ public class DefaultFiltersTest extends TestCase {
       testAdvancedPath(expected, actual, suffix);
       new BasicPaths().testBasicPath(expected, actual, suffix);
     }
-    
+
     void testAdvancedClassFilesPathAnt(ResourceFilterString expected,
         ResourceFilterString actual) {
       testAdvancedPathAnt(expected, actual, CLASS_FILE_SUFFIX);
@@ -83,9 +83,9 @@ public class DefaultFiltersTest extends TestCase {
 
     void testAdvancedJavaPathAnt(ResourceFilterString expected,
         ResourceFilterString actual) {
-      testAdvancedPathAnt(expected, actual, JAVA_FILE_SUFFIX);      
+      testAdvancedPathAnt(expected, actual, JAVA_FILE_SUFFIX);
     }
-    
+
     void testAdvancedPath(ResourceFilterString expected,
         ResourceFilterString actual) {
       for (String path : mergeArrays(baseIncluded, baseExcluded, getMiscPaths(
@@ -131,7 +131,7 @@ public class DefaultFiltersTest extends TestCase {
         assertEquals(EXCLUDED_CHARS + str + suffix, expected, actual);
         assertEquals(EXCLUDED_CHARS + str + EXCLUDED_CHARS + suffix,
             expected, actual);
-      }      
+      }
     }
 
     void testBasicPath(ResourceFilterString expected,
@@ -165,7 +165,7 @@ public class DefaultFiltersTest extends TestCase {
   private static final boolean DEFAULT_INCLUDES = false;
   private static final String JAVA_FILE_SUFFIX = ".java";
   private static final String CLASS_FILE_SUFFIX = ".class";
-  
+
   private static final String MERGED_PATTERNS[] = {
       "**/testing/**", "Foo", "Bar", "fooz/**", "barz/hello/**"};
 
@@ -225,9 +225,9 @@ public class DefaultFiltersTest extends TestCase {
   public void testEmptyFilters() {
     BasicPaths basicPaths = new BasicPaths();
     FilterFileType fileType;
-    
+
     // first arg: ant filter, second arg: our custom filter
-    fileType= FilterFileType.RESOURCE_FILES;
+    fileType = FilterFileType.RESOURCE_FILES;
     basicPaths.testBasicPath(getAntFilter(EMPTY_ARRAY, EMPTY_ARRAY,
         EMPTY_ARRAY, DEFAULT_EXCLUDES, fileType, "antDefaultFilter"),
         new ResourceFilterString(fileType.getDefaultFilter(),
@@ -246,7 +246,7 @@ public class DefaultFiltersTest extends TestCase {
         EMPTY_ARRAY, DEFAULT_INCLUDES, fileType, "antJustJavaFilter"),
         new ResourceFilterString(fileType.getFileTypeFilter(),
             "justJavaFilter"), fileType.getSuffix());
-    
+
     fileType = FilterFileType.CLASS_FILES;
     basicPaths.testBasicPath(getAntFilter(EMPTY_ARRAY, EMPTY_ARRAY,
         EMPTY_ARRAY, DEFAULT_EXCLUDES, FilterFileType.CLASS_FILES, "antDefaultClassFilesFilter"),
@@ -255,7 +255,7 @@ public class DefaultFiltersTest extends TestCase {
     basicPaths.testBasicPath(getAntFilter(EMPTY_ARRAY, EMPTY_ARRAY,
         EMPTY_ARRAY, DEFAULT_INCLUDES, FilterFileType.CLASS_FILES, "antJustClassFilesFilter"),
         new ResourceFilterString(fileType.getFileTypeFilter(),
-            "justClassFilesFilter"), fileType.getSuffix());    
+            "justClassFilesFilter"), fileType.getSuffix());
   }
 
   /**
@@ -387,7 +387,7 @@ public class DefaultFiltersTest extends TestCase {
     AdvancedPaths advancedPaths = new AdvancedPaths();
     String newMergedPatterns[] = getMergedPatterns(JAVA_FILE_SUFFIX);
     ResourceFilter filter = null;
-    
+
     // pass empty includeArray. Means catch all
     filter = getFilterWithoutCatchAll(EMPTY_ARRAY, newMergedPatterns,
         EMPTY_ARRAY, FilterFileType.JAVA_FILES);
@@ -417,7 +417,7 @@ public class DefaultFiltersTest extends TestCase {
     AdvancedPaths advancedPaths = new AdvancedPaths();
     String newMergedPatterns[] = getMergedPatterns(JAVA_FILE_SUFFIX);
     ResourceFilter filter = null;
-    
+
     // pass empty includeArray. Means catch all
     filter = getFilterWithCatchAll(EMPTY_ARRAY, newMergedPatterns, EMPTY_ARRAY,
         FilterFileType.JAVA_FILES);
@@ -442,7 +442,7 @@ public class DefaultFiltersTest extends TestCase {
         "ant_newMergedPatterns_newMergedPatterns"), new ResourceFilterString(
         filter, "custom_newMergedPatterns_newMergedPatterns"), JAVA_FILE_SUFFIX);
   }
-  
+
   public void testNonEmptyJavaSkipFiltersAnt() {
     AdvancedPaths advancedPaths = new AdvancedPaths();
     String newMergedPatterns[] = getMergedPatterns(JAVA_FILE_SUFFIX);
@@ -472,7 +472,7 @@ public class DefaultFiltersTest extends TestCase {
         "ant_newMergedPatterns_newMergedPatterns"), new ResourceFilterString(
         filter, "custom_newMergedPatterns_newMergedPatterns"));
   }
-  
+
   // no ant, catchAll filter is null
   public void testNonEmptyClassFileFilters() {
     AdvancedPaths advancedPaths = new AdvancedPaths();
@@ -508,7 +508,7 @@ public class DefaultFiltersTest extends TestCase {
     AdvancedPaths advancedPaths = new AdvancedPaths();
     String newMergedPatterns[] = getMergedPatterns(CLASS_FILE_SUFFIX);
     ResourceFilter filter = null;
-    
+
     // pass empty includeArray. Means catch all
     filter = getFilterWithCatchAll(EMPTY_ARRAY, newMergedPatterns, EMPTY_ARRAY,
         FilterFileType.CLASS_FILES);
@@ -533,7 +533,7 @@ public class DefaultFiltersTest extends TestCase {
         "ant_newMergedPatterns_newMergedPatterns"), new ResourceFilterString(
         filter, "custom_newMergedPatterns_newMergedPatterns"), CLASS_FILE_SUFFIX);
   }
-  
+
   private String[] getMergedPatterns(String suffix) {
     String newMergedPatterns[] = new String[MERGED_PATTERNS.length];
     for (int i = 0; i < MERGED_PATTERNS.length; i++) {
@@ -545,7 +545,7 @@ public class DefaultFiltersTest extends TestCase {
     }
     return newMergedPatterns;
   }
-  
+
   public void testNonEmptyClassFileSkipFiltersAnt() {
     AdvancedPaths advancedPaths = new AdvancedPaths();
     String newMergedPatterns[] = getMergedPatterns(CLASS_FILE_SUFFIX);
@@ -575,7 +575,7 @@ public class DefaultFiltersTest extends TestCase {
         "ant_newMergedPatterns_newMergedPatterns"), new ResourceFilterString(
         filter, "custom_newMergedPatterns_newMergedPatterns"), CLASS_FILE_SUFFIX);
   }
-  
+
   private ResourceFilterString getAntFilter(String includes[],
       String excludes[], String skips[], boolean defaultExcludes,
       final FilterFileType filterFileType, String tag) {
@@ -612,7 +612,7 @@ public class DefaultFiltersTest extends TestCase {
     return new DefaultFilters().customFilterWithCatchAll(includesList,
         excludesList, skipList, true, null, filterFileType);
   }
-  
+
   private boolean fileTypeMatches(FilterFileType filterFileType, String path) {
     switch (filterFileType) {
       case JAVA_FILES:

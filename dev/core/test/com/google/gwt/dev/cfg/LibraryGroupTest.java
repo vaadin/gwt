@@ -13,6 +13,7 @@
  */
 package com.google.gwt.dev.cfg;
 
+import com.google.gwt.dev.cfg.LibraryGroup.CollidingCompilationUnitException;
 import com.google.gwt.dev.cfg.LibraryGroup.DuplicateLibraryNameException;
 import com.google.gwt.dev.cfg.LibraryGroup.UnresolvedLibraryException;
 import com.google.gwt.dev.javac.CompiledClass;
@@ -82,12 +83,14 @@ public class LibraryGroupTest extends TestCase {
     LibraryGroup libraryGroup =
         LibraryGroup.fromLibraries(Lists.<Library> newArrayList(regularLibrary), true);
 
-    // Shows that get by name works for nested types.
+    // Shows that get by source or binary name works for nested types.
     assertEquals(nestedTypeCompilationUnit,
         libraryGroup.getCompilationUnitByTypeSourceName("com.google.gwt.user.Outer.Inner"));
+    assertEquals(nestedTypeCompilationUnit,
+        libraryGroup.getCompilationUnitByTypeBinaryName("com.google.gwt.user.Outer$Inner"));
   }
 
-  public void testGetCompilationUnitTypeSourceNamesSeesAll() {
+  public void testGetCompilationUnitTypeNamesSourceNamesSeesAll() {
     // Create regular/super source compilation units.
     MockCompilationUnit regularCompilationUnit =
         new MockCompilationUnit("com.google.gwt.Regular", "blah");
@@ -124,7 +127,8 @@ public class LibraryGroupTest extends TestCase {
     }
 
     // Show that the library group collects and returns them all.
-    assertTrue(expectedReboundTypeSourceNames.equals(libraryGroup.getReboundTypeSourceNames()));
+    assertTrue(
+        expectedReboundTypeSourceNames.equals(libraryGroup.getReboundTypeSourceNames()));
   }
 
   public void testLibraryLinkOrder() {
@@ -151,112 +155,49 @@ public class LibraryGroupTest extends TestCase {
     assertEquals(libraries.size(), linkOrderLibraries.size());
   }
 
-  /**
-   * See buildVariedPropertyGeneratorLibraryGroup() for test library group structure.
-   */
-  public void testPropertyCollectionByGenerator() {
-    LibraryGroup libraryGroup = buildVariedPropertyGeneratorLibraryGroup();
-
-    // Collect "new" legal binding property values from the perspective of each generator.
-    Collection<String> newUserAgentsForUserAgentAsserter =
-        libraryGroup.gatherNewBindingPropertyValuesForGenerator("UserAgentAsserter").get(
-            "user.agent");
-    Collection<String> newUserAgentsForLocalizedDatePickerGenerator =
-        libraryGroup.gatherNewBindingPropertyValuesForGenerator("LocalizedDatePickerGenerator").get(
-            "user.agent");
-    Collection<String> newLocalesForLocalizedDatePickerGenerator =
-        libraryGroup.gatherNewBindingPropertyValuesForGenerator("LocalizedDatePickerGenerator").get(
-            "locale");
-
-    // Verify that the results are as expected.
-    assertEquals(
-        Sets.newHashSet("webkit_phone", "webkit_tablet"), newUserAgentsForUserAgentAsserter);
-    assertEquals(Sets.newHashSet("webkit_phone", "webkit_tablet", "webkit", "mozilla", "ie"),
-        newUserAgentsForLocalizedDatePickerGenerator);
-    assertEquals(Sets.newHashSet("ru"), newLocalesForLocalizedDatePickerGenerator);
-  }
-
-  /**
-   * <pre>
-   * root library: {
-   *   user.agent: [webkit_phone, webkit_tablet],
-   *   locale: [ru]
-   *   ranGenerators: [],
-   *   libraries: [
-   *     sub library 1: {
-   *       user.agent: [webkit, mozilla, ie],
-   *       locale: [],
-   *       ranGenerators: [UserAgentAsserter]
-   *     },
-   *     sub library 2: {
-   *       user.agent: [],
-   *       locale: [en, fr],
-   *       ranGenerators: [LocalizedDatePickerGenerator]
-   *     }
-   *   ]
-   * }
-   * </pre>
-   */
-  private LibraryGroup buildVariedPropertyGeneratorLibraryGroup() {
-    String generatorNameOne = "UserAgentAsserter";
-    String generatorNameTwo = "LocalizedDatePickerGenerator";
-    return buildVariedPropertyGeneratorLibraryGroup(
-        generatorNameOne, Sets.<String>newHashSet(), generatorNameTwo, Sets.<String>newHashSet());
-  }
-
-  public static LibraryGroup buildVariedPropertyGeneratorLibraryGroup(String generatorNameOne,
-      Set<String> reboundTypeSourceNamesOne, String generatorNameTwo,
-      Set<String> reboundTypeSourceNamesTwo) {
+  public static LibraryGroup buildVariedPropertyGeneratorLibraryGroup(
+      Set<String> reboundTypeSourceNamesOne, Set<String> reboundTypeSourceNamesTwo) {
     // A root library that adds more legal user.agent and locale values but for which no generators
     // have been run.
     MockLibrary rootLibrary = new MockLibrary("RootLibrary");
-    rootLibrary.getDependencyLibraryNames()
-        .addAll(Lists.newArrayList("SubLibrary1", "SubLibrary2"));
-    rootLibrary.getNewBindingPropertyValuesByName()
-        .putAll("user.agent", Lists.newArrayList("webkit_phone", "webkit_tablet"));
-    rootLibrary.getNewBindingPropertyValuesByName().putAll("locale", Lists.newArrayList("ru"));
+    rootLibrary.getDependencyLibraryNames().addAll(
+        Lists.newArrayList("SubLibrary1", "SubLibrary2"));
 
     // A library that adds legal user.agent values and has already run the UserAgentAsserter
     // generator.
     MockLibrary subLibrary1 = new MockLibrary("SubLibrary1");
-    subLibrary1.getNewBindingPropertyValuesByName()
-        .putAll("user.agent", Lists.newArrayList("webkit", "mozilla", "ie"));
-    subLibrary1.getRanGeneratorNames().add(generatorNameOne);
     subLibrary1.getReboundTypeSourceNames().addAll(reboundTypeSourceNamesOne);
 
     // A library that adds legal locale values and has already run the LocaleMessageGenerator
     // generator.
     MockLibrary subLibrary2 = new MockLibrary("SubLibrary2");
-    subLibrary2.getNewBindingPropertyValuesByName()
-        .putAll("locale", Lists.newArrayList("en", "fr"));
-    subLibrary2.getRanGeneratorNames().add(generatorNameTwo);
     subLibrary2.getReboundTypeSourceNames().addAll(reboundTypeSourceNamesTwo);
 
     LibraryGroup libraryGroup = LibraryGroup.fromLibraries(
-        Lists.<Library>newArrayList(rootLibrary, subLibrary1, subLibrary2), true);
+        Lists.<Library> newArrayList(rootLibrary, subLibrary1, subLibrary2), true);
     return libraryGroup;
   }
 
-  public void testSuperSourceOverridesRegularCompilationUnitAccess() {
-    // Create regular/super source compilation units.
-    MockCompilationUnit regularCompilationUnit =
-        new MockCompilationUnit("com.google.gwt.Regular", "blah");
-    MockCompilationUnit superSourceCompilationUnit =
-        new MockCompilationUnit("com.google.gwt.Regular", "blah");
+  public void testEnforcesUniqueCompilationUnits() {
+    MockCompilationUnit compilationUnit = new MockCompilationUnit("com.google.gwt.Regular", "blah");
 
-    // Create regular/super source libraries.
-    MockLibrary regularLibrary = new MockLibrary("LibraryA");
-    regularLibrary.addCompilationUnit(regularCompilationUnit);
-    MockLibrary superSourceLibrary = new MockLibrary("LibraryB");
-    superSourceLibrary.addSuperSourceCompilationUnit(superSourceCompilationUnit);
+    // Creates libraries with colliding compilation units.
+    MockLibrary libraryA = new MockLibrary("LibraryA");
+    libraryA.addCompilationUnit(compilationUnit);
+    MockLibrary libraryB = new MockLibrary("LibraryB");
+    libraryB.addCompilationUnit(compilationUnit);
 
     // Stick them in a library group.
-    LibraryGroup libraryGroup = LibraryGroup.fromLibraries(
-        Lists.<Library> newArrayList(regularLibrary, superSourceLibrary), true);
+    LibraryGroup libraryGroup =
+        LibraryGroup.fromLibraries(Lists.<Library> newArrayList(libraryA, libraryB), true);
 
-    // Show that the library group prefers to return the super source version.
-    assertEquals(libraryGroup.getCompilationUnitByTypeSourceName("com.google.gwt.Regular"),
-        superSourceCompilationUnit);
+    // Show that the library group catches the duplication.
+    try {
+      libraryGroup.getCompilationUnitByTypeSourceName("com.google.gwt.Regular");
+      fail("The library group should have detected and rejected the duplicate compilation unit.");
+    } catch (CollidingCompilationUnitException e) {
+      // expected behavior
+    }
   }
 
   public void testUnresolvedLibraryReference() {

@@ -1,12 +1,12 @@
 /*
  * Copyright 2008 Google Inc.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
  * the License at
- * 
+ *
  * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -111,13 +111,13 @@ public class PropertyPermutations implements Iterable<String[]> {
     } else {
       BindingProperty[] answerable = new BindingProperty[soFar.length];
       System.arraycopy(properties, 0, answerable, 0, soFar.length);
-      PropertyOracle propertyOracle = new StaticPropertyOracle(answerable,
-          soFar, new ConfigurationProperty[0]);
+      PropertyOracle props = new BindingProps(answerable, soFar, ConfigProps.EMPTY)
+          .toPropertyOracle();
 
       for (Condition cond : prop.getConditionalValues().keySet()) {
         try {
           if (cond.isTrue(TreeLogger.NULL, new DeferredBindingQuery(
-              propertyOracle, activeLinkerNames))) {
+              props, activeLinkerNames))) {
             winner = cond;
           }
         } catch (UnableToCompleteException e) {
@@ -158,12 +158,6 @@ public class PropertyPermutations implements Iterable<String[]> {
     this.values = allPermutationsOf(properties, activeLinkerNames);
   }
 
-  public PropertyPermutations(PropertyPermutations allPermutations,
-      int firstPerm, int numPerms) {
-    this.properties = allPermutations.properties;
-    values = allPermutations.values.subList(firstPerm, firstPerm + numPerms);
-  }
-
   /**
    * Copy constructor that allows the list of property values to be reset.
    */
@@ -182,15 +176,15 @@ public class PropertyPermutations implements Iterable<String[]> {
     // Collate property values in this map
     SortedMap<CollapsedPropertyKey, List<String[]>> map = new TreeMap<CollapsedPropertyKey, List<String[]>>();
 
+    BindingProperty[] propertyKeys = getOrderedProperties();
     // Loop over all possible property value permutations
     for (Iterator<String[]> it = iterator(); it.hasNext();) {
       String[] propertyValues = it.next();
-      assert propertyValues.length == getOrderedProperties().length;
+      assert propertyValues.length == propertyKeys.length;
 
-      StaticPropertyOracle oracle = new StaticPropertyOracle(
-          getOrderedProperties(), propertyValues, new ConfigurationProperty[0]);
-      CollapsedPropertyKey key = new CollapsedPropertyKey(
-          oracle);
+      BindingProps props = new BindingProps(propertyKeys, propertyValues,
+          ConfigProps.EMPTY);
+      CollapsedPropertyKey key = new CollapsedPropertyKey(props);
 
       List<String[]> list = map.get(key);
       if (list == null) {
@@ -210,10 +204,18 @@ public class PropertyPermutations implements Iterable<String[]> {
     return toReturn;
   }
 
+  /**
+   * Returns the properties used to generate permutations.
+   * (Parallel to {@link #getOrderedPropertyValues}.)
+   */
   public BindingProperty[] getOrderedProperties() {
     return getOrderedPropertiesOf(properties);
   }
 
+  /**
+   * Returns the value of each property used to generate the given permutation.
+   * (Parallel to {@link #getOrderedProperties()}.)
+   */
   public String[] getOrderedPropertyValues(int permutation) {
     return values.get(permutation);
   }

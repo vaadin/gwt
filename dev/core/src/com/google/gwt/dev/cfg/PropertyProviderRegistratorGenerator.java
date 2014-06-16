@@ -91,12 +91,17 @@ public class PropertyProviderRegistratorGenerator extends Generator {
 
     if (out != null) {
       out.println("package " + PACKAGE_PATH + ";");
-      out.println("import com.google.gwt.core.client.RuntimePropertyRegistry;");
+      out.println("import com.google.gwt.lang.RuntimePropertyRegistry;");
       out.println(
-          "import com.google.gwt.core.client.RuntimePropertyRegistry.PropertyValueProvider;");
+          "import com.google.gwt.lang.RuntimePropertyRegistry.PropertyValueProvider;");
       out.println("public class " + typeName + " {");
 
       for (BindingProperty bindingProperty : newBindingProperties) {
+        // If nothing about the binding property was set or created in the current module.
+        if (bindingProperty.getTargetLibraryDefinedValues().isEmpty()) {
+          // Then its previously created property provider is still valid.
+          continue;
+        }
         createPropertyProviderClass(logger, out, bindingProperty);
       }
       // TODO(stalcup): create configuration property providers.
@@ -123,7 +128,7 @@ public class PropertyProviderRegistratorGenerator extends Generator {
         Entry<Condition, SortedSet<String>>>(bindingProperty.getConditionalValues().entrySet());
     List<Entry<Condition, SortedSet<String>>> prioritizedEntries = Lists.reverse(entries);
 
-    out.println("  public String getValue() {");
+    out.println("  public native String getValue() /*-{");
     boolean alwaysReturnsAValue = false;
     for (Entry<Condition, SortedSet<String>> entry : prioritizedEntries) {
       Condition condition = entry.getKey();
@@ -140,10 +145,10 @@ public class PropertyProviderRegistratorGenerator extends Generator {
       }
     }
     if (!alwaysReturnsAValue) {
-      out.println("    throw new RuntimeException(\"No known value for property "
-          + bindingProperty.getName() + "\");");
+      out.println("    throw @java.lang.RuntimeException::new(Ljava/lang/String;)"
+          + "(\"No known value for property " + bindingProperty.getName() + "\");");
     }
-    out.println("  }");
+    out.println("  }-*/;");
   }
 
   private void createConstrainedValueGetter(PrintWriter out, BindingProperty bindingProperty) {

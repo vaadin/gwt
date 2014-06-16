@@ -22,6 +22,7 @@ package(
     default_visibility = [
         "//third_party/java_src/gwt:__pkg__",
         "//third_party/java_src/gwt/legacy:__pkg__",
+        "//third_party/java_src/gwt/svn/trunk/user:__pkg__",
     ],
 )
 
@@ -97,7 +98,7 @@ AugmentedJar(
     name = "gwt-dev-deps",
     srcs = [],
     added_jars = [
-        "//third_party/java_src/gwt/legacy:libdev.jar",
+        "//third_party/java_src/gwt/legacy:libdev-bare.jar",
         "//third_party/java_src/gwt/legacy:dev-resources.jar",
         "//third_party/java_src/gwt/svn/tools:dev_jars",
         "//third_party/java_src/gwt/svn/tools:legacy_dev_jars",
@@ -113,7 +114,7 @@ AugmentedJar(
     name = "gwt-dev-only",
     srcs = [],
     added_jars = [
-        ":libgwt-dev-classes.jar",
+        ":libgwt-dev-bare.jar",
         ":gwt-dev-resources.jar",
         ":libcompiler.standalone.jar",
         ":libcompiler.standalone.super.jar",
@@ -125,14 +126,10 @@ AugmentedJar(
     wrap_javalibrary = 0,
 )
 
-# All the dev classes before jarjaring.
-# This should only be used in code that will itself be jarjar-ed
-# or in internal tests.
-# (Exposed because it helps other targets build faster than
-# if they waited for gwt-dev to be jarjar-ed.)
-# TODO: split up.
+# The gwt-dev classes for GWT internal use only.
+# They must be jarjar-ed and dependencies stripped before exposing to google3.
 java_library(
-    name = "gwt-dev-classes",
+    name = "gwt-dev-bare",
     srcs = glob(
         ["core/src/**/*.java"],
         exclude = ["**/package-info.java"],
@@ -145,7 +142,6 @@ java_library(
     deps = [
         ":compiler.standalone.super",
         "//third_party/java_src/gwt/svn/tools:dev_deps",
-        # Safe to depend on servlet_api_3 because nobody directly depends on gwt-dev-classes
         "//third_party/java_src/gwt/svn/tools:servlet_api_3",
     ],
 )
@@ -187,6 +183,7 @@ java_library(
             "core/src/com/google/gwt/dev/CompilerContext.java",
             "core/src/com/google/gwt/dev/CompileTaskOptions.java",
             "core/src/com/google/gwt/dev/CompileTaskOptionsImpl.java",
+            "core/src/com/google/gwt/dev/GwtCreateMap.java",
             "core/src/com/google/gwt/dev/GwtVersion.java",
             "core/src/com/google/gwt/dev/Permutation.java",
             "core/src/com/google/gwt/dev/PrecompileTaskOptions.java",
@@ -211,7 +208,6 @@ java_library(
         ],
     ),
     javacopts = [
-        "-encoding utf8",
         "-source 5",
         "-target 5",
     ],
@@ -235,7 +231,6 @@ java_library(
     ),
     constraints = ["android"],
     javacopts = [
-        "-encoding utf8",
         "-source 5",
         "-target 5",
     ],
@@ -274,7 +269,6 @@ java_library(
     ],
     gwtxml = ":interop-annotations-gwtxml",
     javacopts = [
-        "-encoding utf8",
         "-source 5",
         "-target 5",
     ],
@@ -291,28 +285,57 @@ genrule(
 # TODO: split up.
 AugmentedJar(
     name = "dev-test-code",
-    srcs = glob([
-        "core/test/**/*.java",
-    ]),
+    testonly = 1,
+    srcs = [],
     added_jars = [
+        ":libdev-test-code-bare.jar",
         # for soycTest
         "//third_party/java_src/gwt/svn/trunk/samples:hello-src.jar",
     ],
     added_roots = [
         "core/test",
     ],
-    build_deps = [
-        ":gwt-dev-classes",
-        ":compiler.standalone.super",
-        "//third_party/java_src/gwt/svn/tools:dev_deps",  # for pre-jarjar imports
-    ],
     constraints = [],
     dojarjar = 1,
     export_deps = [
         ":dev",  # for the post-jarjar names
-    ],
-    deps = [
         "//third_party/java/junit",
+    ],
+)
+
+# The gwt-dev tests for GWT internal use only.
+# They must be jarjar-ed and dependencies stripped before exposing to google3.
+# TODO(skybrian): we should have a separate jar for test infrastructure and
+# and remove dependencies on this library in gwt-user and google3.
+java_library(
+    name = "dev-test-code-bare",
+    testonly = 1,
+    srcs = glob([
+        "core/test/**/*.java",
+    ]),
+    deps = [
+        ":compiler.standalone.super",
+        ":gwt-dev-bare",
+        "//third_party/java/junit",
+        "//third_party/java_src/gwt/svn/tools:dev_deps",
+    ],
+)
+
+gwt_test(
+    name = "tests_dev.IncrementalBuilderTest",
+    data = [
+        "//third_party/java_src/gwt:gwt-dev-full.jar",
+        "//third_party/java_src/gwt:gwt-user-full",
+        "//third_party/java_src/gwt/svn/trunk/user:incremental-build-system-test-res.jar",
+    ],
+    jvm_flags = [
+        "-Dgwt.cp=third_party/java_src/gwt/svn/trunk/user/incremental-build-system-test-res.jar\;third_party/java_src/gwt/gwt-dev-full.jar\;third_party/java_src/gwt/gwt-user-full.jar",
+        "-ea",
+    ],
+    main_class = "com.google.gwt.dev.IncrementalBuilderTest",
+    deps = [
+        ":dev-test-code",
+        "//third_party/java_src/gwt/svn/trunk/user:incremental-build-system-test-res",
     ],
 )
 
@@ -328,6 +351,11 @@ GWT_DEV_TESTS = glob(
     exclude = [
         "core/test/**/ClassPathEntryTest.java",
         "core/test/**/ResourceOracleImplTest.java",
+    ] +
+    # Handled separately because it needs a custom test target with
+    # custom classpath.
+    [
+        "core/test/**/IncrementalBuilderTest.java",
     ],
 )
 

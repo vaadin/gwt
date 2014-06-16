@@ -37,6 +37,7 @@ CSSValue
 CSSValueList
 CSSVariablesMap
 CSSViewportRule
+CSSUnknownRule
 CanvasGradient
 CanvasPattern
 CanvasRenderingContext2D
@@ -83,9 +84,12 @@ FileReader
 Float32Array
 Float64Array
 FocusEvent
+FontFace
 FormData
 Function
 GainNode
+Gamepad
+GamepadEvent
 HTMLAllCollection
 HTMLAnchorElement
 HTMLAppletElement
@@ -273,6 +277,7 @@ SVGComponentTransferFunctionElement
 SVGCursorElement
 SVGDefsElement
 SVGDescElement
+SVGDiscardElement
 SVGDocument
 SVGElement
 SVGElementInstance
@@ -312,6 +317,7 @@ SVGFontFaceSrcElement
 SVGFontFaceUriElement
 SVGForeignObjectElement
 SVGGElement
+SVGGeometryElement
 SVGGlyphElement
 SVGGlyphRefElement
 SVGGradientElement
@@ -390,8 +396,10 @@ Screen
 ScriptProcessorNode
 SecurityPolicy
 Selection
+ShadowRoot
 SharedWorker
 SpeechInputEvent
+SpeechSynthesisUtterance
 Storage
 StorageEvent
 String
@@ -420,6 +428,7 @@ Uint16Array
 Uint32Array
 Uint8Array
 Uint8ClampedArray
+VTTCue
 ValidityState
 WaveShaperNode
 WebGLActiveInfo
@@ -441,6 +450,7 @@ WebKitCSSKeyframesRule
 WebKitCSSMatrix
 WebKitCSSMixFunctionValue
 WebKitCSSTransformValue
+WebKitGamepad
 WebKitMediaSource
 WebKitMutationObserver
 WebKitPoint
@@ -516,6 +526,7 @@ scrollY
 scrollbars
 self
 sessionStorage
+speechSynthesis
 status
 statusbar
 styleMedia

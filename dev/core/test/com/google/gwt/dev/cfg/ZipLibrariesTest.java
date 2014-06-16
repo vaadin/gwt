@@ -87,10 +87,6 @@ public class ZipLibrariesTest extends CompilationStateTestBase {
     String expectedLibraryName = "BazLib";
     final String expectedResourceContents =
         "<html><head><title>Index</title></head><body>Hi</body></html>";
-    Set<String> expectedRanGeneratorNames =
-        Sets.newHashSet("UiBinderGenerator", "PlatinumGenerator");
-    Set<String> expectedUserAgentConfigurationValues = Sets.newHashSet("webkit");
-    Set<String> expectedLocaleConfigurationValues = Sets.newHashSet("en", "fr");
     Set<String> expectedDependencyLibraryNames = Sets.newHashSet("FooLib", "BarLib");
     oracle.add(BAR, SUPER_FOO, JdtCompilerTest.OUTER_INNER);
     rebuildCompilationState();
@@ -109,13 +105,6 @@ public class ZipLibrariesTest extends CompilationStateTestBase {
         return expectedResourceContents;
       }
     });
-    zipLibraryWriter.addNewConfigurationPropertyValuesByName("user.agent",
-        expectedUserAgentConfigurationValues);
-    zipLibraryWriter.addNewConfigurationPropertyValuesByName("locale",
-        expectedLocaleConfigurationValues);
-    for (String generatorName : expectedRanGeneratorNames) {
-      zipLibraryWriter.addRanGeneratorName(generatorName);
-    }
     zipLibraryWriter.addDependencyLibraryNames(expectedDependencyLibraryNames);
     for (CompilationUnit compilationUnit : compilationUnits) {
       zipLibraryWriter.addCompilationUnit(compilationUnit);
@@ -133,11 +122,6 @@ public class ZipLibrariesTest extends CompilationStateTestBase {
     assertEquals(expectedLibraryName, zipLibrary.getLibraryName());
     assertEquals(expectedResourceContents,
         Util.readStreamAsString(zipLibrary.getPublicResourceByPath("index.html").openContents()));
-    assertEquals(expectedRanGeneratorNames, zipLibrary.getRanGeneratorNames());
-    assertEquals(expectedUserAgentConfigurationValues,
-        zipLibrary.getNewConfigurationPropertyValuesByName().get("user.agent"));
-    assertEquals(expectedLocaleConfigurationValues,
-        zipLibrary.getNewConfigurationPropertyValuesByName().get("locale"));
     assertEquals(expectedDependencyLibraryNames, zipLibrary.getDependencyLibraryNames());
 
     // CompilationUnit
@@ -154,10 +138,15 @@ public class ZipLibrariesTest extends CompilationStateTestBase {
     assertEquals(SUPER_FOO.getLocation(), superFooCompilationUnit.getResourceLocation());
     assertEquals(SUPER_FOO.getTypeName(), superFooCompilationUnit.getTypeName());
 
-    // Can find inner classes.
-    assertTrue(zipLibrary.getNestedNamesByCompilationUnitName().get(
+    // Can find inner classes by source name.
+    assertTrue(zipLibrary.getNestedSourceNamesByCompilationUnitName().get(
         JdtCompilerTest.OUTER_INNER.getTypeName()).contains(
         JdtCompilerTest.OUTER_INNER.getTypeName() + ".Inner"));
+
+    // Can find inner classes by binary name.
+    assertTrue(zipLibrary.getNestedBinaryNamesByCompilationUnitName().get(
+        JdtCompilerTest.OUTER_INNER.getTypeName()).contains(
+        JdtCompilerTest.OUTER_INNER.getTypeName() + "$Inner"));
   }
 
   public void testVersionNumberException() throws IOException {

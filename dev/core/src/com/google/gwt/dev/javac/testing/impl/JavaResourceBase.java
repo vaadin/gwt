@@ -113,7 +113,7 @@ public class JavaResourceBase {
   public static final MockJavaResource COMPARABLE =
       createMockJavaResource("java.lang.Comparable",
           "package java.lang;",
-          "public interface Comparable<T extends Comparable<T> > {",
+          "public interface Comparable<T> {",
           "  public int compareTo(T other);",
           "}");
 
@@ -184,9 +184,8 @@ public class JavaResourceBase {
           "}");
 
   public static final MockJavaResource IS_SERIALIZABLE =
-      createMockJavaResource(
-      "com.google.gwt.user.client.rpc.IsSerializable",
-      "package com.google.gwt.user.client.rpc;",
+      createMockJavaResource("com.google.gwt.user.client.rpc.IsSerializable",
+          "package com.google.gwt.user.client.rpc;",
           "public interface IsSerializable {",
           "}");
 
@@ -198,6 +197,20 @@ public class JavaResourceBase {
           "  public static native JavaScriptObject createObject() /*-{ return {}; }-*/;",
           "  protected JavaScriptObject() { }",
           "  public final String toString() { return \"JavaScriptObject\"; }",
+          "}");
+
+  public static final MockJavaResource LIST =
+      createMockJavaResource("java.util.List",
+          "package java.util;",
+          "public interface List<T> extends Collection<T> {",
+          "  public T get(int i);",
+          "}");
+
+  public static final MockJavaResource ARRAY_LIST =
+      createMockJavaResource("java.util.ArrayList",
+          "package java.util;",
+          "public class ArrayList<T> implements List<T> {",
+          "  public T get(int i) { return null; }",
           "}");
 
   public static final MockJavaResource LONG =
@@ -241,8 +254,15 @@ public class JavaResourceBase {
           "  public boolean equals(Object that){return this == that;}",
           "  public int hashCode() { return 0; }",
           "  public String toString() { return \"Object\"; }",
-          "  public Class<?> getClass() { return ___clazz; }"
-          ,
+          "  public Class<?> getClass() { return ___clazz; }",
+          "}");
+
+  public static final MockJavaResource RUNTIME_EXCEPTION =
+      createMockJavaResource("java.lang.RuntimeException",
+          "package java.lang;",
+          "public class RuntimeException extends Exception {",
+          "  public RuntimeException() {}",
+          "  public RuntimeException(String message) {}",
           "}");
 
   public static final MockJavaResource SERIALIZABLE =
@@ -310,12 +330,40 @@ public class JavaResourceBase {
           "  public void addSuppressed(Throwable ex) { }",
           "}");
 
+  // TODO: move JS* annotations to intrinsic mock resource base
+  public static final MockJavaResource JSINTERFACE =
+      createMockJavaResource("com.google.gwt.core.client.js.JsInterface",
+          "package com.google.gwt.core.client.js;",
+          "public @interface JsInterface {\n",
+          "  String prototype() default \"\";\n" +
+              "  boolean isNative() default false;\n",
+          "}"
+      );
+  public static final MockJavaResource JSINTERFACEPROTOTYPE =
+      createMockJavaResource("com.google.gwt.core.client.js.impl.PrototypeOfJsInterface",
+          "package com.google.gwt.core.client.js.impl;",
+          "public @interface PrototypeOfJsInterface {\n",
+          "}");
+  public static final MockJavaResource JSEXPORT =
+      createMockJavaResource("com.google.gwt.core.client.js.JsExport",
+          "package com.google.gwt.core.client.js;",
+          "public @interface JsExport {\n",
+          "  String value() default \"\";\n",
+          "}");
+  public static final MockJavaResource JSPROPERTY =
+      createMockJavaResource("com.google.gwt.core.client.js.JsProperty",
+          "package com.google.gwt.core.client.js;",
+          "public @interface JsProperty {\n",
+          "  String value() default \"\";\n",
+          "}");
+
   public static MockJavaResource[] getStandardResources() {
     return new MockJavaResource[]{
-        AUTOCLOSEABLE, ANNOTATION, BYTE, BOOLEAN, CHARACTER, CHAR_SEQUENCE, CLASS,
+        AUTOCLOSEABLE, ANNOTATION, ARRAY_LIST, BYTE, BOOLEAN, CHARACTER, CHAR_SEQUENCE, CLASS,
         CLASS_NOT_FOUND_EXCEPTION, COLLECTION, COMPARABLE, DOUBLE, ENUM, EXCEPTION, ERROR, FLOAT,
-        INTEGER, IS_SERIALIZABLE, JAVASCRIPTOBJECT, LONG, MAP, NO_CLASS_DEF_FOUND_ERROR, NUMBER,
-        OBJECT, SERIALIZABLE, SHORT, STRING, STRING_BUILDER, SUPPRESS_WARNINGS, THROWABLE};
+        INTEGER, IS_SERIALIZABLE, JAVASCRIPTOBJECT, LIST, LONG, MAP, NO_CLASS_DEF_FOUND_ERROR, NUMBER,
+        OBJECT, RUNTIME_EXCEPTION, SERIALIZABLE, SHORT, STRING, STRING_BUILDER, SUPPRESS_WARNINGS, THROWABLE,
+        JSINTERFACE, JSINTERFACEPROTOTYPE, JSEXPORT, JSPROPERTY};
   }
 
   /**

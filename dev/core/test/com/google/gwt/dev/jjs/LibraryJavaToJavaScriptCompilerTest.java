@@ -15,11 +15,14 @@ package com.google.gwt.dev.jjs;
 
 import com.google.gwt.core.ext.BadPropertyValueException;
 import com.google.gwt.core.ext.Generator;
+import com.google.gwt.core.ext.Generator.RunsLocal;
 import com.google.gwt.core.ext.GeneratorContext;
 import com.google.gwt.core.ext.TreeLogger;
 import com.google.gwt.core.ext.UnableToCompleteException;
 import com.google.gwt.core.ext.linker.ArtifactSet;
 import com.google.gwt.dev.CompilerContext;
+import com.google.gwt.dev.CompilerOptionsImpl;
+import com.google.gwt.dev.PrecompileTaskOptions;
 import com.google.gwt.dev.cfg.BindingProperty;
 import com.google.gwt.dev.cfg.Condition;
 import com.google.gwt.dev.cfg.ConditionWhenPropertyIs;
@@ -69,12 +72,8 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
    * Test Generator that wants to create a FooShim%user.agent% type for every processed FooShim
    * type.
    */
+  @RunsLocal(requiresProperties = {"user.agent"})
   public static class BrowserShimGenerator extends Generator {
-
-    @Override
-    public boolean contentDependsOnTypes() {
-      return false;
-    }
 
     @Override
     public String generate(TreeLogger logger, GeneratorContext generatorContext,
@@ -92,23 +91,14 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
         throw new UnableToCompleteException();
       }
     }
-
-    @Override
-    public Set<String> getAccessedPropertyNames() {
-      return Sets.newHashSet("user.agent");
-    }
   }
 
   /**
    * Test Generator that wants to create a FooShim%locale% type for every processed FooShim
    * type.
    */
+  @RunsLocal(requiresProperties = {"locale"})
   public static class LocaleMessageGenerator extends Generator {
-
-    @Override
-    public boolean contentDependsOnTypes() {
-      return false;
-    }
 
     @Override
     public String generate(TreeLogger logger, GeneratorContext generatorContext,
@@ -125,11 +115,6 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
       } catch (BadPropertyValueException e) {
         throw new UnableToCompleteException();
       }
-    }
-
-    @Override
-    public Set<String> getAccessedPropertyNames() {
-      return Sets.newHashSet("locale");
     }
   }
 
@@ -185,6 +170,7 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
 
     @Override
     public ArtifactSet finish(TreeLogger logger) throws UnableToCompleteException {
+      dirty = false;
       // Don't actually compile generated source code;
       return new ArtifactSet();
     }
@@ -231,8 +217,8 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
           createInstantiableClassType("com.google.EventShim"));
       private AtomicLongMap<String> runCountByGeneratorName = AtomicLongMap.create();
 
-      public MockLibraryPrecompiler(RebindPermutationOracle rpo) {
-        super(rpo);
+      public MockLibraryPrecompiler(RebindPermutationOracle rpo, String[] entryPointTypeNames) {
+        super(rpo, entryPointTypeNames);
       }
 
       /**
@@ -258,11 +244,11 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
       }
 
       @Override
-      protected boolean runGenerator(RuleGenerateWith generatorRule,
+      protected void runGenerator(RuleGenerateWith generatorRule,
           Set<String> reboundTypeSourceNames) throws UnableToCompleteException {
         processedReboundTypeSourceNames.addAll(reboundTypeSourceNames);
         runCountByGeneratorName.incrementAndGet(generatorRule.getName());
-        return super.runGenerator(generatorRule, reboundTypeSourceNames);
+        super.runGenerator(generatorRule, reboundTypeSourceNames);
       }
     }
 
@@ -275,7 +261,7 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
     }
 
     private MockLibraryPrecompiler createPrecompiler() {
-      return new MockLibraryPrecompiler(null);
+      return new MockLibraryPrecompiler(null, null);
     }
   }
 
@@ -306,7 +292,7 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
     // CanvasElement when a CanvasElement is requested.
     String runtimeRebindRule0 = runtimeRebindRuleSourcesByShortName.get("RuntimeRebindRule0");
     assertTrue(runtimeRebindRule0.contains("@CanvasElement::new()()"));
-    assertTrue(runtimeRebindRule0.contains("requestTypeName.equals(\"CanvasElement\")"));
+    assertTrue(runtimeRebindRule0.contains("requestTypeClass == @CanvasElement::class"));
   }
 
   public void testBuildLocalRuntimeRebindRules() throws UnableToCompleteException {
@@ -335,18 +321,18 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
     // Expects to see the created fallback rule first.
     String runtimeRebindRule0 = runtimeRebindRuleSourcesByShortName.get("RuntimeRebindRule0");
     assertTrue(runtimeRebindRule0.contains("@CanvasElement::new()()"));
-    assertTrue(runtimeRebindRule0.contains("requestTypeName.equals(\"CanvasElement\")"));
+    assertTrue(runtimeRebindRule0.contains("requestTypeClass == @CanvasElement::class"));
 
     // Expects to see the created replace with rule second.
     String runtimeRebindRule1 = runtimeRebindRuleSourcesByShortName.get("RuntimeRebindRule1");
     assertTrue(runtimeRebindRule1.contains("@WebkitCanvasElement::new()()"));
-    assertTrue(runtimeRebindRule1.contains("requestTypeName.equals(\"CanvasElement\")"));
+    assertTrue(runtimeRebindRule1.contains("requestTypeClass == @CanvasElement::class"));
 
     // Expects to see the created fail rule third.
     String runtimeRebindRule2 = runtimeRebindRuleSourcesByShortName.get("RuntimeRebindRule2");
     assertTrue(runtimeRebindRule2.contains("Deferred binding request failed for type"));
     assertTrue(runtimeRebindRule2.contains(
-        "RuntimePropertyRegistry.getPropertyValue(\"foo\").equals(\"bar\")"));
+        "RuntimePropertyRegistry::getPropertyValue(*)(\"foo\") == \"bar\""));
 
     // Now that runtime rebind rules have been generated, create a registrator for them.
     precompiler.buildRuntimeRebindRegistrator(allRootTypes);
@@ -361,7 +347,6 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
 
     String registratorSource = generatorContext.stringWriterByTypeSourceName.get(
         compiler.jprogram.getRuntimeRebindRegistratorTypeSourceName()).toString();
-    System.out.println(registratorSource);
     // The generated registrator contains all of the RuntimeRebindRule class instantiation,
     // and registrations.
     assertTrue(registratorSource.contains(
@@ -378,12 +363,12 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
     Properties properties = new Properties();
     BindingProperty userAgentProperty = properties.createBinding("user.agent");
     userAgentProperty.setProvider(new PropertyProvider("return navigator.userAgent;"));
-    userAgentProperty.addDefinedValue(userAgentProperty.getRootCondition(), "mozilla");
-    userAgentProperty.addDefinedValue(userAgentProperty.getRootCondition(), "webkit");
+    userAgentProperty.addTargetLibraryDefinedValue(userAgentProperty.getRootCondition(), "mozilla");
+    userAgentProperty.addTargetLibraryDefinedValue(userAgentProperty.getRootCondition(), "webkit");
     BindingProperty flavorProperty = properties.createBinding("flavor");
     flavorProperty.setProvider(new PropertyProvider("return window.properties.flavor;"));
-    flavorProperty.addDefinedValue(flavorProperty.getRootCondition(), "Vanilla");
-    flavorProperty.addDefinedValue(flavorProperty.getRootCondition(), "Chocolate");
+    flavorProperty.addTargetLibraryDefinedValue(flavorProperty.getRootCondition(), "Vanilla");
+    flavorProperty.addTargetLibraryDefinedValue(flavorProperty.getRootCondition(), "Chocolate");
     ConfigurationProperty emulateStackProperty =
         properties.createConfiguration("emulateStack", false);
     emulateStackProperty.setValue("TRUE");
@@ -446,12 +431,12 @@ public class LibraryJavaToJavaScriptCompilerTest extends TestCase {
         .getConditions().add(new ConditionWhenTypeEndsWith("Messages"));
     module.addRule(localeMessageGenerateRule);
     LibraryGroup libraryGroup = LibraryGroupTest.buildVariedPropertyGeneratorLibraryGroup(
-        "com.google.gwt.dev.jjs.LibraryJavaToJavaScriptCompilerTest.BrowserShimGenerator",
         Sets.newHashSet("com.google.ChromeMessages"),
-        "com.google.gwt.dev.jjs.LibraryJavaToJavaScriptCompilerTest.LocaleMessageGenerator",
         Sets.newHashSet("com.google.WindowShim"));
+    PrecompileTaskOptions options = new CompilerOptionsImpl();
+    options.setFinalProperties(module.getProperties());
     compilerContext = new CompilerContext.Builder().libraryGroup(libraryGroup)
-        .libraryWriter(libraryWriter).module(module).build();
+        .libraryWriter(libraryWriter).module(module).options(options).build();
     finishSetUpWithCompilerContext();
 
     // Analyzes properties and generators in the library group and watches output in the generator

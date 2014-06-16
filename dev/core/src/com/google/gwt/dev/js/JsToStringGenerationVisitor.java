@@ -856,7 +856,14 @@ public class JsToStringGenerationVisitor extends JsVisitor {
     return false;
   }
 
-  // CHECKSTYLE_NAMING_OFF
+  /**
+   * Adds any unbilled JavaScript to the most recently finished child node (if any).
+   */
+  protected void billChildToHere() {
+  }
+
+// CHECKSTYLE_NAMING_OFF
+
   protected void _newline() {
     p.newline();
   }
@@ -928,6 +935,7 @@ public class JsToStringGenerationVisitor extends JsVisitor {
             _semi();
           }
           _newlineOpt();
+          billChildToHere();
         }
       }
       if (shouldRecordPositions) {
@@ -1176,10 +1184,12 @@ public class JsToStringGenerationVisitor extends JsVisitor {
 
   private void _semi() {
     p.print(';');
+    billChildToHere();
   }
 
   private void _semiOpt() {
     p.printOpt(';');
+    billChildToHere();
   }
 
   private boolean _sepCommaOptSpace(boolean sep) {
@@ -1266,7 +1276,7 @@ public class JsToStringGenerationVisitor extends JsVisitor {
     p.print(CHARS_WHILE);
   }
 
-  // CHECKSTYLE_NAMING_ON
+// CHECKSTYLE_NAMING_ON
 
   private void indent() {
     p.indentIn();
