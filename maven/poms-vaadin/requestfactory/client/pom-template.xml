@@ -18,8 +18,8 @@
 	    <artifactId>validation-api</artifactId>
 	</dependency>
 	<dependency>
-	    <groupId>com.vaadin.external.google</groupId>
-	    <artifactId>android-json</artifactId>
+	    <groupId>com.vaadin.external.json</groupId>
+	    <artifactId>json</artifactId>
 	</dependency>
     </dependencies>
 </project>
