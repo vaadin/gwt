@@ -40,7 +40,7 @@ public class UserAgentPropertyGenerator implements PropertyProviderGenerator {
    */
   private enum UserAgent {
     opera("return (ua.indexOf('opera') != -1);"),
-    safari("return (ua.indexOf('webkit') != -1);"),
+    safari("return (ua.indexOf('webkit') != -1 && ua.indexOf('trident') == -1);"),
     ie10("return (ua.indexOf('msie') != -1 && ($doc.documentMode == 10));"),
     ie9("return (ua.indexOf('msie') != -1 && ($doc.documentMode >= 9));"),
     ie8("return (ua.indexOf('msie') != -1 && ($doc.documentMode >= 8));"),
