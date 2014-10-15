@@ -80,7 +80,7 @@ public class TypeRefDepsCheckerTest extends TestCase {
         + "'FromModule3' has no dependency (neither direct nor transitive) on "
         + "'ToModule1|ToModule2|ToModule3'.", null);
     UnitTestTreeLogger logger = builder.createLogger();
-    File missingDepsFile = java.nio.file.Files.createTempFile("missingDepsFile", "txt").toFile();
+    File missingDepsFile = java.io.File.createTempFile("missingDepsFile", "txt");
     MockDepsInfoProvider depsInfo = new MockDepsInfoProvider();
     depsInfo.addModuleDep("FooModule", "FromModule1");
     depsInfo.addModuleDep("FooModule", "FromModule2");
@@ -156,7 +156,7 @@ public class TypeRefDepsCheckerTest extends TestCase {
         "Type 'BangType' wants to reference type 'ZingType' but can't because module "
         + "'BarModule' has no dependency (neither direct nor transitive) on 'BazModule'.", null);
     UnitTestTreeLogger logger = builder.createLogger();
-    File missingDepsFile = java.nio.file.Files.createTempFile("missingDepsFile", "txt").toFile();
+    File missingDepsFile = java.io.File.createTempFile("missingDepsFile", "txt");
     MockDepsInfoProvider depsInfo = new MockDepsInfoProvider();
     // Notice that BarModule can not see BazModule.
     depsInfo.addModuleDep("FooModule", "BarModule");
