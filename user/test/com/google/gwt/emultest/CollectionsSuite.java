@@ -29,7 +29,6 @@ import com.google.gwt.emultest.java.util.IdentityHashMapTest;
 import com.google.gwt.emultest.java.util.LinkedHashMapTest;
 import com.google.gwt.emultest.java.util.LinkedHashSetTest;
 import com.google.gwt.emultest.java.util.LinkedListTest;
-import com.google.gwt.emultest.java.util.ObjectsTest;
 import com.google.gwt.emultest.java.util.PriorityQueueTest;
 import com.google.gwt.emultest.java.util.RandomTest;
 import com.google.gwt.emultest.java.util.StackTest;
@@ -61,7 +60,7 @@ public class CollectionsSuite {
     suite.addTestSuite(LinkedHashMapTest.class);
     suite.addTestSuite(LinkedHashSetTest.class);
     suite.addTestSuite(LinkedListTest.class);
-    suite.addTestSuite(ObjectsTest.class);
+//    suite.addTestSuite(ObjectsTest.class);
     suite.addTestSuite(PriorityQueueTest.class);
     suite.addTestSuite(RandomTest.class);
     suite.addTestSuite(StackTest.class);
