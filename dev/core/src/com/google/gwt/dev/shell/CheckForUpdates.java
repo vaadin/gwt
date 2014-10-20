@@ -111,7 +111,7 @@ public class CheckForUpdates {
   // "http://localhost/gwt/currentversion.xml";
 
   // The real URL that should be used.
-  private static final String QUERY_URL = "http://tools.google.com/webtoolkit/currentversion.xml";
+  private static final String QUERY_URL = "http://tools.vaadin.com/version/currentversion.xml";
 
   public static FutureTask<UpdateResult> checkForUpdatesInBackgroundThread(
       final TreeLogger logger, final long minCheckMillis) {
