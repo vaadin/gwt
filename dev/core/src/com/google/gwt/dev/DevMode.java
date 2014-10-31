@@ -37,6 +37,7 @@ import com.google.gwt.dev.util.arg.ArgHandlerDisableUpdateCheck;
 import com.google.gwt.dev.util.arg.ArgHandlerExtraDir;
 import com.google.gwt.dev.util.arg.ArgHandlerIncrementalCompile;
 import com.google.gwt.dev.util.arg.ArgHandlerJsInteropMode;
+import com.google.gwt.dev.util.arg.ArgHandlerMethodNameDisplayMode;
 import com.google.gwt.dev.util.arg.ArgHandlerModuleName;
 import com.google.gwt.dev.util.arg.ArgHandlerModulePathPrefix;
 import com.google.gwt.dev.util.arg.ArgHandlerSourceLevel;
@@ -242,6 +243,7 @@ public class DevMode extends DevModeBase implements RestartServerCallback {
       registerHandler(new ArgHandlerModulePathPrefix(options));
       registerHandler(new ArgHandlerWorkDirOptional(options));
       registerHandler(new ArgHandlerDisableUpdateCheck(options));
+      registerHandler(new ArgHandlerMethodNameDisplayMode(options));
       registerHandler(new ArgHandlerSourceLevel(options));
       registerHandler(new ArgHandlerJsInteropMode(options));
       registerHandler(new ArgHandlerIncrementalCompile(options));

@@ -29,6 +29,7 @@ import com.google.gwt.dev.util.arg.OptionIncrementalCompile;
 import com.google.gwt.dev.util.arg.OptionInlineLiteralParameters;
 import com.google.gwt.dev.util.arg.OptionJsInteropMode;
 import com.google.gwt.dev.util.arg.OptionJsonSoycEnabled;
+import com.google.gwt.dev.util.arg.OptionMethodNameDisplayMode;
 import com.google.gwt.dev.util.arg.OptionNamespace;
 import com.google.gwt.dev.util.arg.OptionOptimize;
 import com.google.gwt.dev.util.arg.OptionOptimizeDataflow;
@@ -58,5 +59,5 @@ public interface JJSOptions extends OptionOptimize, OptionAggressivelyOptimize,
     OptionStrictPublicResources, OptionSoycHtmlDisabled, OptionEnableClosureCompiler,
     OptionFragmentsMerge, OptionFragmentCount, OptionSourceLevel, OptionNamespace,
     OptionCheckedMode, OptionJsInteropMode, OptionUseDetailedTypeIds,
-    OptionAllowJDTConstantInlining {
+    OptionAllowJDTConstantInlining, OptionMethodNameDisplayMode {
 }

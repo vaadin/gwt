@@ -16,7 +16,8 @@
 package com.google.gwt.dev.jjs;
 
 import com.google.gwt.dev.js.JsNamespaceOption;
-import com.google.gwt.dev.util.arg.JsInteropMode;
+import com.google.gwt.dev.util.arg.OptionJsInteropMode;
+import com.google.gwt.dev.util.arg.OptionMethodNameDisplayMode;
 import com.google.gwt.dev.util.arg.OptionOptimize;
 import com.google.gwt.dev.util.arg.SourceLevel;
 
@@ -55,8 +56,10 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   private boolean strict = false;
   private boolean strictSourceResources = false;
   private boolean strictPublicResources = false;
-  private JsInteropMode jsInteropMode = JsInteropMode.NONE;
+  private OptionJsInteropMode.Mode jsInteropMode = OptionJsInteropMode.Mode.NONE;
   private boolean useDetailedTypeIds = false;
+  private OptionMethodNameDisplayMode.Mode methodNameDisplayMode =
+      OptionMethodNameDisplayMode.Mode.NONE;
 
   public JJSOptionsImpl() {
   }
@@ -95,6 +98,7 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
     setNamespace(other.getNamespace());
     setJsInteropMode(other.getJsInteropMode());
     setUseDetailedTypeIds(other.useDetailedTypeIds());
+    setMethodNameDisplayMode(other.getMethodNameDisplayMode());
   }
 
   @Override
@@ -117,6 +121,10 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
     return fragmentsMerge;
   }
 
+  @Override
+  public com.google.gwt.dev.util.arg.OptionMethodNameDisplayMode.Mode getMethodNameDisplayMode() {
+    return methodNameDisplayMode;
+  }
   @Override
   public JsNamespaceOption getNamespace() {
     return namespace;
@@ -284,6 +292,12 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   }
 
   @Override
+  public void setMethodNameDisplayMode(
+      com.google.gwt.dev.util.arg.OptionMethodNameDisplayMode.Mode methodNameDisplayMode) {
+    this.methodNameDisplayMode = methodNameDisplayMode;
+  }
+
+  @Override
   public void setNamespace(JsNamespaceOption newValue) {
     namespace = newValue;
   }
@@ -394,12 +408,12 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   }
 
   @Override
-  public JsInteropMode getJsInteropMode() {
+  public OptionJsInteropMode.Mode getJsInteropMode() {
     return jsInteropMode;
   }
 
   @Override
-  public void setJsInteropMode(JsInteropMode mode) {
+  public void setJsInteropMode(OptionJsInteropMode.Mode mode) {
     jsInteropMode = mode;
   }
 
@@ -407,5 +421,4 @@ public class JJSOptionsImpl implements JJSOptions, Serializable {
   public boolean useDetailedTypeIds() {
     return useDetailedTypeIds;
   }
-
 }

@@ -20,7 +20,8 @@ import com.google.gwt.dev.jjs.JJSOptions;
 import com.google.gwt.dev.jjs.JJSOptionsImpl;
 import com.google.gwt.dev.jjs.JsOutputOption;
 import com.google.gwt.dev.js.JsNamespaceOption;
-import com.google.gwt.dev.util.arg.JsInteropMode;
+import com.google.gwt.dev.util.arg.OptionJsInteropMode;
+import com.google.gwt.dev.util.arg.OptionMethodNameDisplayMode;
 import com.google.gwt.dev.util.arg.SourceLevel;
 
 import java.io.File;
@@ -106,6 +107,11 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   @Override
   public int getMaxPermsPerPrecompile() {
     return maxPermsPerPrecompile;
+  }
+
+  @Override
+  public OptionMethodNameDisplayMode.Mode getMethodNameDisplayMode() {
+    return jjsOptions.getMethodNameDisplayMode();
   }
 
   @Override
@@ -321,6 +327,11 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
   }
 
   @Override
+  public void setMethodNameDisplayMode(OptionMethodNameDisplayMode.Mode methodNameDisplayMode) {
+    jjsOptions.setMethodNameDisplayMode(methodNameDisplayMode);
+  }
+
+  @Override
   public void setMissingDepsFile(File missingDepsFile) {
     this.missingDepsFile = missingDepsFile;
   }
@@ -479,11 +490,11 @@ public class PrecompileTaskOptionsImpl extends CompileTaskOptionsImpl
     return warnMissingDeps;
   }
 
-  @Override public JsInteropMode getJsInteropMode() {
+  @Override public OptionJsInteropMode.Mode getJsInteropMode() {
     return jjsOptions.getJsInteropMode();
   }
 
-  @Override public void setJsInteropMode(JsInteropMode mode) {
+  @Override public void setJsInteropMode(OptionJsInteropMode.Mode mode) {
     jjsOptions.setJsInteropMode(mode);
   }
 }

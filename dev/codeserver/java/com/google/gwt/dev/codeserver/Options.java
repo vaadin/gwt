@@ -22,11 +22,12 @@ import com.google.gwt.dev.cfg.ModuleDef;
 import com.google.gwt.dev.util.arg.ArgHandlerIncrementalCompile;
 import com.google.gwt.dev.util.arg.ArgHandlerJsInteropMode;
 import com.google.gwt.dev.util.arg.ArgHandlerLogLevel;
+import com.google.gwt.dev.util.arg.ArgHandlerMethodNameDisplayMode;
 import com.google.gwt.dev.util.arg.ArgHandlerSourceLevel;
-import com.google.gwt.dev.util.arg.JsInteropMode;
 import com.google.gwt.dev.util.arg.OptionIncrementalCompile;
 import com.google.gwt.dev.util.arg.OptionJsInteropMode;
 import com.google.gwt.dev.util.arg.OptionLogLevel;
+import com.google.gwt.dev.util.arg.OptionMethodNameDisplayMode;
 import com.google.gwt.dev.util.arg.OptionSourceLevel;
 import com.google.gwt.dev.util.arg.SourceLevel;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableList;
@@ -77,7 +78,9 @@ public class Options {
   private boolean failOnError = false;
   private boolean strictResources = false;
   private int compileTestRecompiles = 0;
-  private JsInteropMode jsInteropMode = JsInteropMode.NONE;
+  private OptionJsInteropMode.Mode jsInteropMode = OptionJsInteropMode.Mode.NONE;
+  private OptionMethodNameDisplayMode.Mode methodNameDisplayMode =
+      OptionMethodNameDisplayMode.Mode.NONE;
 
   /**
    * Sets each option to the appropriate value, based on command-line arguments.
@@ -292,7 +295,7 @@ public class Options {
     return failOnError;
   }
 
-  JsInteropMode getJsInteropMode() {
+  OptionJsInteropMode.Mode getJsInteropMode() {
     return jsInteropMode;
   }
 
@@ -346,14 +349,26 @@ public class Options {
       }));
       registerHandler(new ArgHandlerJsInteropMode(new OptionJsInteropMode() {
         @Override
-        public JsInteropMode getJsInteropMode() {
+        public OptionJsInteropMode.Mode getJsInteropMode() {
           return Options.this.jsInteropMode;
         }
 
         @Override
-        public void setJsInteropMode(JsInteropMode mode) {
+        public void setJsInteropMode(OptionJsInteropMode.Mode mode) {
           Options.this.jsInteropMode = mode;
         }}));
+      registerHandler(new ArgHandlerMethodNameDisplayMode(new OptionMethodNameDisplayMode() {
+        @Override
+        public OptionMethodNameDisplayMode.Mode getMethodNameDisplayMode() {
+          return Options.this.methodNameDisplayMode;
+        }
+
+        @Override
+        public void setMethodNameDisplayMode(Mode mode) {
+          Options.this.methodNameDisplayMode = mode;
+        }
+      }) {
+      });
     }
 
     @Override
@@ -699,5 +714,9 @@ public class Options {
       moduleNames.add(arg);
       return true;
     }
+  }
+
+  public OptionMethodNameDisplayMode.Mode getMethodNameDisplayMode() {
+    return methodNameDisplayMode;
   }
 }
