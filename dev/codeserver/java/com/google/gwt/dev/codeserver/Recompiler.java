@@ -46,14 +46,12 @@ import com.google.gwt.thirdparty.guava.common.base.Joiner;
 import com.google.gwt.thirdparty.guava.common.base.Objects;
 import com.google.gwt.thirdparty.guava.common.collect.ImmutableMap;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
-import com.google.gwt.thirdparty.guava.common.collect.Sets;
 import com.google.gwt.thirdparty.guava.common.io.Files;
 import com.google.gwt.thirdparty.guava.common.io.Resources;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -158,13 +156,16 @@ class Recompiler {
     int compileId = ++compilesDone;
     CompileDir compileDir = outboxDir.makeCompileDir(job.getLogger());
     TreeLogger compileLogger = makeCompileLogger(compileDir, job.getLogger());
-
-    job.onStarted(compileId, compileDir);
-
-    boolean success = doCompile(compileLogger, compileDir, job);
-    if (!success) {
-      compileLogger.log(TreeLogger.Type.ERROR, "Compiler returned false");
-      throw new UnableToCompleteException();
+    try {
+      job.onStarted(compileId, compileDir);
+      boolean success = doCompile(compileLogger, compileDir, job);
+      if (!success) {
+        compileLogger.log(TreeLogger.Type.ERROR, "Compiler returned false");
+        throw new UnableToCompleteException();
+      }
+    } finally {
+      // Make the error log available no matter what happens
+      lastBuild.set(compileDir);
     }
 
     long elapsedTime = System.currentTimeMillis() - startTime;
@@ -184,26 +185,30 @@ class Recompiler {
     long startTime = System.currentTimeMillis();
     CompileDir compileDir = outboxDir.makeCompileDir(logger);
     TreeLogger compileLogger = makeCompileLogger(compileDir, logger);
+    ModuleDef module;
+    try {
+      module = loadModule(compileLogger);
 
-    ModuleDef module = loadModule(Sets.<String>newHashSet(), compileLogger);
+      logger.log(TreeLogger.INFO, "Loading Java files in " + inputModuleName + ".");
+      CompilerOptions loadOptions = new CompilerOptionsImpl(compileDir, inputModuleName, options);
+      compilerContext = compilerContextBuilder.options(loadOptions).unitCache(
+          Compiler.getOrCreateUnitCache(logger, loadOptions)).build();
 
-    logger.log(TreeLogger.INFO, "Loading Java files in " + inputModuleName + ".");
-    CompilerOptions loadOptions = new CompilerOptionsImpl(compileDir, inputModuleName, options);
-    compilerContext = compilerContextBuilder.options(loadOptions).unitCache(
-        Compiler.getOrCreateUnitCache(logger, loadOptions)).build();
+      // Loads and parses all the Java files in the GWT application using the JDT.
+      // (This is warmup to make compiling faster later; we stop at this point to avoid
+      // needing to know the binding properties.)
+      module.getCompilationState(compileLogger, compilerContext);
 
-    // Loads and parses all the Java files in the GWT application using the JDT.
-    // (This is warmup to make compiling faster later; we stop at this point to avoid
-    // needing to know the binding properties.)
-    module.getCompilationState(compileLogger, compilerContext);
+      setUpCompileDir(compileDir, module, compileLogger);
+      if (launcherDir != null) {
+        launcherDir.update(module, compileDir, compileLogger);
+      }
 
-    setUpCompileDir(compileDir, module, compileLogger);
-    if (launcherDir != null) {
-      launcherDir.update(module, compileDir, compileLogger);
+      outputModuleName.set(module.getName());
+    } finally {
+      // Make the compile log available no matter what happens.
+      lastBuild.set(compileDir);
     }
-
-    outputModuleName.set(module.getName());
-    lastBuild.set(compileDir);
 
     long elapsedTime = System.currentTimeMillis() - startTime;
     compileLogger.log(TreeLogger.Type.INFO, "Module setup completed in " + elapsedTime + " ms");
@@ -270,10 +275,14 @@ class Recompiler {
       return templateJs;
 
     } catch (IOException e) {
-      compileLogger.log(Type.ERROR, "Can not generate + " + outputModuleName
-          + " + .recompile.nocache.js", e);
+      compileLogger.log(Type.ERROR, "Can not generate + " + outputModuleName + " recompile js", e);
       throw new UnableToCompleteException();
     }
+  }
+
+  synchronized String getRecompileJs(TreeLogger logger) throws UnableToCompleteException {
+    ModuleDef loadModule = loadModule(logger);
+    return generateModuleRecompileJs(loadModule, logger);
   }
 
   private boolean doCompile(TreeLogger compileLogger, CompileDir compileDir, Job job)
@@ -284,7 +293,7 @@ class Recompiler {
     CompilerOptions loadOptions = new CompilerOptionsImpl(compileDir, inputModuleName, options);
     compilerContext = compilerContextBuilder.options(loadOptions).build();
 
-    ModuleDef module = loadModule(job.getBindingProperties().keySet(), compileLogger);
+    ModuleDef module = loadModule(compileLogger);
 
     // We need to generate the stub before restricting permutations
     String recompileJs = generateModuleRecompileJs(module, compileLogger);
@@ -303,7 +312,8 @@ class Recompiler {
       job.setCompileStrategy(CompileStrategy.SKIPPED);
       return true;
     }
-
+    // Force a recompile if we don't succeed.
+    lastBuildInput = null;
 
     job.onProgress("Compiling");
     // TODO: use speed tracer to get more compiler events?
@@ -332,11 +342,7 @@ class Recompiler {
       if (launcherDir != null) {
         launcherDir.update(module, compileDir, compileLogger);
       }
-    } else {
-      // always recompile after an error
-      lastBuildInput = null;
     }
-    lastBuild.set(compileDir); // makes compile log available over HTTP
 
     return success;
   }
@@ -418,7 +424,7 @@ class Recompiler {
   /**
    * Loads the module and configures it for SuperDevMode. (Does not restrict permutations.)
    */
-  private ModuleDef loadModule(Set<String> propertyNames, TreeLogger logger) throws UnableToCompleteException {
+  private ModuleDef loadModule(TreeLogger logger) throws UnableToCompleteException {
 
     // make sure we get the latest version of any modified jar
     ZipFileClassPathEntry.clearCache();
@@ -432,6 +438,12 @@ class Recompiler {
     ModuleDef moduleDef = ModuleDefLoader.loadFromResources(
         logger, compilerContext, inputModuleName, resources, true);
     compilerContext = compilerContextBuilder.module(moduleDef).build();
+
+    // Undo all permutation restriction customizations from previous compiles.
+    for (BindingProperty bindingProperty : moduleDef.getProperties().getBindingProperties()) {
+      String[] allowedValues = bindingProperty.getAllowedValues(bindingProperty.getRootCondition());
+      bindingProperty.setRootGeneratedValues(allowedValues);
+    }
 
     // A snapshot of the module's configuration before we modified it.
     ConfigProps config = new ConfigProps(moduleDef);
@@ -504,11 +516,6 @@ class Recompiler {
     overrideBinding(moduleDef, "compiler.useSymbolMaps", "false");
     overrideBinding(moduleDef, "superdevmode", "on");
 
-    // Unrestrict permutations so we can properly generate property providers
-    for (String propertyName : propertyNames) {
-      BindingProperty bindingProp = moduleDef.getProperties().findBindingProp(propertyName);
-      bindingProp.setRootGeneratedValues(bindingProp.getDefinedValues());
-    }
     return moduleDef;
   }
 
