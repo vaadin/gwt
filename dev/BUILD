@@ -216,8 +216,10 @@ java_library(
         exclude = [
             "core/super/com/google/gwt/dev/jjs/intrinsic/**",
             "**/package-info.java",
+            "**/EmulatedCharset.java",
         ],
     ),
+    compatible_with = ["//buildenv/target:android"],
     constraints = ["android"],
 )
 
@@ -247,6 +249,7 @@ java_library(
         "core/super/com/google/gwt/core/client/GwtScriptOnly.java",
         "core/super/com/google/gwt/core/client/UnsafeNativeLong.java",
     ],
+    compatible_with = ["//buildenv/target:android"],
     constraints = [
         "android",
     ],
@@ -260,6 +263,7 @@ java_library(
         "core/super/javaemul/internal/annotations/CompilerHint.java",
         "core/super/javaemul/internal/annotations/DoNotInline.java",
     ],
+    compatible_with = ["//buildenv/target:android"],
     constraints = [
         "android",
     ],

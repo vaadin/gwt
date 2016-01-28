@@ -30,6 +30,7 @@ import com.google.gwt.dev.jjs.ast.JDeclaredType;
 import com.google.gwt.dev.jjs.ast.JExpression;
 import com.google.gwt.dev.jjs.ast.JField;
 import com.google.gwt.dev.jjs.ast.JFieldRef;
+import com.google.gwt.dev.jjs.ast.JInstanceOf;
 import com.google.gwt.dev.jjs.ast.JInterfaceType;
 import com.google.gwt.dev.jjs.ast.JLocal;
 import com.google.gwt.dev.jjs.ast.JLocalRef;
@@ -161,37 +162,37 @@ public class ControlFlowAnalyzer {
       if ((x.getOp() == JBinaryOperator.CONCAT || x.getOp() == JBinaryOperator.ASG_CONCAT)) {
         rescueByConcat(x.getLhs().getType());
         rescueByConcat(x.getRhs().getType());
-      } else if (x.getOp() == JBinaryOperator.ASG) {
-        // Don't rescue variables that are merely assigned to and never read
-        boolean doSkip = false;
-        JExpression lhs = x.getLhs();
-        if (lhs.hasSideEffects() || isVolatileField(lhs)) {
-          /*
-           * If the lhs has side effects, skipping it would lose the side
-           * effect. If the lhs is volatile, also keep it. This behavior
-           * provides a useful idiom for test cases to prevent code from being
-           * pruned.
-           */
-        } else if (lhs instanceof JLocalRef) {
-          // locals are ok to skip
-          doSkip = true;
-        } else if (lhs instanceof JParameterRef) {
-          // parameters are ok to skip
-          doSkip = true;
-        } else if (lhs instanceof JFieldRef) {
-          // fields must rescue the qualifier
-          doSkip = true;
-          JFieldRef fieldRef = (JFieldRef) lhs;
-          JExpression instance = fieldRef.getInstance();
-          if (instance != null) {
-            accept(instance);
-          }
+      }
+
+      JExpression lhs = x.getLhs();
+      if (x.getOp() != JBinaryOperator.ASG || lhs.hasSideEffects() || isVolatileField(lhs)) {
+        // Continue the normal visitor process for lhs and rhs.
+        return true;
+      }
+
+      // Assignments where the lhs does not have side effects (save for volatile fields) are special
+      // treated here. The idea is to not consider live a field/local/parameter that is only
+      // written to.
+      if (lhs instanceof JLocalRef || lhs instanceof JParameterRef) {
+        // if the lhs is a local or parameter, do not consider it live just because it is being
+        // written to.
+        accept(x.getRhs());
+        return false;
+      } else if (lhs instanceof JFieldRef) {
+        JFieldRef fieldRef = (JFieldRef) lhs;
+        JField field = fieldRef.getField();
+        if (field.canBeImplementedExternally()) {
+          // Proceed normally to consider native fields live even if they are only written to.
+          return true;
         }
 
-        if (doSkip) {
-          accept(x.getRhs());
-          return false;
+        // Fields that are only written to still need to process their qualifier.
+        JExpression instance = fieldRef.getInstance();
+        if (instance != null) {
+          accept(instance);
         }
+        accept(x.getRhs());
+        return false;
       }
       return true;
     }
@@ -200,6 +201,10 @@ public class ControlFlowAnalyzer {
     public boolean visit(JCastOperation x, Context ctx) {
       // Rescue any JavaScriptObject type that is the target of a cast.
       JType targetType = x.getCastType();
+
+      // Casts to native classes use the native constructor qualified name.
+      maybeRescueNativeConstructor(targetType);
+
       if (!canBeInstantiatedInJavaScript(targetType)) {
         return true;
       }
@@ -305,6 +310,13 @@ public class ControlFlowAnalyzer {
           membersToRescueIfTypeIsInstantiated.add(target);
         }
       }
+      return true;
+    }
+
+    @Override
+    public boolean visit(JInstanceOf expression, Context ctx) {
+      // Instanceof checks for native classes use the native constructor qualified name.
+      maybeRescueNativeConstructor(expression.getTestType());
       return true;
     }
 
@@ -621,6 +633,11 @@ public class ControlFlowAnalyzer {
             // Parameters in JsExport, JsType, JsFunction methods should not be pruned in order to
             // keep the API intact.
             rescue(param);
+            if (param.isVarargs()) {
+              assert method.isJsMethodVarargs();
+              // Rescue the (array) type of varargs parameters as the array creation is implicit.
+              rescue((JReferenceType) param.getType(), true);
+            }
           }
         }
         rescueOverridingMethods(method);
@@ -744,6 +761,13 @@ public class ControlFlowAnalyzer {
         for (JExpression arg : list) {
           this.accept(arg);
         }
+      }
+    }
+
+    private void maybeRescueNativeConstructor(JType type) {
+      JConstructor jsConstructor = JjsUtils.getJsNativeConstructorOrNull(type);
+      if (jsConstructor != null) {
+        rescue(jsConstructor);
       }
     }
 

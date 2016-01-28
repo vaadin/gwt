@@ -15,12 +15,17 @@
  */
 package com.google.gwt.core;
 
-import com.google.gwt.core.client.interop.JsFunctionTest;
-import com.google.gwt.core.client.interop.JsMethodTest;
-import com.google.gwt.core.client.interop.JsPropertyTest;
-import com.google.gwt.core.client.interop.JsTypeArrayTest;
-import com.google.gwt.core.client.interop.JsTypeBridgeTest;
-import com.google.gwt.core.client.interop.JsTypeTest;
+import com.google.gwt.core.interop.JsExportOptimizationTest;
+import com.google.gwt.core.interop.JsExportTest;
+import com.google.gwt.core.interop.JsFunctionTest;
+import com.google.gwt.core.interop.JsMethodTest;
+import com.google.gwt.core.interop.JsPropertyTest;
+import com.google.gwt.core.interop.JsTypeArrayTest;
+import com.google.gwt.core.interop.JsTypeBridgeTest;
+import com.google.gwt.core.interop.JsTypeSpecialTypesTest;
+import com.google.gwt.core.interop.JsTypeTest;
+import com.google.gwt.core.interop.JsTypeVarargsTest;
+import com.google.gwt.core.interop.NativeJsTypeTest;
 
 import junit.framework.Test;
 import junit.framework.TestSuite;
@@ -32,12 +37,17 @@ public class CoreJsInteropSuite {
   public static Test suite() {
     TestSuite suite = new TestSuite("All core js interop tests");
 
+    suite.addTestSuite(JsExportTest.class);
+    suite.addTestSuite(JsExportOptimizationTest.class);
     suite.addTestSuite(JsTypeTest.class);
     suite.addTestSuite(JsTypeBridgeTest.class);
+    suite.addTestSuite(JsTypeSpecialTypesTest.class);
     suite.addTestSuite(JsPropertyTest.class);
     suite.addTestSuite(JsMethodTest.class);
     suite.addTestSuite(JsTypeArrayTest.class);
     suite.addTestSuite(JsFunctionTest.class);
+    suite.addTestSuite(JsTypeVarargsTest.class);
+    suite.addTestSuite(NativeJsTypeTest.class);
 
     return suite;
   }

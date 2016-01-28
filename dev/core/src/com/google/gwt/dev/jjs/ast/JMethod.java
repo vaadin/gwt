@@ -24,6 +24,7 @@ import com.google.gwt.dev.jjs.ast.js.JsniMethodBody;
 import com.google.gwt.dev.jjs.impl.JjsUtils;
 import com.google.gwt.dev.util.StringInterner;
 import com.google.gwt.dev.util.collect.Lists;
+import com.google.gwt.thirdparty.guava.common.collect.Iterables;
 import com.google.gwt.thirdparty.guava.common.collect.Sets;
 
 import java.io.IOException;
@@ -71,29 +72,85 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
 
   @Override
   public boolean isJsInteropEntryPoint() {
-    return exported && !needsDynamicDispatch() && !isJsNative();
+    return exported && !needsDynamicDispatch() && !isJsNative() && !isJsOverlay();
   }
 
   @Override
   public boolean canBeReferencedExternally() {
-    if (getJsMemberType() != JsMemberType.NONE) {
-      return true;
+    if (isJsOverlay() || (!needsDynamicDispatch() && isJsNative()))  {
+      // JsOverlays, native constructors and native static methods can not be referenced
+      // externally
+      return false;
     }
-
-    if (isJsFunctionMethod()) {
-      return true;
-    }
-
-    for (JMethod overriddenMethod : getOverriddenMethods()) {
-      if (overriddenMethod.isJsFunctionMethod()) {
+    for (JMethod method : getOverriddenMethodsIncludingSelf()) {
+      if (method.exported || method.isJsFunctionMethod()) {
         return true;
       }
     }
     return false;
   }
 
+  @Override
   public boolean canBeImplementedExternally() {
     return isJsNative() || isJsFunctionMethod() || isJsInterfaceMethod();
+  }
+
+  /**
+   * Adds a new final parameter to this method.
+   */
+  public JParameter createFinalParameter(SourceInfo info, String name, JType type) {
+    return createParameter(info, name, type, true, false, false);
+  }
+
+  /**
+   * Adds a new parameter to this method.
+   */
+  public JParameter createParameter(SourceInfo info, String name, JType type) {
+    return createParameter(info, name, type, false, false, false);
+  }
+
+  /**
+   * Adds a new parameter to this method.
+   */
+  public JParameter createParameter(SourceInfo info, String name, JType type, boolean isFinal,
+      boolean isVarargs) {
+    return createParameter(info, name, type, isFinal, isVarargs, false);
+  }
+
+  /**
+   * Adds a new parameter to this method that is a copy of {@code from}.
+   */
+  public JParameter cloneParameter(JParameter from) {
+    return createParameter(from.getSourceInfo(), from.getName(), from.getType(), from.isFinal(),
+        from.isVarargs(), from.isThis());
+  }
+
+  /**
+   * Creates a parameter to hold the value of this in devirtualized methods.
+   */
+  public JParameter createThisParameter(SourceInfo info, JType type) {
+    return createParameter(info,  "this$static", type, true, false, true);
+  }
+
+  private JParameter createParameter(SourceInfo info, String name, JType type,
+      boolean isFinal, boolean isVarargs, boolean isThis) {
+    assert (name != null);
+    assert (type != null);
+
+    JParameter parameter = new JParameter(info, name, type, isFinal, isVarargs, isThis);
+    addParameter(parameter);
+    return parameter;
+  }
+
+  /**
+   * Adds a parameter to this method.
+   */
+  private void addParameter(JParameter x) {
+    // Local types can capture local variables and sandwich the parameters of constructors between
+    // the outer reference and the local captures.
+    assert params.isEmpty() || !params.get(params.size() - 1).isVarargs()
+        || getEnclosingType().getClassDisposition().isLocalType();
+    params = Lists.add(params, x);
   }
 
   private boolean isJsInterfaceMethod() {
@@ -118,7 +175,7 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
     if (jsName.isEmpty()) {
       assert !needsDynamicDispatch();
       return namespace;
-    } else if (namespace.isEmpty()) {
+    } else if (JsInteropUtil.isGlobal(namespace)) {
       assert !needsDynamicDispatch();
       return jsName;
     } else {
@@ -128,18 +185,12 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
 
   @Override
   public String getJsName() {
-    String jsMemberName = jsName;
-    for (JMethod override : getOverriddenMethods()) {
-      String jsMemberOverrideName = override.jsName;
-      if (jsMemberOverrideName == null) {
-        continue;
+    for (JMethod method : getOverriddenMethodsIncludingSelf()) {
+      if (method.jsName != null) {
+        return method.jsName;
       }
-      if (jsMemberName != null && !jsMemberName.equals(jsMemberOverrideName)) {
-        return JsInteropUtil.INVALID_JSNAME;
-      }
-      jsMemberName = jsMemberOverrideName;
     }
-    return jsMemberName;
+    return null;
   }
 
   public boolean isJsConstructor() {
@@ -170,27 +221,21 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
 
   @Override
   public JsMemberType getJsMemberType() {
-    if (jsMemberType != JsMemberType.NONE) {
-      return jsMemberType;
-    }
-    for (JMethod overriddenMethod : getOverriddenMethods()) {
-      if (overriddenMethod.jsMemberType != JsMemberType.NONE) {
-        return overriddenMethod.jsMemberType;
+    for (JMethod method : getOverriddenMethodsIncludingSelf()) {
+      if (method.jsMemberType != JsMemberType.NONE) {
+        return method.jsMemberType;
       }
     }
     return JsMemberType.NONE;
   }
 
   private boolean isJsFunctionMethod() {
-    return enclosingType != null && enclosingType.isJsFunction();
+    return enclosingType.isJsFunction();
   }
 
   public boolean isOrOverridesJsFunctionMethod() {
-    if (isJsFunctionMethod()) {
-      return true;
-    }
-    for (JMethod overriddenMethod : getOverriddenMethods()) {
-      if (overriddenMethod.isJsFunctionMethod()) {
+    for (JMethod method : getOverriddenMethodsIncludingSelf()) {
+      if (method.isJsFunctionMethod()) {
         return true;
       }
     }
@@ -204,7 +249,9 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
 
   @Override
   public boolean isJsOverlay() {
-    return isJsOverlay || (getEnclosingType() != null && getEnclosingType().isJsoType());
+    return isJsOverlay
+        || getEnclosingType().isJsoType()
+        || getEnclosingType().isJsNative() && JProgram.isClinit(this);
   }
 
   public void setSyntheticAccidentalOverride() {
@@ -269,6 +316,14 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
     this.preventDevirtualization = true;
   }
 
+  public boolean isJsMethodVarargs() {
+    if (getParams().isEmpty() || !(canBeReferencedExternally() || canBeImplementedExternally())) {
+      return false;
+    }
+
+    JParameter lastParameter = Iterables.getLast(getParams());
+    return lastParameter.isVarargs();
+  }
   /**
    * AST representation of @SpecializeMethod.
    */
@@ -330,8 +385,9 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
     }
   }
 
-  public static final JMethod NULL_METHOD = new JMethod(SourceOrigin.UNKNOWN, "nullMethod", null,
-      JReferenceType.NULL_TYPE, false, false, true, AccessModifier.PUBLIC);
+  public static final JMethod NULL_METHOD = new JMethod(SourceOrigin.UNKNOWN, "nullMethod",
+      JClassType.NULL_CLASS, JReferenceType.NULL_TYPE, false, false, true,
+      AccessModifier.PUBLIC);
 
   static {
     NULL_METHOD.setSynthetic();
@@ -429,12 +485,6 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
     assert overridingMethod != this : this + " cannot override itself";
     overridingMethods.add(overridingMethod);
   }
-  /**
-   * Adds a parameter to this method.
-   */
-  public void addParam(JParameter x) {
-    params = Lists.add(params, x);
-  }
 
   public void addThrownException(JClassType exceptionType) {
     thrownExceptions = Lists.add(thrownExceptions, exceptionType);
@@ -525,6 +575,13 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
   }
 
   /**
+   * Return all overridden methods including the method itself (where it is the first item).
+   */
+  private Iterable<JMethod> getOverriddenMethodsIncludingSelf() {
+    return Iterables.concat(Collections.singleton(this), overriddenMethods);
+  }
+
+  /**
    * Returns the transitive closure of all the methods that override this method; caveat this
    * list is only complete in monolithic compiles and should not be used in incremental compiles.
    * The returned set is ordered in such a way that most specific overriding methods appear after
@@ -590,7 +647,7 @@ public class JMethod extends JNode implements JMember, CanBeAbstract {
   }
 
   public boolean isExternal() {
-    return getEnclosingType() != null && getEnclosingType().isExternal();
+    return getEnclosingType().isExternal();
   }
 
   @Override

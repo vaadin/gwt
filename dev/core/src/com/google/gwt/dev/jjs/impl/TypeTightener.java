@@ -37,7 +37,6 @@ import com.google.gwt.dev.jjs.ast.JMethod;
 import com.google.gwt.dev.jjs.ast.JMethodCall;
 import com.google.gwt.dev.jjs.ast.JNewInstance;
 import com.google.gwt.dev.jjs.ast.JParameter;
-import com.google.gwt.dev.jjs.ast.JParameterRef;
 import com.google.gwt.dev.jjs.ast.JPermutationDependentValue;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JReferenceType;
@@ -310,7 +309,7 @@ public class TypeTightener {
       // Fake an assignment-to-self on all args to prevent tightening
       JMethod method = x.getTarget();
       for (JParameter param : method.getParams()) {
-        addAssignment(param, new JParameterRef(SourceOrigin.UNKNOWN, param));
+        addAssignment(param, param.makeRef(SourceOrigin.UNKNOWN));
       }
     }
 
@@ -438,8 +437,7 @@ public class TypeTightener {
       //  If possible, try to use a narrower cast
       JReferenceType tighterType = getSingleConcreteType(toType);
       if (tighterType != null && tighterType != toType) {
-        JCastOperation newOp = new JCastOperation(x.getSourceInfo(), tighterType, x.getExpr());
-          ctx.replaceMe(newOp);
+        ctx.replaceMe(new JCastOperation(x.getSourceInfo(), tighterType, x.getExpr()));
       }
     }
 
@@ -459,8 +457,9 @@ public class TypeTightener {
 
     @Override
     public void exit(JField x, Context ctx) {
-      if (program.codeGenTypes.contains(x.getEnclosingType()) || x.canBeReferencedExternally()) {
-        // We cannot tighten this field as we don't see all references.
+      if (program.codeGenTypes.contains(x.getEnclosingType())
+          || x.canBeReferencedExternally() || x.canBeImplementedExternally()) {
+        // We cannot tighten this field as we don't see all references or the initial value.
         return;
       }
       if (!x.isVolatile()) {

@@ -11,11 +11,13 @@
   <name>@moduleName</name>
   
   <properties>
-    <!-- Convenience property to set the GWT version -->
-    <gwtVersion>@gwtVersion</gwtVersion>
-    <!-- Note: GWT needs at least java 1.6 -->
+    <!-- Note: GWT needs at least java 1.7 -->
     <maven.compiler.source>1.7</maven.compiler.source>
     <maven.compiler.target>1.7</maven.compiler.target>
+
+    <!-- Don't let your Mac use a crazy non-standard encoding -->
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
   </properties>
 
   <dependencyManagement>
@@ -24,7 +26,7 @@
       <dependency>
         <groupId>com.google.gwt</groupId>
         <artifactId>gwt</artifactId>
-        <version>${gwtVersion}</version>
+        <version>@gwtVersion</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -48,11 +50,6 @@
       <scope>provided</scope>
     </dependency>
     <dependency>
-      <groupId>com.google.gwt</groupId>
-      <artifactId>gwt-codeserver</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <version>4.11</version>
@@ -61,44 +58,43 @@
   </dependencies>
   
   <build>
-    
+    <!-- Output classes directly into the webapp, so that IDEs and "mvn process-classes" update them in DevMode -->
+    <outputDirectory>${project.build.directory}/${project.build.finalName}/WEB-INF/classes</outputDirectory>
+
     <plugins>
       
       <!-- GWT Maven Plugin-->
       <plugin>
-        <groupId>org.codehaus.mojo</groupId>
+        <groupId>net.ltgt.gwt.maven</groupId>
         <artifactId>gwt-maven-plugin</artifactId>
-        <version>${gwtVersion}</version>
+        <version>1.0-rc-6</version>
         <executions>
           <execution>
             <goals>
+              <goal>import-sources</goal>
               <goal>compile</goal>
-            </goals>
-          </execution>
-          <execution>
-            <!-- Run tests through gwt:test, this allows reusing the plugin configuration for GWTTestCases -->
-            <id>gwt-tests</id>
-            <phase>test</phase>
-            <goals>
+              <goal>import-test-sources</goal>
               <goal>test</goal>
             </goals>
           </execution>
         </executions>
-        <!-- Plugin configuration. There are many available options, 
-             see gwt-maven-plugin documentation at codehaus.org --> 
         <configuration>
-          <modules>
-            <module>@moduleName</module>
-          </modules>
-          <!-- URL that should be opened by DevMode (gwt:run). -->
-          <runTarget>@moduleShortName.html</runTarget>
-          <!-- Ask GWT to create the Story of Your Compile (SOYC) (gwt:compile) -->
-          <compileReport>true</compileReport>
-          <compilerMetrics>true</compilerMetrics>
-          <!-- Run tests using HtmlUnit -->
-          <mode>htmlunit</mode>
-          <!-- Tests patterns -->
-          <includes>**/Test*.java,**/*Test.java,**/*TestCase.java</includes>
+          <moduleName>@moduleName</moduleName>
+          <moduleShortName>@moduleShortName</moduleShortName>
+          <failOnError>true</failOnError>
+          <!-- Compiler configuration -->
+          <compilerArgs>
+            <!-- Ask GWT to create the Story of Your Compile (SOYC) (gwt:compile) -->
+            <arg>-compileReport</arg>
+            <arg>-XcompilerMetrics</arg>
+          </compilerArgs>
+          <!-- DevMode configuration -->
+          <warDir>${project.build.directory}/${project.build.finalName}</warDir>
+          <classpathScope>compile+runtime</classpathScope>
+          <!-- URL(s) that should be opened by DevMode (gwt:devmode). -->
+          <startupUrls>
+            <startupUrl>@moduleShortName.html</startupUrl>
+          </startupUrls>
         </configuration>
       </plugin>
 
@@ -108,26 +104,6 @@
         <version>2.17</version>
         <configuration>
           <skip>true</skip>
-        </configuration>
-      </plugin>
-
-      <!-- NOTE: this is only needed if you use "mvn eclipse:eclipse". -->
-      <!-- You can remove this plugin if you intend to only use the Maven integration in Eclipse, or another IDE -->
-      <plugin>
-        <artifactId>maven-eclipse-plugin</artifactId>
-        <version>2.7</version>  <!--  Note 2.8 does not work with AspectJ aspect path -->
-        <configuration>
-          <downloadSources>true</downloadSources>
-          <downloadJavadocs>false</downloadJavadocs>
-          <wtpversion>2.0</wtpversion>
-          <additionalBuildcommands>
-            <buildCommand>
-              <name>com.google.gwt.eclipse.core.gwtProjectValidator</name>
-            </buildCommand>
-          </additionalBuildcommands>
-          <additionalProjectnatures>
-            <projectnature>com.google.gwt.eclipse.core.gwtNature</projectnature>
-          </additionalProjectnatures>
         </configuration>
       </plugin>
 

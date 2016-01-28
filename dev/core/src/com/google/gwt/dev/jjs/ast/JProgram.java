@@ -229,17 +229,6 @@ public class JProgram extends JNode implements ArrayTypeCreator {
     return x;
   }
 
-  public static JParameter createParameter(SourceInfo info, String name, JType type,
-      boolean isFinal, boolean isThis, JMethod enclosingMethod) {
-    assert (name != null);
-    assert (type != null);
-    assert (enclosingMethod != null);
-
-    JParameter x = new JParameter(info, name, type, isFinal, isThis);
-    enclosingMethod.addParam(x);
-    return x;
-  }
-
   public static List<JDeclaredType> deserializeTypes(ObjectInputStream stream) throws IOException,
       ClassNotFoundException {
     @SuppressWarnings("unchecked")
@@ -260,7 +249,8 @@ public class JProgram extends JNode implements ArrayTypeCreator {
   public static boolean isClinit(JMethod method) {
     JDeclaredType enclosingType = method.getEnclosingType();
 
-    boolean isClinit = enclosingType != null && method == enclosingType.getClinitMethod();
+    boolean isClinit = enclosingType != JClassType.NULL_CLASS &&
+        method == enclosingType.getClinitMethod();
     assert !isClinit || method.getName().equals(GwtAstBuilder.CLINIT_METHOD_NAME);
     return isClinit;
   }
@@ -341,16 +331,14 @@ public class JProgram extends JNode implements ArrayTypeCreator {
 
   private final Map<JMethod, JMethod> staticToInstanceMap = Maps.newIdentityHashMap();
 
-  private JClassType typeClass;
-
-  private JClassType typeJavaLangObject;
-
   private final Map<String, JDeclaredType> typeNameMap = Maps.newHashMap();
 
   private Map<JField, JType> typesByClassLiteralField;
 
+  private JClassType typeClass;
+  private JClassType typeJavaLangObject;
+  private JArrayType typeJavaLangObjectArray;
   private JClassType typeSpecialClassLiteralHolder;
-
   private JClassType typeSpecialJavaScriptObject;
 
   private JClassType typeString;
@@ -368,12 +356,8 @@ public class JProgram extends JNode implements ArrayTypeCreator {
   }
 
   public JProgram(MinimalRebuildCache minimalRebuildCache) {
-    this(minimalRebuildCache, true);
-  }
-
-  public JProgram(MinimalRebuildCache minimalRebuildCache, boolean legacyJsInterop) {
     super(SourceOrigin.UNKNOWN);
-    typeOracle = new JTypeOracle(this, minimalRebuildCache, legacyJsInterop);
+    typeOracle = new JTypeOracle(this, minimalRebuildCache);
   }
 
   public void addEntryMethod(JMethod entryPoint) {
@@ -424,6 +408,7 @@ public class JProgram extends JNode implements ArrayTypeCreator {
     switch (name) {
       case "java.lang.Object":
         typeJavaLangObject = (JClassType) type;
+        typeJavaLangObjectArray = getOrCreateArrayType(type, 1);
         break;
       case "java.lang.String":
         typeString = (JClassType) type;
@@ -487,15 +472,15 @@ public class JProgram extends JNode implements ArrayTypeCreator {
     if (type.isArrayType()) {
       // A variable of type Object[] could contain an instance of native JsType[], the latter
       // is treated as a JSO for devirtualization purposes.
-      // TODO(rluble): maybe it should not be treated as a JSO, think .toString().
       return EnumSet.of(DispatchType.JSO, DispatchType.JAVA_ARRAY);
     }
     EnumSet<DispatchType> dispatchSet = EnumSet.noneOf(DispatchType.class);
     DispatchType dispatchType = getRepresentedAsNativeTypesDispatchMap().get(type);
     if (dispatchType != null) {
       dispatchSet = EnumSet.of(dispatchType);
-    } else if (typeOracle.isDualJsoInterface(type)) {
-      // If it is an interface implemented both by JSOs and regular Java Objects;
+    } else if (typeOracle.isDualJsoInterface(type) || type.isJsNative()) {
+      // If it is an interface implemented both by JSOs and regular Java Objects; native JsTypes
+      // are considered JSOs for object method devirtualization.
       dispatchSet = EnumSet.of(DispatchType.HAS_JAVA_VIRTUAL_DISPATCH, DispatchType.JSO);
     } else if (typeOracle.isSingleJsoImpl(type) || type.isJsoType()) {
       // If it is either an interface implemented by JSOs or JavaScriptObject or one of its
@@ -530,9 +515,16 @@ public class JProgram extends JNode implements ArrayTypeCreator {
       return JReferenceType.NULL_TYPE;
     }
 
-    if (thisType.canBeNull()  != thatType.canBeNull()) {
-      // If either is non-nullable, the result should be non-nullable.
-      return strengthenType(thisType.strengthenToNonNull(), thatType.strengthenToNonNull());
+    if (!thisType.canBeNull() || !thatType.canBeNull()) {
+      JReferenceType thisTypeNonNull = thisType.strengthenToNonNull();
+      JReferenceType thatTypeNonNull = thatType.strengthenToNonNull();
+      // .strengthenToNonNull does not guarantee that the resulting type is non null (e.g. JSOs).
+
+      // If either is non-nullable, the result should be non-nullable, unless it is a type that
+      // can not be made non-nullable, like a JSO.
+      if (thisType != thisTypeNonNull || thatType != thatTypeNonNull) {
+        return strengthenType(thisTypeNonNull, thatTypeNonNull);
+      }
     }
 
     if (typeOracle.castSucceedsTrivially(thisType, thatType)) {
@@ -1084,6 +1076,10 @@ public class JProgram extends JNode implements ArrayTypeCreator {
 
   public JClassType getTypeJavaLangObject() {
     return typeJavaLangObject;
+  }
+
+  public JArrayType getTypeJavaLangObjectArray() {
+    return typeJavaLangObjectArray;
   }
 
   public JClassType getTypeJavaLangString() {

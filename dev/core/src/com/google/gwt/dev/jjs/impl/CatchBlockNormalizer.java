@@ -21,7 +21,6 @@ import com.google.gwt.dev.jjs.ast.JBinaryOperation;
 import com.google.gwt.dev.jjs.ast.JBinaryOperator;
 import com.google.gwt.dev.jjs.ast.JBlock;
 import com.google.gwt.dev.jjs.ast.JDeclarationStatement;
-import com.google.gwt.dev.jjs.ast.JDeclaredType;
 import com.google.gwt.dev.jjs.ast.JExpression;
 import com.google.gwt.dev.jjs.ast.JIfStatement;
 import com.google.gwt.dev.jjs.ast.JInstanceOf;
@@ -31,7 +30,6 @@ import com.google.gwt.dev.jjs.ast.JMethod;
 import com.google.gwt.dev.jjs.ast.JMethodBody;
 import com.google.gwt.dev.jjs.ast.JMethodCall;
 import com.google.gwt.dev.jjs.ast.JModVisitor;
-import com.google.gwt.dev.jjs.ast.JNewInstance;
 import com.google.gwt.dev.jjs.ast.JPrimitiveType;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JReferenceType;
@@ -54,7 +52,7 @@ public class CatchBlockNormalizer {
    * Collapses all multi-catch blocks into a single catch block.
    */
   private class CollapseCatchBlocks extends JModVisitor {
-    JMethod wrapMethod = program.getIndexedMethod(RuntimeConstants.EXCEPTIONS_WRAP);
+    JMethod wrapMethod = program.getIndexedMethod(RuntimeConstants.EXCEPTIONS_TO_JAVA);
 
     @Override
     public void endVisit(JMethodBody x, Context ctx) {
@@ -80,11 +78,11 @@ public class CatchBlockNormalizer {
       JBlock newCatchBlock = new JBlock(catchInfo);
 
       {
-        // $e = Exceptions.wrap($e)
-        JMethodCall call = new JMethodCall(catchInfo, null, wrapMethod);
-        call.addArg(new JLocalRef(catchInfo, exceptionVariable));
-        newCatchBlock.addStmt(JProgram.createAssignmentStmt(catchInfo, new JLocalRef(catchInfo,
-            exceptionVariable), call));
+        // $e = Exceptions.toJava($e)
+        JMethodCall call =
+            new JMethodCall(catchInfo, null, wrapMethod, exceptionVariable.makeRef(catchInfo));
+        newCatchBlock.addStmt(
+            JProgram.createAssignmentStmt(catchInfo, exceptionVariable.makeRef(catchInfo), call));
       }
 
       /*
@@ -95,7 +93,7 @@ public class CatchBlockNormalizer {
        * Go backwards so we can nest the else statements in the correct order!
        */
       // rethrow the current exception if no one caught it.
-      JStatement cur = new JThrowStatement(catchInfo, new JLocalRef(catchInfo, exceptionVariable));
+      JStatement cur = new JThrowStatement(catchInfo, exceptionVariable.makeRef(catchInfo));
       for (int i = x.getCatchClauses().size() - 1; i >= 0; i--) {
         JTryStatement.CatchClause clause = x.getCatchClauses().get(i);
         JBlock block = clause.getBlock();
@@ -109,16 +107,16 @@ public class CatchBlockNormalizer {
 
         // Handle the first Exception type.
         JExpression ifTest = new JInstanceOf(catchInfo, (JReferenceType) exceptionsTypes.get(0),
-            new JLocalRef(catchInfo, exceptionVariable));
+            exceptionVariable.makeRef(catchInfo));
         // Handle the rest of the Exception types if any.
         for (int j = 1; j < exceptionsTypes.size(); j++) {
           JExpression orExp = new JInstanceOf(catchInfo, (JReferenceType) exceptionsTypes.get(j),
-              new JLocalRef(catchInfo, exceptionVariable));
+              exceptionVariable.makeRef(catchInfo));
           ifTest = new JBinaryOperation(catchInfo, JPrimitiveType.BOOLEAN, JBinaryOperator.OR,
               ifTest, orExp);
         }
         JDeclarationStatement declaration =
-            new JDeclarationStatement(catchInfo, arg, new JLocalRef(catchInfo, exceptionVariable));
+            new JDeclarationStatement(catchInfo, arg, exceptionVariable.makeRef(catchInfo));
         block.addStmt(0, declaration);
         // nest the previous as an else for me
         cur = new JIfStatement(catchInfo, ifTest, block, cur);
@@ -131,7 +129,7 @@ public class CatchBlockNormalizer {
       List<JType> newCatchTypes = new ArrayList<JType>(1);
       newCatchTypes.add(exceptionVariable.getType());
       x.getCatchClauses().add(new JTryStatement.CatchClause(newCatchTypes,
-          new JLocalRef(newCatchBlock.getSourceInfo(), exceptionVariable), newCatchBlock));
+          exceptionVariable.makeRef(catchInfo), newCatchBlock));
     }
 
     @Override
@@ -142,28 +140,12 @@ public class CatchBlockNormalizer {
     }
   }
 
-  private class UnwrapJavaScriptExceptionVisitor extends JModVisitor {
-    JDeclaredType jseType =
-        program.getFromTypeMap("com.google.gwt.core.client.JavaScriptException");
-    JMethod unwrapMethod = program.getIndexedMethod(RuntimeConstants.EXCEPTIONS_UNWRAP);
+  private class UnwrapThrowableVisitor extends JModVisitor {
+    JMethod unwrapMethod = program.getIndexedMethod(RuntimeConstants.EXCEPTIONS_TO_JS);
 
     @Override
     public void endVisit(JThrowStatement x, Context ctx) {
-      assert jseType != null;
-
-      JExpression expr = x.getExpr();
-
-      // Optimization: unwrap not needed if "new BlahException()"
-      if (expr instanceof JNewInstance && !expr.getType().equals(jseType)) {
-        return;
-      }
-
-      // Optimization: unwrap not needed if expression can never be JavaScriptException
-      if (program.typeOracle.castFailsTrivially((JReferenceType) expr.getType(), jseType)) {
-        return;
-      }
-
-      // throw x; -> throw Exceptions.unwrap(x);
+      // throw x; -> throw Exceptions.toJs(x);
       ctx.replaceMe(createUnwrappedThrow(x));
     }
 
@@ -193,7 +175,7 @@ public class CatchBlockNormalizer {
   private void execImpl() {
     CollapseCatchBlocks collapser = new CollapseCatchBlocks();
     collapser.accept(program);
-    UnwrapJavaScriptExceptionVisitor unwrapper = new UnwrapJavaScriptExceptionVisitor();
+    UnwrapThrowableVisitor unwrapper = new UnwrapThrowableVisitor();
     unwrapper.accept(program);
   }
 

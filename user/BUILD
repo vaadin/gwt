@@ -194,6 +194,7 @@ java_library(
         ["src/com/google/gwt/regexp/shared/*.java"],
         exclude = ["**/package-info.java"],
     ),
+    compatible_with = ["//buildenv/target:android"],
     constraints = ["android"],
 )
 
@@ -310,6 +311,7 @@ java_library(
             "src/com/google/gwt/user/client/impl/DomImpl.java",
             "src/com/google/gwt/user/client/HistoryListener.java",
             "src/com/google/gwt/user/client/Cookies.java",
+            "src/com/google/gwt/core/client/impl/JavaScriptExceptionBase.java",
             "src/com/google/gwt/user/client/ui/AcceptsOneWidget.java",
             "src/com/google/gwt/user/client/ui/Widget.java",
             "src/com/google/gwt/user/client/ui/IsWidget.java",
@@ -394,7 +396,9 @@ java_library(
     ] + glob([
         "src/com/google/gwt/user/client/rpc/core/java/util/*_CustomFieldSerializer*.java",
     ]),
+    compatible_with = ["//buildenv/target:android"],
     constraints = [
+        "android",
         "gwt",
         "public",
     ],
@@ -404,14 +408,8 @@ java_library(
 # GWT JsInterop annotations in a separate library used by hybrid app projects
 java_library(
     name = "gwt-jsinterop-annotations",
-    srcs = glob(["src/jsinterop/**/*.java"]) + [
-        "src/com/google/gwt/core/client/js/JsExport.java",
-        "src/com/google/gwt/core/client/js/JsFunction.java",
-        "src/com/google/gwt/core/client/js/JsNamespace.java",
-        "src/com/google/gwt/core/client/js/JsNoExport.java",
-        "src/com/google/gwt/core/client/js/JsProperty.java",
-        "src/com/google/gwt/core/client/js/JsType.java",
-    ],
+    srcs = glob(["src/jsinterop/**/*.java"]),
+    compatible_with = ["//buildenv/target:android"],
     constraints = [
         "android",
     ],
@@ -466,6 +464,7 @@ java_library(
     srcs = [
         "src/com/google/gwt/core/shared/GwtIncompatible.java",
     ],
+    compatible_with = ["//buildenv/target:android"],
     constraints = [
         "android",
     ],
@@ -558,7 +557,6 @@ filegroup(
             "test/**/ConstraintDefinitionsGwtSuite.java",
             "test/**/*JreSuite.java",
             "test/**/*Java8Suite.java",
-            "test/**/*JsInteropExportsSuite.java",
         ],
     ),
 )
@@ -566,11 +564,6 @@ filegroup(
 filegroup(
     name = "jsinterop_suite_files",
     srcs = glob(["test/**/*JsInteropSuite.java"]),
-)
-
-filegroup(
-    name = "jsinterop_exports_suite_files",
-    srcs = glob(["test/**/*JsInteropExportsSuite.java"]),
 )
 
 filegroup(
@@ -588,7 +581,6 @@ filegroup(
             "test/**/RunAsyncSuite.java",
             "test/**/*JreSuite.java",
             "test/**/*JsInteropSuite.java",
-            "test/**/*JsInteropExportsSuite.java",
             "test/**/*Java8Suite.java",
         ],
     ),

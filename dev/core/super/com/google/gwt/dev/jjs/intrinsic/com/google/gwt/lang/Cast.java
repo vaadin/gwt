@@ -93,6 +93,14 @@ final class Cast {
   }
 
   /**
+   * Allow a cast to an java.lang.Object array, accepting also untyped arrays.
+   */
+  static Object castToArray(Object src) {
+    checkType(src == null || instanceOfArray(src));
+    return src;
+  }
+
+  /**
    * Allow a cast to (untyped) array. This case covers single and multidimensional JsType arrays.
    */
   static Object castToNativeArray(Object src) {
@@ -127,9 +135,8 @@ final class Cast {
   /**
    * A dynamic cast that optionally checks for JsType prototypes.
    */
-  static Object castToNative(Object src, JavaScriptObject dstId, String jsType) {
-    // TODO(goktug): Remove canCast after new JsInterop semantics.
-    checkType(src == null || canCast(src, dstId) || jsinstanceOf(src, jsType));
+  static Object castToNative(Object src, JavaScriptObject jsType) {
+    checkType(src == null ||  jsinstanceOf(src, jsType));
     return src;
   }
 
@@ -157,15 +164,21 @@ final class Cast {
   }-*/;
 
   /**
+   * Returns true if {@code src} is Java object array or an untyped array.
+   */
+  static boolean instanceOfArray(Object src) {
+    return isArray(src) && !Array.isPrimitiveArray(src);
+  }
+
+  /**
    * Returns true if {@code src} is an array (native or not).
    */
   static boolean instanceOfNativeArray(Object src) {
     return isArray(src);
   }
 
-  static boolean instanceOfNative(Object src, JavaScriptObject dstId, String jsType) {
-    // TODO(goktug): Remove instanceof after new JsInterop semantics.
-    return instanceOf(src, dstId) || jsinstanceOf(src, jsType);
+  static boolean instanceOfNative(Object src, JavaScriptObject jsType) {
+    return jsinstanceOf(src, jsType);
   }
 
   static boolean instanceOfUnknownNative(Object src) {
@@ -234,16 +247,8 @@ final class Cast {
    * Determine if object is an instanceof jsType regardless of window or frame.
    */
   @HasNoSideEffects
-  private static native boolean jsinstanceOf(Object obj, String jsTypeStr) /*-{
-    if (!obj) {
-        return false;
-    }
-
-    var jsType = $wnd;
-    for (var i = 0, parts = jsTypeStr.split("."), l = parts.length; i < l ; i++) {
-      jsType = jsType && jsType[parts[i]];
-    }
-    return jsType && obj instanceof jsType;
+  private static native boolean jsinstanceOf(Object obj, JavaScriptObject jsType) /*-{
+    return obj && jsType && obj instanceof jsType;
   }-*/;
 
   static native boolean jsNotEquals(Object a, Object b) /*-{

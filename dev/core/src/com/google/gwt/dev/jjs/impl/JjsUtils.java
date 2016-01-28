@@ -44,7 +44,6 @@ import com.google.gwt.dev.jjs.ast.JMethodCall;
 import com.google.gwt.dev.jjs.ast.JNewInstance;
 import com.google.gwt.dev.jjs.ast.JNullLiteral;
 import com.google.gwt.dev.jjs.ast.JParameter;
-import com.google.gwt.dev.jjs.ast.JParameterRef;
 import com.google.gwt.dev.jjs.ast.JPrimitiveType;
 import com.google.gwt.dev.jjs.ast.JProgram;
 import com.google.gwt.dev.jjs.ast.JReferenceType;
@@ -56,7 +55,7 @@ import com.google.gwt.dev.jjs.ast.js.JMultiExpression;
 import com.google.gwt.dev.js.ast.JsBooleanLiteral;
 import com.google.gwt.dev.js.ast.JsExpression;
 import com.google.gwt.dev.js.ast.JsLiteral;
-import com.google.gwt.dev.js.ast.JsName;
+import com.google.gwt.dev.js.ast.JsNameRef;
 import com.google.gwt.dev.js.ast.JsNullLiteral;
 import com.google.gwt.dev.js.ast.JsNumberLiteral;
 import com.google.gwt.dev.js.ast.JsObjectLiteral;
@@ -203,6 +202,10 @@ public class JjsUtils {
       forwardingMethod.setDefaultMethod();
     }
 
+    if (methodToDelegateTo.isJsOverlay() && type.isJsNative()) {
+      forwardingMethod.isJsOverlay();
+    }
+
     // Create the forwarding body.
     JMethodBody body = (JMethodBody) forwardingMethod.getBody();
     // Invoke methodToDelegate
@@ -212,7 +215,7 @@ public class JjsUtils {
     forwardingCall.setStaticDispatchOnly();
     // copy params
     for (JParameter p : forwardingMethod.getParams()) {
-      forwardingCall.addArg(new JParameterRef(p.getSourceInfo(), p));
+      forwardingCall.addArg(p.makeRef(p.getSourceInfo()));
     }
 
     // return statement if not void return type
@@ -298,6 +301,19 @@ public class JjsUtils {
     assert type.isAbstract();
     assert superTypeMethod.isAbstract();
     return createEmptyMethodFromExample(type, superTypeMethod, true);
+  }
+
+  /**
+   * Returns a native constructor of a native JsType class.
+   */
+  public static JConstructor getJsNativeConstructorOrNull(JType type) {
+    if (!type.isJsNative() || !(type.getUnderlyingType() instanceof JClassType)) {
+      return null;
+    }
+    JMethod jsConstructor = Iterables.getFirst(Iterables.filter(
+        ((JClassType) type).getMethods(), JjsPredicates.IS_JS_CONSTRUCTOR), null);
+    assert jsConstructor != null;
+    return (JConstructor) jsConstructor;
   }
 
   /**
@@ -434,7 +450,8 @@ public class JjsUtils {
     return translatorByLiteralClass.get(literal.getClass()).translate(literal);
   }
 
-  static void synthesizeStaticInitializerChain(JDeclaredType type) {
+  static void synthesizeStaticInitializerChain(
+      JDeclaredType type, Iterable<JInterfaceType> superInterfacesRequiringStaticInitialization) {
     // Implement static initialization as described in (Java 8) JLS 12.4.2.
     List<JStatement> superClinitCalls = Lists.newArrayList();
     SourceInfo sourceInfo = type.getSourceInfo();
@@ -447,7 +464,7 @@ public class JjsUtils {
     }
 
     // Recurse over interfaces in preorder initializing the ones that have default methods.
-    for (JInterfaceType interfaceType : getSuperInterfacesRequiringInitialization(type)) {
+    for (JInterfaceType interfaceType : superInterfacesRequiringStaticInitialization) {
       superClinitCalls.add(
           new JMethodCall(sourceInfo, null, interfaceType.getClinitMethod()).makeStatement());
     }
@@ -507,14 +524,14 @@ public class JjsUtils {
         if (values.length == 1) {
           return new JsNumberLiteral(literal.getSourceInfo(), ((JLongLiteral) literal).getValue());
         }
-        JsObjectLiteral objectLiteral = new JsObjectLiteral(sourceInfo);
-        objectLiteral.setInternable();
+        JsObjectLiteral.Builder objectLiteralBuilder = JsObjectLiteral.builder(sourceInfo)
+            .setInternable();
 
-        assert values.length == names.length;
-        for (int i = 0; i < names.length; i++) {
-          addPropertyToObject(sourceInfo, names[i], values[i], objectLiteral);
+        assert values.length == longComponentNames.length;
+        for (int i = 0; i < longComponentNames.length; i++) {
+          addPropertyToObject(sourceInfo, longComponentNames[i], values[i], objectLiteralBuilder);
         }
-        return objectLiteral;
+        return objectLiteralBuilder.build();
       }
     },
     STRING_LITERAL_TRANSLATOR() {
@@ -530,29 +547,15 @@ public class JjsUtils {
       }
     };
 
-    private static final JsName[] names;
-
-    static {
-      // The names of the components in an emulated long ('l', 'm', and 'h') are accessed directly
-      // through JSNI in LongLib (the implementor of emulated long operations), hence it is
-      // important that they don't get renamed hence the corresponding JsNames are created
-      // unscoped (null scope) and unobfuscatable.
-      String[] stringNames = {"l","m","h"};
-      names = new JsName[stringNames.length];
-      for (int i = 0; i < stringNames.length; i++) {
-        names[i] = new JsName(null, stringNames[i], stringNames[i]);
-        names[i].setUnobfuscatable();
-      }
-    }
+    private static String[] longComponentNames = { "l", "m", "h" };
 
     abstract JsLiteral translate(JExpression literal);
   }
 
-  private static void addPropertyToObject(SourceInfo sourceInfo, JsName propertyName,
-      long propertyValue, JsObjectLiteral objectLiteral) {
-    JsExpression label = propertyName.makeRef(sourceInfo);
+  private static void addPropertyToObject(SourceInfo sourceInfo, String propertyName,
+      long propertyValue, JsObjectLiteral.Builder objectLiteralBuilder) {
     JsExpression value = new JsNumberLiteral(sourceInfo, propertyValue);
-    objectLiteral.addProperty(sourceInfo, label, value);
+    objectLiteralBuilder.add(new JsNameRef(sourceInfo, propertyName), value);
   }
 
   private static JMethod createEmptyMethodFromExample(
@@ -563,27 +566,13 @@ public class JjsUtils {
     emptyMethod.setSynthetic();
     // Copy parameters.
     for (JParameter param : exampleMethod.getParams()) {
-      emptyMethod.addParam(new JParameter(param.getSourceInfo(), param.getName(), param.getType(),
-          param.isFinal(), param.isThis()));
+      emptyMethod.cloneParameter(param);
     }
     JMethodBody body = new JMethodBody(exampleMethod.getSourceInfo());
     emptyMethod.setBody(body);
     emptyMethod.freezeParamTypes();
     inType.addMethod(emptyMethod);
     return emptyMethod;
-  }
-
-  private static Iterable<JInterfaceType> getSuperInterfacesRequiringInitialization(
-      JDeclaredType type) {
-    Iterable<JInterfaceType> interfaces = Collections.emptyList();
-    for (JInterfaceType interfaceType : type.getImplements()) {
-      interfaces =
-          Iterables.concat(interfaces, getSuperInterfacesRequiringInitialization(interfaceType));
-      if (interfaceType.hasDefaultMethods()) {
-        interfaces = Iterables.concat(interfaces, Collections.singleton(interfaceType));
-      }
-    }
-    return interfaces;
   }
 
   private JjsUtils() {

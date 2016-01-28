@@ -16,6 +16,8 @@
 package com.google.gwt.dev.jjs.test;
 
 import com.google.gwt.core.client.JavaScriptObject;
+import com.google.gwt.junit.DoNotRunWith;
+import com.google.gwt.junit.Platform;
 import com.google.gwt.junit.client.GWTTestCase;
 
 import java.util.List;
@@ -34,9 +36,10 @@ public class ArrayTest extends GWTTestCase {
     return new Array(length);
   }-*/;
 
+  @DoNotRunWith(Platform.Devel)
   public void testObjectArray_empty() {
     Object nativeArray = createJsArray(0);
-    assertFalse(nativeArray instanceof Object[]);
+    assertTrue(nativeArray instanceof Object[]);
     assertFalse(nativeArray instanceof Object[][]);
     assertFalse(nativeArray instanceof int[]);
     assertFalse(nativeArray instanceof List[]);
@@ -52,10 +55,11 @@ public class ArrayTest extends GWTTestCase {
     assertFalse(objectArray.equals(nativeArray));
   }
 
+  @DoNotRunWith(Platform.Devel)
   public void testObjectArray_nonEmpty() {
     // Native array is an object array
     Object nativeArray = createJsArray(10);
-    assertFalse(nativeArray instanceof Object[]);
+    assertTrue(nativeArray instanceof Object[]);
     assertFalse(nativeArray instanceof Object[][]);
     assertFalse(nativeArray instanceof int[]);
     assertFalse(nativeArray instanceof List[]);

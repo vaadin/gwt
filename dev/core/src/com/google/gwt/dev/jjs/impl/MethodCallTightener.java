@@ -124,6 +124,7 @@ public class MethodCallTightener {
 
       JMethod mostSpecificOverride =
           program.typeOracle.findMostSpecificOverride(underlyingType, original);
+
       if (mostSpecificOverride == original) {
         return methodCall;
       }

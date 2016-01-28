@@ -32,6 +32,7 @@ import com.google.gwt.i18n.client.HasDirection.Direction;
 import com.google.gwt.i18n.shared.DirectionEstimator;
 import com.google.gwt.i18n.shared.HasDirectionEstimator;
 import com.google.gwt.safehtml.shared.SafeHtml;
+import com.google.gwt.safehtml.shared.annotations.IsSafeHtml;
 import com.google.gwt.user.client.DOM;
 import com.google.gwt.user.client.Event;
 
@@ -160,11 +161,11 @@ public class CheckBox extends ButtonBase implements HasName, HasValue<Boolean>,
 
   /**
    * Creates a check box with the specified text label.
-   * 
+   *
    * @param label the check box's label
    * @param asHTML <code>true</code> to treat the specified label as html
    */
-  public CheckBox(String label, boolean asHTML) {
+  public CheckBox(@IsSafeHtml String label, boolean asHTML) {
     this();
     if (asHTML) {
       setHTML(label);
@@ -235,7 +236,7 @@ public class CheckBox extends ButtonBase implements HasName, HasValue<Boolean>,
 
   @Override
   public String getHTML() {
-    return directionalTextHelper.getTextOrHtml(true);
+    return directionalTextHelper.getHtml();
   }
 
   @Override
@@ -250,7 +251,7 @@ public class CheckBox extends ButtonBase implements HasName, HasValue<Boolean>,
 
   @Override
   public String getText() {
-    return directionalTextHelper.getTextOrHtml(false);
+    return directionalTextHelper.getText();
   }
 
   @Override
@@ -376,12 +377,12 @@ public class CheckBox extends ButtonBase implements HasName, HasValue<Boolean>,
 
   @Override
   public void setHTML(SafeHtml html, Direction dir) {
-    directionalTextHelper.setTextOrHtml(html.asString(), dir, true);
+    directionalTextHelper.setHtml(html, dir);
   }
 
   @Override
-  public void setHTML(String html) {
-    directionalTextHelper.setTextOrHtml(html, true);
+  public void setHTML(@IsSafeHtml String html) {
+    directionalTextHelper.setHtml(html);
   }
 
   @Override
@@ -402,12 +403,12 @@ public class CheckBox extends ButtonBase implements HasName, HasValue<Boolean>,
 
   @Override
   public void setText(String text) {
-    directionalTextHelper.setTextOrHtml(text, false);
+    directionalTextHelper.setText(text);
   }
 
   @Override
   public void setText(String text, Direction dir) {
-    directionalTextHelper.setTextOrHtml(text, dir, false);
+    directionalTextHelper.setText(text, dir);
   }
 
   /**

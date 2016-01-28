@@ -203,6 +203,10 @@ public class Devirtualizer {
       if (method.isJsOverlay()) {
         return true;
       }
+      if (method.getEnclosingType().isJsNative()) {
+        // Methods in a native JsType that are not JsOverlay should NOT be devirtualized.
+        return false;
+      }
       EnumSet<DispatchType> dispatchType = program.getDispatchType(instanceType);
       dispatchType.remove(DispatchType.HAS_JAVA_VIRTUAL_DISPATCH);
       return !dispatchType.isEmpty();
@@ -256,11 +260,9 @@ public class Devirtualizer {
     devirtualMethod.setSynthetic();
     inClass.addMethod(devirtualMethod);
     // Setup parameters.
-    JProgram.createParameter(sourceInfo, "this$static", method.getEnclosingType(), true,
-        true, devirtualMethod);
+    devirtualMethod.createThisParameter(sourceInfo, method.getEnclosingType());
     for (JParameter oldParam : method.getParams()) {
-      JProgram.createParameter(sourceInfo, oldParam.getName(), oldParam.getType(), true, false,
-          devirtualMethod);
+      devirtualMethod.createFinalParameter(sourceInfo, oldParam.getName(), oldParam.getType());
     }
 
     devirtualMethod.freezeParamTypes();
@@ -358,12 +360,12 @@ public class Devirtualizer {
 
     if (!dispatchTo.isStatic()) {
       // This is a virtual dispatch, take the first parameter as the receiver.
-      thisParamRef = new JParameterRef(sourceInfo, parameters.remove(0));
+      thisParamRef = parameters.remove(0).makeRef(sourceInfo);
     }
 
     JMethodCall dispatchCall = new JMethodCall(sourceInfo, thisParamRef, dispatchTo);
     for (JParameter param : parameters) {
-      dispatchCall.addArg(new JParameterRef(sourceInfo, param));
+      dispatchCall.addArg(param.makeRef(sourceInfo));
     }
     return dispatchCall;
   }
@@ -434,7 +436,7 @@ public class Devirtualizer {
     // Decide where to place the devirtual method. Ideally these methods should reside in the
     // declaring type, but some of these will be interfaces and currently GWT does not emit
     // any code for them.
-    // TODO(rluble): place interface methods in the corresponding interface once Java 9 defender
+    // TODO(rluble): place interface methods in the corresponding interface once Java 8 defender
     // method support is implemented.
     JClassType devirtualMethodEnclosingClass  = null;
     if (method.getEnclosingType() instanceof JClassType) {
@@ -455,7 +457,7 @@ public class Devirtualizer {
         devirtualMethodEnclosingClass = (JClassType)
             dispatchToMethodByTargetType.get(DispatchType.JSO).getEnclosingType();
       } else {
-        // It is an interface implemented by String or arrays, place it in Object.
+        // It is an interface implemented by devirtualized types, place it in Object.
         devirtualMethodEnclosingClass = program.getTypeJavaLangObject();
       }
     }
@@ -492,7 +494,7 @@ public class Devirtualizer {
     // Dispatch to array
     dispatchExpression = constructMinimalCondition(
         isJavaArray,
-        new JParameterRef(thisParam.getSourceInfo(), thisParam),
+        thisParam.makeRef(thisParam.getSourceInfo()),
         maybeCreateDispatch(dispatchToMethodByTargetType.get(DispatchType.JAVA_ARRAY),
             devirtualMethod),
         dispatchExpression);
@@ -500,7 +502,7 @@ public class Devirtualizer {
     // Dispatch to regular object
     dispatchExpression = constructMinimalCondition(
         hasJavaObjectVirtualDispatch,
-        new JParameterRef(thisParam.getSourceInfo(), thisParam),
+        thisParam.makeRef(thisParam.getSourceInfo()),
         maybeCreateDispatch(
             dispatchToMethodByTargetType.get(DispatchType.HAS_JAVA_VIRTUAL_DISPATCH),
             devirtualMethod),
@@ -513,7 +515,7 @@ public class Devirtualizer {
       String castInstanceOfQualifier = dispatchType.getTypeCategory().castInstanceOfQualifier();
       dispatchExpression = constructMinimalCondition(
           program.getIndexedMethod("Cast.instanceOf" + castInstanceOfQualifier),
-          new JParameterRef(thisParam.getSourceInfo(), thisParam),
+          thisParam.makeRef(thisParam.getSourceInfo()),
           maybeCreateDispatch(dispatchToMethodByTargetType.get(dispatchType), devirtualMethod),
           dispatchExpression);
     }

@@ -21,6 +21,8 @@ import com.google.gwt.dom.client.Document;
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.safehtml.shared.SafeHtml;
 import com.google.gwt.safehtml.shared.SafeHtmlBuilder;
+import com.google.gwt.safehtml.shared.SafeHtmlUtils;
+import com.google.gwt.safehtml.shared.annotations.IsSafeHtml;
 import com.google.gwt.user.client.DOM;
 
 /**
@@ -65,8 +67,8 @@ public class RenderablePanel extends ComplexPanel implements IsRenderable {
    *
    * @param html the panel's HTML
    */
-  public RenderablePanel(String html) {
-    this(new SafeHtmlBuilder().appendHtmlConstant(html).toSafeHtml());
+  public RenderablePanel(@IsSafeHtml String html) {
+    this(SafeHtmlUtils.fromTrustedString(html));
   }
 
   /**

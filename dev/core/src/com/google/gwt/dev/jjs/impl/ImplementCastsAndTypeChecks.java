@@ -34,9 +34,9 @@ import com.google.gwt.dev.jjs.ast.JReferenceType;
 import com.google.gwt.dev.jjs.ast.JRuntimeTypeReference;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.ast.RuntimeConstants;
+import com.google.gwt.dev.jjs.ast.js.JsniMethodRef;
 import com.google.gwt.thirdparty.guava.common.collect.Maps;
 
-import java.util.EnumSet;
 import java.util.Map;
 
 /**
@@ -92,7 +92,8 @@ public class ImplementCastsAndTypeChecks {
           refType =  (JReferenceType) program.normalizeJsoType(refType);
         }
 
-        if (pruneTrivialCasts && program.typeOracle.castSucceedsTrivially(argType, refType)) {
+        if (pruneTrivialCasts && program.typeOracle.castSucceedsTrivially(argType, refType) ||
+            determineTypeCategoryForType(refType) == TypeCategory.TYPE_JAVA_LANG_OBJECT) {
           // just remove the cast
           ctx.replaceMe(curExpr);
           return;
@@ -204,7 +205,8 @@ public class ImplementCastsAndTypeChecks {
           // don't depend on type-tightener having run
           || (program.typeOracle.isEffectivelyJavaScriptObject(argType)
               && program.typeOracle.isEffectivelyJavaScriptObject(toType));
-      if (pruneTrivialCasts && isTrivialCast) {
+      if (pruneTrivialCasts && isTrivialCast ||
+          determineTypeCategoryForType(toType) == TypeCategory.TYPE_JAVA_LANG_OBJECT) {
         // trivially true if non-null; replace with a null test
         JBinaryOperation eq =
             new JBinaryOperation(x.getSourceInfo(), program.getTypePrimitiveBoolean(),
@@ -225,17 +227,7 @@ public class ImplementCastsAndTypeChecks {
   private TypeCategory determineTypeCategoryForType(JReferenceType type) {
     TypeCategory typeCategory = TypeCategory.typeCategoryForType(type, program);
 
-    assert EnumSet.of(TypeCategory.TYPE_JSO,
-        TypeCategory.TYPE_JAVA_OBJECT_OR_JSO,
-        TypeCategory.TYPE_NATIVE_ARRAY,
-        TypeCategory.TYPE_JAVA_LANG_OBJECT,
-        TypeCategory.TYPE_JAVA_LANG_STRING,
-        TypeCategory.TYPE_JAVA_LANG_DOUBLE,
-        TypeCategory.TYPE_JAVA_LANG_BOOLEAN,
-        TypeCategory.TYPE_JAVA_OBJECT,
-        TypeCategory.TYPE_JS_UNKNOWN_NATIVE,
-        TypeCategory.TYPE_JS_NATIVE,
-        TypeCategory.TYPE_JS_FUNCTION).contains(typeCategory);
+    assert typeCategory.castInstanceOfQualifier() != null;
 
     return typeCategory;
   }
@@ -258,15 +250,27 @@ public class ImplementCastsAndTypeChecks {
     }
 
     call.addArg(targetExpression);
-    if (method.getParams().size() >= 2) {
+
+    if (method.getParams().size() < 2) {
+      // The cast checking method does not require an additional parameter. This situation arises
+      // when the call is a cast check and cast checking has been disabled or when the type category
+      // provides enough information, e.g. TYPE_UNTYPED_ARRAY.
+      return call;
+    } else if (targetTypeCategory.requiresTypeId()) {
       call.addArg((new JRuntimeTypeReference(sourceInfo, program.getTypeJavaLangObject(),
           targetType)));
+      return call;
+    } else if (targetTypeCategory.requiresJsConstructor()) {
+      JDeclaredType declaredType = (JDeclaredType) targetType;
+
+      JMethod jsConstructor = JjsUtils.getJsNativeConstructorOrNull(declaredType);
+      assert jsConstructor != null &&  declaredType.isJsNative();
+      call.addArg(new JsniMethodRef(sourceInfo, declaredType.getQualifiedJsName(), jsConstructor,
+          program.getJavaScriptObject()));
+      return call;
+    } else {
+      throw new AssertionError();
     }
-    if (method.getParams().size() == 3) {
-     call.addArg(program.getStringLiteral(sourceInfo,
-         ((JDeclaredType) targetType).getQualifiedJsName()));
-    }
-    return call;
   }
 
   public static void exec(JProgram program, boolean pruneTrivialCasts) {
@@ -291,9 +295,13 @@ public class ImplementCastsAndTypeChecks {
     this.pruneTrivialCasts = pruneTrivialCasts;
 
     for (TypeCategory t : TypeCategory.values()) {
-      String instanceOfMethod = "Cast.instanceOf" + t.castInstanceOfQualifier();
+      String castInstanceOfQualifier = t.castInstanceOfQualifier();
+      if (castInstanceOfQualifier == null) {
+        continue;
+      }
+      String instanceOfMethod = "Cast.instanceOf" + castInstanceOfQualifier;
       instanceOfMethodsByTargetTypeCategory.put(t, program.getIndexedMethod(instanceOfMethod));
-      String castMethod = "Cast.castTo" + t.castInstanceOfQualifier();
+      String castMethod = "Cast.castTo" + castInstanceOfQualifier;
       dynamicCastMethodsByTargetTypeCategory.put(t, program.getIndexedMethod(castMethod));
     }
   }

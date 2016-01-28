@@ -176,7 +176,7 @@
   <target name="compiler.standalone"
           description="Validates that the standalone gwt-compiler project can build.">
     <mkdir dir="${javac.out}"/>
-    <gwt.javac srcdir="core/super" excludes="com/google/gwt/dev/jjs/intrinsic/"/>
+    <gwt.javac srcdir="core/super" excludes="com/google/gwt/dev/jjs/intrinsic/,**/EmulatedCharset.java"/>
     <gwt.javac srcdir="core/src">
       <include name="com/google/gwt/core/ext/**"/>
       <include name="com/google/gwt/core/linker/**"/>
@@ -289,7 +289,7 @@
              includes="${gwt.junit.testcase.dev.core.includes}"
              excludes="${gwt.junit.testcase.dev.core.excludes}"/>
     <gwt.junit test.name="dev" test.out="${junit.out}"
-               test.args="${test.args}"
+               test.args="${test.args} -devMode"
                test.jvmargs="${test.jvmargs}"
                test.cases="tests.dev.core">
       <extraclasspaths>

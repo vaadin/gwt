@@ -16,11 +16,18 @@
 package com.google.gwt.dev.jjs.test;
 
 import com.google.gwt.core.client.GwtScriptOnly;
+import com.google.gwt.dev.jjs.test.defaultmethods.ImplementsWithDefaultMethodAndStaticInitializer;
+import com.google.gwt.dev.jjs.test.defaultmethods.SomeClass;
 import com.google.gwt.junit.client.GWTTestCase;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import jsinterop.annotations.JsOverlay;
+import jsinterop.annotations.JsProperty;
+import jsinterop.annotations.JsType;
+
 /**
  * Tests Java 8 features. It is super sourced so that gwt can be compiles under Java 7.
  *
@@ -1255,7 +1262,98 @@ public class Java8Test extends GWTTestCase {
     assertContentsInOrder(initializationOrder, "A1", "B1", "A2", "C", "B2", "A3", "D");
   }
 
+  /**
+   * Regression test for issue 9214.
+   */
+  interface P<T> {
+    boolean apply(T obj);
+  }
+
+  static class B {
+    public boolean getTrue() {
+      return true;
+    }
+  }
+
+  public void testMethodReference_generics() {
+    P<B> p = B::getTrue;
+    assertTrue(p.apply(new B()));
+  }
+
+  public void testDefaultMethod_staticInitializer() {
+    SomeClass.initializationOrder = new ArrayList<String>();
+    Object object = ImplementsWithDefaultMethodAndStaticInitializer.someClass;
+    assertContentsInOrder(SomeClass.initializationOrder, "1", "2", "3", "4");
+  }
+
   private void assertContentsInOrder(Iterable<String> contents, String... elements) {
     assertEquals(Arrays.asList(elements).toString(), contents.toString());
+  }
+
+  @JsType(isNative = true)
+  interface  NativeJsTypeInterfaceWithStaticInitializationAndFieldAccess {
+    @JsOverlay
+    Object object = new Integer(3);
+  }
+
+  @JsType(isNative = true)
+  interface NativeJsTypeInterfaceWithStaticInitializationAndStaticOverlayMethod {
+    @JsOverlay
+    Object object = new Integer(4);
+
+    @JsOverlay
+    static Object getObject() {
+      return object;
+    }
+  }
+
+  @JsType(isNative = true)
+  interface NativeJsTypeInterfaceWithStaticInitializationAndInstanceOverlayMethod {
+    @JsOverlay
+    Object object = new Integer(5);
+
+    @JsProperty
+    int getA();
+
+    @JsOverlay
+    default Object getObject() {
+      return ((int) object) + this.getA();
+    }
+  }
+
+  private native NativeJsTypeInterfaceWithStaticInitializationAndInstanceOverlayMethod
+      createNativeJsTypeInterfaceWithStaticInitializationAndInstanceOverlayMethod() /*-{
+    return {a: 1};
+  }-*/;
+
+  @JsType(isNative = true)
+  interface NativeJsTypeInterfaceWithStaticInitialization {
+    @JsOverlay
+    Object object = new Integer(6);
+  }
+
+  @JsType(isNative = true)
+  interface NativeJsTypeInterfaceWithComplexStaticInitialization {
+    @JsOverlay
+    Object object = (Integer) (((int) NativeJsTypeInterfaceWithStaticInitialization.object) + 1);
+  }
+
+  static class JavaTypeImplementingNativeJsTypeInterceWithDefaultMethod implements
+      NativeJsTypeInterfaceWithStaticInitializationAndInstanceOverlayMethod {
+    @JsProperty
+    public int getA() {
+      return 4;
+    }
+  }
+
+  public void testNativeJsTypeWithStaticIntializer() {
+    assertEquals(3, NativeJsTypeInterfaceWithStaticInitializationAndFieldAccess.object);
+    assertEquals(
+        4, NativeJsTypeInterfaceWithStaticInitializationAndStaticOverlayMethod.getObject());
+    assertEquals(6,
+        createNativeJsTypeInterfaceWithStaticInitializationAndInstanceOverlayMethod()
+            .getObject());
+    assertEquals(7, NativeJsTypeInterfaceWithComplexStaticInitialization.object);
+    assertEquals(9, new JavaTypeImplementingNativeJsTypeInterceWithDefaultMethod().getObject());
   }
 }

@@ -15,6 +15,7 @@
  */
 package com.google.gwt.dev.jjs.ast;
 
+import com.google.gwt.dev.javac.JsInteropUtil;
 import com.google.gwt.dev.jjs.SourceInfo;
 import com.google.gwt.dev.jjs.SourceOrigin;
 import com.google.gwt.dev.util.StringInterner;
@@ -77,8 +78,8 @@ public class JField extends JVariable implements JMember {
     }
   }
 
-  public static final JField NULL_FIELD = new JField(SourceOrigin.UNKNOWN, "nullField", null,
-      JReferenceType.NULL_TYPE, false, Disposition.FINAL);
+  public static final JField NULL_FIELD = new JField(SourceOrigin.UNKNOWN, "nullField",
+      JClassType.NULL_CLASS, JReferenceType.NULL_TYPE, false, Disposition.FINAL);
 
   private JsMemberType jsMembertype = JsMemberType.NONE;
   private String jsName;
@@ -132,6 +133,12 @@ public class JField extends JVariable implements JMember {
     return null;
   }
 
+
+  @Override
+  public JFieldRef makeRef(SourceInfo info) {
+    throw new UnsupportedOperationException();
+  }
+
   @Override
   public void setJsMemberInfo(
       JsMemberType jsMembertype, String namespace, String name, boolean exported) {
@@ -153,12 +160,17 @@ public class JField extends JVariable implements JMember {
 
   @Override
   public boolean isJsInteropEntryPoint() {
-    return exported && isStatic() && !isJsNative();
+    return exported && isStatic() && !isJsNative() && !isJsOverlay();
   }
 
   @Override
   public boolean canBeReferencedExternally() {
-    return getJsMemberType() != JsMemberType.NONE;
+    return exported && !isJsNative();
+  }
+
+  @Override
+  public boolean canBeImplementedExternally() {
+    return isJsNative();
   }
 
   @Override
@@ -169,7 +181,7 @@ public class JField extends JVariable implements JMember {
   @Override
   public String getQualifiedJsName() {
     String namespace = getJsNamespace();
-    return namespace.isEmpty() ? jsName : namespace + "." + jsName;
+    return JsInteropUtil.isGlobal(namespace) ? jsName : namespace + "." + jsName;
   }
 
   @Override
@@ -185,6 +197,11 @@ public class JField extends JVariable implements JMember {
   @Override
   public boolean isJsOverlay() {
     return isJsOverlay;
+  }
+
+  @Override
+  public boolean isJsMethodVarargs() {
+    return false;
   }
 
   @Override
@@ -208,7 +225,7 @@ public class JField extends JVariable implements JMember {
   }
 
   public boolean isExternal() {
-    return getEnclosingType() != null && getEnclosingType().isExternal();
+    return getEnclosingType().isExternal();
   }
 
   @Override

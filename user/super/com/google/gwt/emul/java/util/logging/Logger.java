@@ -24,15 +24,9 @@ import java.util.List;
  *  The Java API doc for details</a>
  */
 public class Logger {
+  public static final String GLOBAL_LOGGER_NAME = "global";
 
-public static final String GLOBAL_LOGGER_NAME = "global";
-
-  private static final boolean SUPER_DEV_MODE =
-      System.getProperty("superdevmode", "off").equals("on");
-
-  private static final String LOGGING_ENABLED =
-      System.getProperty("gwt.logging.enabled", SUPER_DEV_MODE ? "TRUE" : "FALSE");
-
+  private static final String LOGGING_ENABLED = System.getProperty("gwt.logging.enabled", "TRUE");
   private static final boolean LOGGING_WARNING = LOGGING_ENABLED.equals("WARNING");
   private static final boolean LOGGING_SEVERE = LOGGING_ENABLED.equals("SEVERE");
   private static final boolean LOGGING_FALSE = LOGGING_ENABLED.equals("FALSE");

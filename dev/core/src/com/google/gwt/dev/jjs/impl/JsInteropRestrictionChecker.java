@@ -45,7 +45,13 @@ import com.google.gwt.dev.jjs.ast.JReferenceType;
 import com.google.gwt.dev.jjs.ast.JStatement;
 import com.google.gwt.dev.jjs.ast.JType;
 import com.google.gwt.dev.jjs.ast.JVisitor;
+import com.google.gwt.dev.jjs.ast.js.JsniMethodBody;
 import com.google.gwt.dev.js.JsUtils;
+import com.google.gwt.dev.js.ast.JsContext;
+import com.google.gwt.dev.js.ast.JsFunction;
+import com.google.gwt.dev.js.ast.JsNameRef;
+import com.google.gwt.dev.js.ast.JsParameter;
+import com.google.gwt.dev.js.ast.JsVisitor;
 import com.google.gwt.dev.util.Pair;
 import com.google.gwt.dev.util.log.AbstractTreeLogger;
 import com.google.gwt.thirdparty.guava.common.base.Predicate;
@@ -233,6 +239,10 @@ public class JsInteropRestrictionChecker {
       checkMemberOfNativeJsType(member);
     }
 
+    if (member.needsDynamicDispatch()) {
+      checkIllegalOverrides(member);
+    }
+
     if (member.isJsOverlay()) {
       checkJsOverlay(member);
       return;
@@ -246,12 +256,13 @@ public class JsInteropRestrictionChecker {
       return;
     }
 
-    if (member.getJsName().equals(JsInteropUtil.INVALID_JSNAME)) {
-      logInvalidName(member);
+    if (!checkJsPropertyAccessor(member)) {
       return;
     }
 
-    checkJsPropertyAccessor(member);
+    if (member.isJsMethodVarargs()) {
+      checkJsVarargs(member);
+    }
 
     checkMemberQualifiedJsName(member);
 
@@ -261,6 +272,33 @@ public class JsInteropRestrictionChecker {
 
     if (isCheckedGlobalName(member)) {
       checkGlobalName(ownGlobalNames, member);
+    }
+  }
+
+  private void checkIllegalOverrides(JMember member) {
+    if (member instanceof JField) {
+      return;
+    }
+
+    JMethod method = (JMethod) member;
+
+    if (method.isSynthetic()) {
+      // Ignore synthetic methods. These synthetic methods might be accidental overrides or
+      // default method implementations, and they forward to the same implementation so it is
+      // safe to allow them.
+      return;
+    }
+    for (JMethod overriddenMethod : method.getOverriddenMethods()) {
+      if (overriddenMethod.isSynthetic()) {
+        // Ignore synthetic methods for a better error message.
+        continue;
+      }
+      if (overriddenMethod.isJsOverlay()) {
+        logError(member, "Method '%s' cannot override a JsOverlay method '%s'.",
+            JjsUtils.getReadableDescription(method),
+            JjsUtils.getReadableDescription(overriddenMethod));
+        return;
+      }
     }
   }
 
@@ -277,9 +315,10 @@ public class JsInteropRestrictionChecker {
 
     if (member instanceof JField) {
       JField field = (JField) member;
-      if (!field.isCompileTimeConstant()) {
+      if (field.needsDynamicDispatch()) {
         logError(
-            member, "JsOverlay field '%s' can only be a compile time constant.", methodDescription);
+            member, "JsOverlay field '%s' can only be static.",
+            methodDescription);
       }
       return;
     }
@@ -291,7 +330,8 @@ public class JsInteropRestrictionChecker {
       return;
     }
 
-    if (method.getBody() == null || (!method.isFinal() && !method.isStatic())) {
+    if (method.getBody() == null || (!method.isFinal() && !method.isStatic()
+        && !method.isDefaultMethod())) {
       logError(member,
           "JsOverlay method '%s' cannot be non-final nor native.", methodDescription);
     }
@@ -340,32 +380,62 @@ public class JsInteropRestrictionChecker {
     }
   }
 
-  private void logInvalidName(JMember member) {
-    if (member.getJsMemberType().isPropertyAccessor()) {
+  private void checkJsVarargs(JMember member) {
+    final JMethod method = (JMethod) member;
+    if (!method.isJsniMethod()) {
+      return;
+    }
+    final JsFunction function = ((JsniMethodBody) method.getBody()).getFunc();
+    final JsParameter varargParameter = Iterables.getLast(function.getParameters());
+    new JsVisitor() {
+      @Override
+      public void endVisit(JsNameRef x, JsContext ctx) {
+        if (x.getName() == varargParameter.getName()) {
+          logError(x, "Cannot access vararg parameter '%s' from JSNI in JsMethod %s."
+              + " Use 'arguments' instead.", x.getIdent(),
+              getMemberDescription(method));
+        }
+      }
+    }.accept(function);
+  }
+
+  private boolean checkJsPropertyAccessor(JMember member) {
+    JsMemberType memberType = member.getJsMemberType();
+
+    if (member.getJsName().equals(JsInteropUtil.INVALID_JSNAME)) {
+      assert memberType.isPropertyAccessor();
       logError(
           member,
           "JsProperty %s should either follow Java Bean naming conventions or provide a name.",
           getMemberDescription(member));
-    } else {
-      logError(
-          member,
-          "%s cannot be assigned a different JavaScript name than the method it overrides.",
-          getMemberDescription(member));
-    }
-  }
-
-  private void checkJsPropertyAccessor(JMember member) {
-    if (member.getJsMemberType() == JsMemberType.UNDEFINED_ACCESSOR) {
-      logError(member, "JsProperty %s should have a correct setter or getter signature.",
-          getMemberDescription(member));
+      return false;
     }
 
-    if (member.getJsMemberType() == JsMemberType.GETTER) {
-      if (member.getType() != JPrimitiveType.BOOLEAN && member.getName().startsWith("is")) {
-        logError(member, "JsProperty %s cannot have a non-boolean return.",
+    switch (memberType) {
+      case UNDEFINED_ACCESSOR:
+        logError(member, "JsProperty %s should have a correct setter or getter signature.",
             getMemberDescription(member));
-      }
+        break;
+      case GETTER:
+        if (member.getType() != JPrimitiveType.BOOLEAN && member.getName().startsWith("is")) {
+          logError(member, "JsProperty %s cannot have a non-boolean return.",
+              getMemberDescription(member));
+        }
+        break;
+      case SETTER:
+        if (((JMethod) member).getParams().get(0).isVarargs()) {
+          logError(member, "JsProperty %s cannot have a vararg parameter.",
+              getMemberDescription(member));
+        }
+        break;
     }
+
+    if (memberType.isPropertyAccessor() && member.isStatic() && !member.isJsNative()) {
+        logError(member, "Static property accessor '%s' can only be native.",
+            JjsUtils.getReadableDescription(member));
+    }
+
+    return true;
   }
 
   private void checkMemberQualifiedJsName(JMember member) {
@@ -394,18 +464,19 @@ public class JsInteropRestrictionChecker {
   private <T extends HasJsName & HasSourceInfo> void checkJsName(T item) {
     if (item.getJsName().isEmpty()) {
       logError(item, "%s cannot have an empty name.", getDescription(item));
-      return;
-    }
-    if (!JsUtils.isValidJsIdentifier(item.getJsName())) {
+    } else if (!JsUtils.isValidJsIdentifier(item.getJsName())) {
       logError(item, "%s has invalid name '%s'.", getDescription(item), item.getJsName());
-      return;
     }
   }
 
   private <T extends HasJsName & HasSourceInfo> void checkJsNamespace(T item) {
-      String jsNamespace = item.getJsNamespace();
-    if (!jsNamespace.isEmpty() && !JsUtils.isValidJsQualifiedName(jsNamespace)) {
-      logError(item, "%s has invalid namespace '%s'.", getDescription(item), jsNamespace);
+    if (JsInteropUtil.isGlobal(item.getJsNamespace())) {
+      return;
+    }
+    if (item.getJsNamespace().isEmpty()) {
+      logError(item, "%s cannot have an empty namespace.", getDescription(item));
+    } else if (!JsUtils.isValidJsQualifiedName(item.getJsNamespace())) {
+      logError(item, "%s has invalid namespace '%s'.", getDescription(item), item.getJsNamespace());
     }
   }
 
@@ -414,6 +485,7 @@ public class JsInteropRestrictionChecker {
     JsMember oldJsMember = oldAndNewJsMember.left;
     JsMember newJsMember = oldAndNewJsMember.right;
 
+    checkNameConsistency(member);
     checkJsPropertyConsistency(member, newJsMember);
 
     if (oldJsMember == null || oldJsMember == newJsMember) {
@@ -456,6 +528,22 @@ public class JsInteropRestrictionChecker {
       if (newMember.getter.getType() != setterParams.get(0).getType()) {
         logError(member, "JsProperty setter %s and getter %s cannot have inconsistent types.",
             getMemberDescription(newMember.setter), getMemberDescription(newMember.getter));
+      }
+    }
+  }
+
+  private void checkNameConsistency(JMember member) {
+    if (member instanceof JMethod) {
+      String jsName = member.getJsName();
+      for (JMethod jMethod : ((JMethod) member).getOverriddenMethods()) {
+        String parentName = jMethod.getJsName();
+        if (parentName != null && !parentName.equals(jsName)) {
+          logError(
+              member,
+              "%s cannot be assigned a different JavaScript name than the method it overrides.",
+              getMemberDescription(member));
+          break;
+        }
       }
     }
   }
@@ -745,7 +833,7 @@ public class JsInteropRestrictionChecker {
         }
         return new JsMember(member, member, jsMember == null ? null : jsMember.getter);
       default:
-        if (jsMember != null) {
+        if (jsMember != null && !jsMember.isPropertyAccessor()) {
           if (overrides(member, jsMember.member)) {
             jsMember.member = member;
             return jsMember;
@@ -770,8 +858,16 @@ public class JsInteropRestrictionChecker {
     // Methods that only differ in return types are Java overrides and need to be considered so
     // for local name collision checking.
     JMethod potentiallyOverriddenMethod = (JMethod) potentiallyOverriddenMember;
-    return method.getJsniSignature(false, false)
-        .equals(potentiallyOverriddenMethod.getJsniSignature(false, false));
+
+    // TODO(goktug): make this more precise to handle package visibilities.
+    boolean visibilitiesMatchesForOverride =
+        !method.isPackagePrivate() && !method.isPrivate()
+        && !potentiallyOverriddenMethod.isPackagePrivate()
+        && !potentiallyOverriddenMethod.isPrivate();
+
+    return visibilitiesMatchesForOverride
+        && method.getJsniSignature(false, false)
+               .equals(potentiallyOverriddenMethod.getJsniSignature(false, false));
   }
 
   private static String getDescription(HasSourceInfo hasSourceInfo) {

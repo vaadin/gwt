@@ -58,6 +58,11 @@ public class JArrayType extends JReferenceType {
     return "[" + elementType.getJsniSignatureName();
   }
 
+  @Override
+  public JEnumType isEnumOrSubclass() {
+    return null;
+  }
+
   public JType getLeafType() {
     if (leafType == null) {
       if (elementType instanceof JArrayType) {
@@ -95,6 +100,16 @@ public class JArrayType extends JReferenceType {
   }
 
   @Override
+  public boolean isJsType() {
+    return false;
+  }
+
+  @Override
+  public boolean isJsFunction() {
+    return false;
+  }
+
+  @Override
   public boolean isJsNative() {
     return getLeafType().isJsNative();
   }
@@ -106,8 +121,12 @@ public class JArrayType extends JReferenceType {
 
   @Override
   public boolean canBeReferencedExternally() {
-    return getLeafType().canBeReferencedExternally()
-        && !getLeafType().isJavaLangObject();
+    return getLeafType().canBeReferencedExternally();
+  }
+
+  @Override
+  public boolean isJavaLangObject() {
+    return false;
   }
 
   @Override

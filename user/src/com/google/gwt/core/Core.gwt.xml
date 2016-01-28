@@ -27,11 +27,18 @@
   <define-property name="superdevmode" values="off, on"/>
   <set-property name="superdevmode" value="off"/>
 
+  <define-property name="jre.debugMode" values="ENABLED,DISABLED" />
+  <set-property name="jre.debugMode" value="DISABLED" />
+  <set-property name="jre.debugMode" value="ENABLED">
+    <when-property-is name="superdevmode" value="on" />
+  </set-property>
+
   <inherits name="com.google.gwt.dev.jjs.intrinsic.Intrinsic" />
   <inherits name="com.google.gwt.core.CompilerParameters" />
   <inherits name="com.google.gwt.emul.Emulation" />
   <inherits name="com.google.gwt.core.StackTrace" />
   <inherits name="com.google.gwt.core.AsyncFragmentLoader" />
+  <inherits name="jsinterop.annotations.Annotations" />
 
   <source path="client" />
   <source path="shared" />
@@ -76,6 +83,6 @@
   <set-property name="gwt.logging.simpleConsoleHandler" value="ENABLED"/>
 
   <set-property name="gwt.logging.enabled" value="TRUE">
-    <when-property-is name="superdevmode" value="on"/>
+    <when-property-is name="jre.debugMode" value="ENABLED"/>
   </set-property>
 </module>

@@ -22,7 +22,6 @@ import com.google.gwt.core.ext.linker.ArtifactSet;
 import com.google.gwt.core.ext.linker.impl.StandardLinkerContext;
 import com.google.gwt.dev.DevMode.HostedModeOptions;
 import com.google.gwt.dev.cfg.ModuleDef;
-import com.google.gwt.dev.util.arg.OptionJsInteropMode;
 import com.google.gwt.dev.util.arg.OptionMethodNameDisplayMode;
 import com.google.gwt.thirdparty.guava.common.base.Stopwatch;
 import com.google.gwt.thirdparty.guava.common.collect.ListMultimap;
@@ -88,7 +87,7 @@ public class SuperDevListener implements CodeServerListener {
   public void start() {
     try {
       Stopwatch watch = Stopwatch.createStarted();
-      logger.log(Type.INFO, "Runing CodeServer with parameters: " + codeServerArgs);
+      logger.log(Type.INFO, "Running CodeServer with parameters: " + codeServerArgs);
       runCodeServer(codeServerArgs.toArray(new String[0]));
       logger.log(Type.INFO, "Code server started in " + watch + " ms");
     } catch (Exception e) {
@@ -166,14 +165,10 @@ public class SuperDevListener implements CodeServerListener {
       args.add("-logLevel");
       args.add(String.valueOf(options.getLogLevel()));
     }
-    if (options.getJsInteropMode() != OptionJsInteropMode.Mode.JS_RC) {
-      args.add("-XjsInteropMode");
-      args.add(options.getJsInteropMode().name());
-    }
     if (options.shouldGenerateJsInteropExports()) {
       args.add("-generateJsInteropExports");
-      args.add(options.getJsInteropMode().name());
     }
+
     if (!options.isIncrementalCompileEnabled()) {
       args.add("-noincremental");
     }

@@ -38,6 +38,9 @@ public class JClassType extends JDeclaredType {
     }
   }
 
+  public static JClassType NULL_CLASS =
+      new JClassType(SourceOrigin.UNKNOWN, "NullClass", true, true);
+
   private final boolean isAbstract;
   private final boolean isFinal;
   private boolean isJso;
@@ -63,7 +66,9 @@ public class JClassType extends JDeclaredType {
 
   @Override
   public final JMethod getInitMethod() {
-    assert getMethods().size() > 1;
+    if (getMethods().size() <= GwtAstBuilder.INIT_METHOD_INDEX) {
+      return null;
+    }
     JMethod init = this.getMethods().get(GwtAstBuilder.INIT_METHOD_INDEX);
 
     if (!init.getName().equals(GwtAstBuilder.INIT_NAME_METHOD_NAME)) {
@@ -148,8 +153,18 @@ public class JClassType extends JDeclaredType {
   protected Object writeReplace() {
     if (isExternal()) {
       return new ExternalSerializedForm(this);
+    } else if (this == NULL_CLASS) {
+      return ExternalSerializedNullClass.INSTANCE;
     } else {
       return this;
+    }
+  }
+
+  private static class ExternalSerializedNullClass implements Serializable {
+    public static final ExternalSerializedNullClass INSTANCE = new ExternalSerializedNullClass();
+
+    private Object readResolve() {
+      return NULL_CLASS;
     }
   }
 }
